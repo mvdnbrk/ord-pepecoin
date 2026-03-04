@@ -63,7 +63,7 @@ impl Inscribe {
     let index = Index::open(&options)?;
     index.update()?;
 
-    let client = options.dogecoin_rpc_client_for_wallet_command(false)?;
+    let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
 
     let mut utxos = index.get_unspent_outputs(Wallet::load(&options)?)?;
 

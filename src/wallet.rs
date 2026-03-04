@@ -6,7 +6,7 @@ pub(crate) struct Wallet {
 
 impl Wallet {
   pub(crate) fn load(options: &Options) -> Result<Self> {
-    options.dogecoin_rpc_client_for_wallet_command(false)?;
+    options.pepecoin_rpc_client_for_wallet_command(false)?;
 
     Ok(Self { _private: () })
   }

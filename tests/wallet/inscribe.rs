@@ -39,14 +39,14 @@ fn inscribe_works_with_huge_expensive_inscriptions() {
 }
 
 #[test]
-fn inscribe_fails_if_dogecoin_core_is_too_old() {
+fn inscribe_fails_if_pepecoin_core_is_too_old() {
   let rpc_server = test_bitcoincore_rpc::builder().version(1140500).build();
 
   CommandBuilder::new("wallet inscribe hello.txt")
     .write("hello.txt", "HELLOWORLD")
     .expected_exit_code(1)
     .expected_stderr(
-      "error: Dogecoin Core 1.14.6.0 or newer required, current version is 1.14.5.0\n",
+      "error: Pepecoin Core 1.1.0.0 or newer required, current version is 1.0.0.0\n",
     )
     .rpc_server(&rpc_server)
     .run();
@@ -210,7 +210,7 @@ fn inscribe_with_optional_satpoint_arg() {
 
   TestServer::spawn_with_args(&rpc_server, &["--index-sats"]).assert_response_regex(
     "/sat/100000000000000",
-    format!(".*<a href=/shibescription/{inscription}>.*"),
+    format!(".*<a href=/inscription/{inscription}>.*"),
   );
 
   TestServer::spawn_with_args(&rpc_server, &[])

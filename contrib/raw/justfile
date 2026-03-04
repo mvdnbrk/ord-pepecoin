@@ -3,7 +3,7 @@ create INPUT_TXID INPUT_VOUT OUTPUT_DESTINATION OUTPUT_AMOUNT:
 
   set -euxo pipefail
 
-  dogecoin-cli createrawtransaction \
+  pepecoin-cli createrawtransaction \
     '[
       {
         "txid": "{{INPUT_TXID}}",
@@ -18,7 +18,7 @@ create INPUT_TXID INPUT_VOUT OUTPUT_DESTINATION OUTPUT_AMOUNT:
     > raw.hex
 
 sign WALLET_NAME:
-  dogecoin-cli -rpcwallet={{WALLET_NAME}} signrawtransactionwithwallet `cat raw.hex` > signed.json
+  pepecoin-cli -rpcwallet={{WALLET_NAME}} signrawtransactionwithwallet `cat raw.hex` > signed.json
 
 send:
-  dogecoin-cli sendrawtransaction `cat signed.json | jq '.hex' --raw-output`
+  pepecoin-cli sendrawtransaction `cat signed.json | jq '.hex' --raw-output`

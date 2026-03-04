@@ -129,7 +129,7 @@ mod tests {
   <body>
   <header>
     <nav>
-      <a href=/>Doginals<sup>alpha</sup></a>
+      <a href=/>Pepeinals<sup>alpha</sup></a>
       .*
       <a href=/rare.txt>rare.txt</a>
       <form action=/search method=get>
@@ -157,7 +157,7 @@ mod tests {
         }),
         true
       ),
-      r".*<nav>\s*<a href=/>Doginals<sup>alpha</sup></a>.*"
+      r".*<nav>\s*<a href=/>Pepeinals<sup>alpha</sup></a>.*"
     );
   }
 
@@ -171,7 +171,7 @@ mod tests {
         }),
         false
       ),
-      r".*<nav>\s*<a href=/>Doginals<sup>alpha</sup></a>.*\s*<form action=/search.*",
+      r".*<nav>\s*<a href=/>Pepeinals<sup>alpha</sup></a>.*\s*<form action=/search.*",
     );
   }
 
@@ -185,7 +185,7 @@ mod tests {
         }),
         true
       ),
-      r".*<nav>\s*<a href=/>Doginals<sup>signet</sup></a>.*"
+      r".*<nav>\s*<a href=/>Pepeinals<sup>signet</sup></a>.*"
     );
   }
 }

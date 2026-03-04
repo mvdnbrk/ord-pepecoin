@@ -155,9 +155,7 @@ impl Server {
         .route("/inscription/:inscription_id", get(Self::inscription))
         .route("/inscriptions", get(Self::inscriptions))
         .route("/inscriptions/:from", get(Self::inscriptions_from))
-        .route("/shibescription/:inscription_id", get(Self::inscription))
-        .route("/shibescriptions", get(Self::inscriptions))
-        .route("/shibescriptions/:from", get(Self::inscriptions_from))
+
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/:sat", get(Self::ordinal))
         .route("/output/:output", get(Self::output))
@@ -463,7 +461,7 @@ impl Server {
   }
 
   async fn install_script() -> Redirect {
-    Redirect::to("https://raw.githubusercontent.com/apezord/ord-dogecoin/master/install.sh")
+    Redirect::to("https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/master/install.sh")
   }
 
   async fn block(
@@ -570,7 +568,7 @@ impl Server {
     } else if OUTPOINT.is_match(query) {
       Ok(Redirect::to(&format!("/output/{query}")))
     } else if INSCRIPTION_ID.is_match(query) {
-      Ok(Redirect::to(&format!("/shibescription/{query}")))
+      Ok(Redirect::to(&format!("/inscription/{query}")))
     } else {
       Ok(Redirect::to(&format!("/sat/{query}")))
     }
@@ -612,8 +610,8 @@ impl Server {
 
     let chain = page_config.chain;
     match chain {
-      Chain::Mainnet => builder.title("Shibescriptions"),
-      _ => builder.title(format!("Shibescriptions – {chain:?}")),
+      Chain::Mainnet => builder.title("Inscriptions"),
+      _ => builder.title(format!("Inscriptions – {chain:?}")),
     };
 
     builder.generator(Some("ord".to_string()));
@@ -621,10 +619,10 @@ impl Server {
     for (number, id) in index.get_feed_inscriptions(300)? {
       builder.item(
         rss::ItemBuilder::default()
-          .title(format!("Shibescription {number}"))
-          .link(format!("/shibescription/{id}"))
+          .title(format!("Inscription {number}"))
+          .link(format!("/inscription/{id}"))
           .guid(Some(rss::Guid {
-            value: format!("/shibescription/{id}"),
+            value: format!("/inscription/{id}"),
             permalink: true,
           }))
           .build(),
@@ -905,7 +903,7 @@ mod tests {
   use {super::*, reqwest::Url, std::net::TcpListener};
 
   struct TestServer {
-    dogecoin_rpc_server: test_bitcoincore_rpc::Handle,
+    pepecoin_rpc_server: test_bitcoincore_rpc::Handle,
     index: Arc<Index>,
     ord_server_handle: Handle,
     url: Url,
@@ -926,15 +924,15 @@ mod tests {
       Self::new_server(test_bitcoincore_rpc::spawn(), None, ord_args, server_args)
     }
 
-    fn new_with_dogecoin_rpc_server_and_config(
-      dogecoin_rpc_server: test_bitcoincore_rpc::Handle,
+    fn new_with_pepecoin_rpc_server_and_config(
+      pepecoin_rpc_server: test_bitcoincore_rpc::Handle,
       config: String,
     ) -> Self {
-      Self::new_server(dogecoin_rpc_server, Some(config), &[], &[])
+      Self::new_server(pepecoin_rpc_server, Some(config), &[], &[])
     }
 
     fn new_server(
-      dogecoin_rpc_server: test_bitcoincore_rpc::Handle,
+      pepecoin_rpc_server: test_bitcoincore_rpc::Handle,
       config: Option<String>,
       ord_args: &[&str],
       server_args: &[&str],
@@ -964,7 +962,7 @@ mod tests {
 
       let (options, server) = parse_server_args(&format!(
         "ord --chain regtest --rpc-url {} --cookie-file {} --data-dir {} {config_args} {} server --http-port {} --address 127.0.0.1 {}",
-        dogecoin_rpc_server.url(),
+        pepecoin_rpc_server.url(),
         cookiefile.to_str().unwrap(),
         tempdir.path().to_str().unwrap(),
         ord_args.join(" "),
@@ -1004,7 +1002,7 @@ mod tests {
       }
 
       Self {
-        dogecoin_rpc_server,
+        pepecoin_rpc_server,
         index,
         ord_server_handle,
         tempdir,
@@ -1073,14 +1071,14 @@ mod tests {
     }
 
     fn mine_blocks(&self, n: u64) -> Vec<bitcoin::Block> {
-      let blocks = self.dogecoin_rpc_server.mine_blocks(n);
+      let blocks = self.pepecoin_rpc_server.mine_blocks(n);
       self.index.update().unwrap();
       blocks
     }
 
     fn mine_blocks_with_subsidy(&self, n: u64, subsidy: u64) -> Vec<Block> {
       let blocks = self
-        .dogecoin_rpc_server
+        .pepecoin_rpc_server
         .mine_blocks_with_subsidy(n, subsidy);
       self.index.update().unwrap();
       blocks
@@ -1270,7 +1268,7 @@ mod tests {
   fn install_sh_redirects_to_github() {
     TestServer::new().assert_redirect(
       "/install.sh",
-      "https://raw.githubusercontent.com/apezord/ord-dogecoin/master/install.sh",
+      "https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/master/install.sh",
     );
   }
 
@@ -1298,7 +1296,7 @@ mod tests {
   fn search_by_query_returns_inscription() {
     TestServer::new().assert_redirect(
       "/search?query=0000000000000000000000000000000000000000000000000000000000000000i0",
-      "/shibescription/0000000000000000000000000000000000000000000000000000000000000000i0",
+      "/inscription/0000000000000000000000000000000000000000000000000000000000000000i0",
     );
   }
 
@@ -1340,7 +1338,7 @@ mod tests {
   fn search_for_inscription_id_returns_inscription() {
     TestServer::new().assert_redirect(
       "/search/0000000000000000000000000000000000000000000000000000000000000000i0",
-      "/shibescription/0000000000000000000000000000000000000000000000000000000000000000i0",
+      "/inscription/0000000000000000000000000000000000000000000000000000000000000000i0",
     );
   }
 
@@ -1473,7 +1471,7 @@ mod tests {
 
   #[test]
   fn output_with_sat_index() {
-    let txid = "5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69";
+    let txid = "d22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512";
     TestServer::new_with_sat_index().assert_response_regex(
       format!("/output/{txid}:0"),
       StatusCode::OK,
@@ -1494,7 +1492,7 @@ mod tests {
 
   #[test]
   fn output_without_sat_index() {
-    let txid = "5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69";
+    let txid = "d22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512";
     TestServer::new().assert_response_regex(
       format!("/output/{txid}:0"),
       StatusCode::OK,
@@ -1585,7 +1583,7 @@ mod tests {
     test_server.assert_response_regex(
     "/",
     StatusCode::OK,
-    ".*<title>Doginals</title>.*
+    ".*<title>Pepeinals</title>.*
 <h2>Latest Blocks</h2>
 <ol start=1 reversed class=blocks>
   <li><a href=/block/[[:xdigit:]]{64}>[[:xdigit:]]{64}</a></li>
@@ -1599,7 +1597,7 @@ mod tests {
     TestServer::new().assert_response_regex(
       "/",
       StatusCode::OK,
-      ".*<a href=/>Doginals<sup>regtest</sup></a>.*",
+      ".*<a href=/>Pepeinals<sup>regtest</sup></a>.*",
     );
   }
 
@@ -1671,7 +1669,7 @@ mod tests {
       fee: 0,
       ..Default::default()
     };
-    test_server.dogecoin_rpc_server.broadcast_tx(transaction);
+    test_server.pepecoin_rpc_server.broadcast_tx(transaction);
     let block_hash = test_server.mine_blocks(1)[0].block_hash();
 
     test_server.assert_response_regex(
@@ -1728,8 +1726,8 @@ mod tests {
 
     test_server.assert_response("/status", StatusCode::OK, "OK");
 
-    test_server.dogecoin_rpc_server.invalidate_tip();
-    test_server.dogecoin_rpc_server.mine_blocks(2);
+    test_server.pepecoin_rpc_server.invalidate_tip();
+    test_server.pepecoin_rpc_server.mine_blocks(2);
 
     test_server.assert_response_regex("/status", StatusCode::OK, "reorg detected.*");
   }
@@ -1740,7 +1738,7 @@ mod tests {
       "/rare.txt",
       StatusCode::OK,
       "sat\tsatpoint
-0\t5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69:0:0
+0\td22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512:0:0
 ",
     );
   }
@@ -1770,7 +1768,7 @@ mod tests {
     TestServer::new_with_sat_index().assert_response_regex(
       "/sat/0",
       StatusCode::OK,
-      ".*>5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69:0:0<.*",
+      ".*>d22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512:0:0<.*",
     );
   }
 
@@ -1789,7 +1787,7 @@ mod tests {
     TestServer::new().assert_response_regex(
       "/input/0/0/0",
       StatusCode::OK,
-      ".*<title>Input /0/0/0</title>.*<h1>Input /0/0/0</h1>.*<dt>text</dt><dd>.*Nintondo</dd>.*",
+      ".*<title>Input /0/0/0</title>.*<h1>Input /0/0/0</h1>.*<dt>text</dt><dd>.*WSJ 1/22/24.*</dd>.*",
     );
   }
 
@@ -1903,7 +1901,7 @@ mod tests {
 
     server.mine_blocks(1);
     server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         outputs: 2,
@@ -1929,7 +1927,7 @@ mod tests {
 
     server.mine_blocks(1);
     server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         outputs: 2,
@@ -1982,7 +1980,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/plain;charset=utf-8", "hello").to_witness(),
@@ -2005,7 +2003,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/plain;charset=utf-8", b"\xc3\x28").to_witness(),
@@ -2027,7 +2025,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription(
@@ -2054,7 +2052,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("audio/flac", "hello").to_witness(),
@@ -2077,7 +2075,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("application/pdf", "hello").to_witness(),
@@ -2100,7 +2098,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("image/png", "hello").to_witness(),
@@ -2124,7 +2122,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/html;charset=utf-8", "hello").to_witness(),
@@ -2147,7 +2145,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2170,7 +2168,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("video/webm", "hello").to_witness(),
@@ -2193,7 +2191,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2203,9 +2201,9 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      format!("/shibescription/{}", InscriptionId::from(txid)),
+      format!("/inscription/{}", InscriptionId::from(txid)),
       StatusCode::OK,
-      ".*<title>Shibescription 0</title>.*",
+      ".*<title>Inscription 0</title>.*",
     );
   }
 
@@ -2215,7 +2213,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2225,7 +2223,7 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      format!("/shibescription/{}", InscriptionId::from(txid)),
+      format!("/inscription/{}", InscriptionId::from(txid)),
       StatusCode::OK,
       r".*<dt>sat</dt>\s*<dd><a href=/sat/100000000000000>100000000000000</a></dd>\s*<dt>preview</dt>.*",
     );
@@ -2237,7 +2235,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2247,7 +2245,7 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      format!("/shibescription/{}", InscriptionId::from(txid)),
+      format!("/inscription/{}", InscriptionId::from(txid)),
       StatusCode::OK,
       r".*<dt>output value</dt>\s*<dd>5000000000</dd>\s*<dt>preview</dt>.*",
     );
@@ -2271,7 +2269,7 @@ mod tests {
     server.mine_blocks(1);
 
     server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2283,7 +2281,7 @@ mod tests {
     server.assert_response_regex(
       "/feed.xml",
       StatusCode::OK,
-      ".*<title>Shibescription 0</title>.*",
+      ".*<title>Inscription 0</title>.*",
     );
   }
 
@@ -2293,7 +2291,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: Inscription::new(Some("foo/bar".as_bytes().to_vec()), None).to_witness(),
@@ -2317,7 +2315,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: Inscription::new(Some("image/png".as_bytes().to_vec()), None).to_witness(),
@@ -2341,7 +2339,7 @@ mod tests {
     server.mine_blocks(1);
 
     let txid = server
-      .dogecoin_rpc_server
+      .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         witness: inscription("text/foo", "hello").to_witness(),
@@ -2362,7 +2360,7 @@ mod tests {
   #[test]
   fn inscriptions_page_with_no_prev_or_next() {
     TestServer::new_with_sat_index().assert_response_regex(
-      "/shibescriptions",
+      "/inscriptions",
       StatusCode::OK,
       ".*prev\nnext.*",
     );
@@ -2375,7 +2373,7 @@ mod tests {
     for i in 0..101 {
       server.mine_blocks(1);
       server
-        .dogecoin_rpc_server
+        .pepecoin_rpc_server
         .broadcast_tx(TransactionTemplate {
           inputs: &[(i + 1, 0, 0)],
           witness: inscription("text/foo", "hello").to_witness(),
@@ -2386,9 +2384,9 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      "/shibescriptions",
+      "/inscriptions",
       StatusCode::OK,
-      ".*<a class=prev href=/shibescriptions/0>prev</a>\nnext.*",
+      ".*<a class=prev href=/inscriptions/0>prev</a>\nnext.*",
     );
   }
 
@@ -2399,7 +2397,7 @@ mod tests {
     for i in 0..101 {
       server.mine_blocks(1);
       server
-        .dogecoin_rpc_server
+        .pepecoin_rpc_server
         .broadcast_tx(TransactionTemplate {
           inputs: &[(i + 1, 0, 0)],
           witness: inscription("text/foo", "hello").to_witness(),
@@ -2410,9 +2408,9 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      "/shibescriptions/0",
+      "/inscriptions/0",
       StatusCode::OK,
-      ".*prev\n<a class=next href=/shibescriptions/100>next</a>.*",
+      ".*prev\n<a class=next href=/inscriptions/100>next</a>.*",
     );
   }
 
@@ -2462,18 +2460,18 @@ mod tests {
 
   #[test]
   fn inscriptions_can_be_hidden_with_config() {
-    let dogecoin_rpc_server = test_bitcoincore_rpc::spawn();
-    dogecoin_rpc_server.mine_blocks(1);
-    let txid = dogecoin_rpc_server.broadcast_tx(TransactionTemplate {
+    let pepecoin_rpc_server = test_bitcoincore_rpc::spawn();
+    pepecoin_rpc_server.mine_blocks(1);
+    let txid = pepecoin_rpc_server.broadcast_tx(TransactionTemplate {
       inputs: &[(1, 0, 0)],
       witness: inscription("text/plain;charset=utf-8", "hello").to_witness(),
       ..Default::default()
     });
     let inscription = InscriptionId::from(txid);
-    dogecoin_rpc_server.mine_blocks(1);
+    pepecoin_rpc_server.mine_blocks(1);
 
-    let server = TestServer::new_with_dogecoin_rpc_server_and_config(
-      dogecoin_rpc_server,
+    let server = TestServer::new_with_pepecoin_rpc_server_and_config(
+      pepecoin_rpc_server,
       format!("\"hidden\":\n - {inscription}"),
     );
 

@@ -102,7 +102,7 @@ impl Fetcher {
           })
           .and_then(|hex| {
             bitcoin::consensus::deserialize(&hex).map_err(|e| {
-              anyhow!("Result for batched JSON-RPC response not valid dogecoin tx: {e}")
+              anyhow!("Result for batched JSON-RPC response not valid pepecoin tx: {e}")
             })
           })
       })

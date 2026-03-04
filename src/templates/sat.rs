@@ -68,7 +68,7 @@ mod tests {
         blocktime: Blocktime::confirmed(0),
         inscription: Some(inscription_id(1)),
       },
-      r"<h1>Sat 0</h1>.*<dt>inscription</dt><dd class=thumbnails><a href=/shibescription/1{64}i1>.*</a></dd>.*",
+      r"<h1>Sat 0</h1>.*<dt>inscription</dt><dd class=thumbnails><a href=/inscription/1{64}i1>.*</a></dd>.*",
     );
   }
 

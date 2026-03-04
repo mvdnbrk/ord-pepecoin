@@ -63,10 +63,10 @@ fn preview() {
   }
 
   assert_regex_match!(
-    reqwest::blocking::get(format!("http://127.0.0.1:{port}/shibescriptions"))
+    reqwest::blocking::get(format!("http://127.0.0.1:{port}/inscriptions"))
       .unwrap()
       .text()
       .unwrap(),
-    format!(".*(<a href=/shibescription/.*){{{}}}.*", examples.len())
+    format!(".*(<a href=/inscription/.*){{{}}}.*", examples.len())
   );
 }

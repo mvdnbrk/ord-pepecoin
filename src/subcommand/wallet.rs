@@ -74,7 +74,7 @@ fn get_change_address(client: &Client) -> Result<Address> {
 }
 
 pub(crate) fn initialize_wallet(options: &Options, seed: [u8; 64]) -> Result {
-  let client = options.dogecoin_rpc_client_for_wallet_command(true)?;
+  let client = options.pepecoin_rpc_client_for_wallet_command(true)?;
   let network = options.chain().network();
 
   client.create_wallet(&options.wallet, None, Some(true), None, None)?;

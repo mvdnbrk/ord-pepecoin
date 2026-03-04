@@ -26,7 +26,7 @@ impl Send {
     let index = Index::open(&options)?;
     index.update()?;
 
-    let client = options.dogecoin_rpc_client_for_wallet_command(false)?;
+    let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
 
     let unspent_outputs = index.get_unspent_outputs(Wallet::load(&options)?)?;
 
@@ -43,7 +43,7 @@ impl Send {
       }
       Outgoing::InscriptionId(id) => index
         .get_inscription_satpoint_by_id(id)?
-        .ok_or_else(|| anyhow!("Shibescription {id} not found"))?,
+        .ok_or_else(|| anyhow!("Inscription {id} not found"))?,
       Outgoing::Amount(amount) => {
         let all_inscription_outputs = inscriptions
           .keys()

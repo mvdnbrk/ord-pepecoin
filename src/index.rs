@@ -143,7 +143,7 @@ impl Index {
     let cookie_file = options.cookie_file()?;
 
     log::info!(
-      "Connecting to Dogecoin Core RPC server at {rpc_url} using credentials from `{}`",
+      "Connecting to Pepecoin Core RPC server at {rpc_url} using credentials from `{}`",
       cookie_file.display()
     );
 
@@ -288,7 +288,7 @@ impl Index {
     for outpoint in utxos.keys() {
       if outpoint_to_value.get(&outpoint.store())?.is_none() {
         return Err(anyhow!(
-          "output in Dogecoin Core wallet but not in ord index: {outpoint}"
+          "output in Pepecoin Core wallet but not in ord index: {outpoint}"
         ));
       }
     }
@@ -1630,7 +1630,7 @@ mod tests {
 
   #[test]
   #[ignore]
-  fn missing_inputs_are_fetched_from_dogecoin_core() {
+  fn missing_inputs_are_fetched_from_pepecoin_core() {
     for args in [
       ["--first-inscription-height", "2"].as_slice(),
       ["--first-inscription-height", "2", "--index-sats"].as_slice(),
@@ -2289,7 +2289,7 @@ mod tests {
           .get_unspent_outputs(Wallet::load(&context.options).unwrap())
           .unwrap_err()
           .to_string(),
-        r"output in Dogecoin Core wallet but not in ord index: [[:xdigit:]]{64}:\d+"
+        r"output in Pepecoin Core wallet but not in ord index: [[:xdigit:]]{64}:\d+"
       );
     }
   }

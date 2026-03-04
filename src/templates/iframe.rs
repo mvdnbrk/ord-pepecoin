@@ -24,7 +24,7 @@ impl Iframe {
 impl Display for Iframe {
   fn fmt(&self, f: &mut Formatter) -> fmt::Result {
     if self.thumbnail {
-      write!(f, "<a href=/shibescription/{}>", self.inscription_id)?;
+      write!(f, "<a href=/inscription/{}>", self.inscription_id)?;
     }
 
     write!(
@@ -50,7 +50,7 @@ mod tests {
     assert_regex_match!(
       Iframe::thumbnail(inscription_id(1))
       .0.to_string(),
-      "<a href=/shibescription/1{64}i1><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/1{64}i1></iframe></a>",
+      "<a href=/inscription/1{64}i1><iframe sandbox=allow-scripts scrolling=no loading=lazy src=/preview/1{64}i1></iframe></a>",
     );
   }
 

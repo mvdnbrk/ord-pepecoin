@@ -1,17 +1,17 @@
 [Unit]
 After=network-online.target
-Description=Dogecoin daemon
-Documentation=https://github.com/dogecoin/dogecoin/blob/master/doc/init.md
+Description=Pepecoin daemon
+Documentation=https://github.com/pepecoin/pepecoin/blob/master/doc/init.md
 Wants=network-online.target
 
 [Service]
-ConfigurationDirectory=dogecoin
+ConfigurationDirectory=pepecoin
 ConfigurationDirectoryMode=0710
-ExecStart=/usr/local/bin/dogecoind \
-  -conf=/etc/dogecoin/dogecoin.conf \
+ExecStart=/usr/local/bin/pepecoind \
+  -conf=/etc/pepecoin/pepecoin.conf \
   -chain=${CHAIN}
-ExecStartPre=/bin/chgrp dogecoin /etc/dogecoin
-Group=dogecoin
+ExecStartPre=/bin/chgrp pepecoin /etc/pepecoin
+Group=pepecoin
 MemoryDenyWriteExecute=true
 NoNewPrivileges=true
 PermissionsStartOnly=true
@@ -20,14 +20,14 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
 Restart=on-failure
-RuntimeDirectory=dogecoind
+RuntimeDirectory=pepecoind
 RuntimeDirectoryMode=0710
-StateDirectory=dogecoind
+StateDirectory=pepecoind
 StateDirectoryMode=0710
 TimeoutStartSec=infinity
 TimeoutStopSec=600
 Type=simple
-User=dogecoin
+User=pepecoin
 
 [Install]
 WantedBy=multi-user.target

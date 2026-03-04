@@ -47,12 +47,12 @@ fn inscription_page() {
   } = inscribe(&rpc_server);
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
-    format!("/shibescription/{inscription}"),
+    format!("/inscription/{inscription}"),
     format!(
       ".*<meta property=og:title content='Inscription 0'>.*
 .*<meta property=og:image content='https://.*/favicon.png'>.*
 .*<meta property=twitter:card content=summary>.*
-<h1>Shibescription 0</h1>
+<h1>Inscription 0</h1>
 .*<iframe .* src=/preview/{inscription}></iframe>.*
 <dl>
   <dt>id</dt>
@@ -99,7 +99,7 @@ fn inscription_appears_on_reveal_transaction_page() {
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     format!("/tx/{reveal}"),
-    format!(".*<h1>Transaction .*</h1>.*<a href=/shibescription/{reveal}.*"),
+    format!(".*<h1>Transaction .*</h1>.*<a href=/inscription/{reveal}.*"),
   );
 }
 
@@ -118,7 +118,7 @@ fn inscription_appears_on_output_page() {
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     format!("/output/{reveal}:0"),
-    format!(".*<h1>Output <span class=monospace>{reveal}:0</span></h1>.*<a href=/shibescription/{inscription}.*"),
+    format!(".*<h1>Output <span class=monospace>{reveal}:0</span></h1>.*<a href=/inscription/{inscription}.*"),
   );
 }
 
@@ -137,9 +137,9 @@ fn inscription_page_after_send() {
 
   let ord_server = TestServer::spawn_with_args(&rpc_server, &[]);
   ord_server.assert_response_regex(
-    format!("/shibescription/{inscription}"),
+    format!("/inscription/{inscription}"),
     format!(
-      r".*<h1>Shibescription 0</h1>.*<dt>location</dt>\s*<dd class=monospace>{reveal}:0:0</dd>.*",
+      r".*<h1>Inscription 0</h1>.*<dt>location</dt>\s*<dd class=monospace>{reveal}:0:0</dd>.*",
     ),
   );
 
@@ -156,9 +156,9 @@ fn inscription_page_after_send() {
 
   let ord_server = TestServer::spawn_with_args(&rpc_server, &[]);
   ord_server.assert_response_regex(
-    format!("/shibescription/{inscription}"),
+    format!("/inscription/{inscription}"),
     format!(
-      r".*<h1>Shibescription 0</h1>.*<dt>address</dt>\s*<dd class=monospace>bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv</dd>.*<dt>location</dt>\s*<dd class=monospace>{send}:0:0</dd>.*",
+      r".*<h1>Inscription 0</h1>.*<dt>address</dt>\s*<dd class=monospace>bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv</dd>.*<dt>location</dt>\s*<dd class=monospace>{send}:0:0</dd>.*",
     ),
   )
 }
@@ -199,9 +199,9 @@ fn home_page_includes_latest_inscriptions() {
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     "/",
     format!(
-      ".*<h2>Latest Shibescriptions</h2>
+      ".*<h2>Latest Inscriptions</h2>
 <div class=thumbnails>
-  <a href=/shibescription/{inscription}><iframe .*></a>
+  <a href=/inscription/{inscription}><iframe .*></a>
 </div>.*",
     ),
   );
@@ -218,14 +218,14 @@ fn home_page_inscriptions_are_sorted() {
     let Inscribe { inscription, .. } = inscribe(&rpc_server);
     inscriptions.insert_str(
       0,
-      &format!("\n  <a href=/shibescription/{inscription}><iframe .*></a>"),
+      &format!("\n  <a href=/inscription/{inscription}><iframe .*></a>"),
     );
   }
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     "/",
     format!(
-      ".*<h2>Latest Shibescriptions</h2>
+      ".*<h2>Latest Inscriptions</h2>
 <div class=thumbnails>{inscriptions}
 </div>.*"
     ),
@@ -240,11 +240,11 @@ fn inscriptions_page() {
   let Inscribe { inscription, .. } = inscribe(&rpc_server);
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
-    "/shibescriptions",
+    "/inscriptions",
     format!(
-      ".*<h1>Shibescription</h1>
+      ".*<h1>Inscription</h1>
 <div class=thumbnails>
-  <a href=/shibescription/{inscription}>.*</a>
+  <a href=/inscription/{inscription}>.*</a>
 </div>
 .*",
     ),
@@ -260,11 +260,11 @@ fn inscriptions_page_is_sorted() {
 
   for _ in 0..8 {
     let Inscribe { inscription, .. } = inscribe(&rpc_server);
-    inscriptions.insert_str(0, &format!(".*<a href=/shibescription/{inscription}>.*"));
+    inscriptions.insert_str(0, &format!(".*<a href=/inscription/{inscription}>.*"));
   }
 
   TestServer::spawn_with_args(&rpc_server, &[])
-    .assert_response_regex("/shibescriptions", &inscriptions);
+    .assert_response_regex("/inscriptions", &inscriptions);
 }
 
 #[test]
@@ -277,13 +277,13 @@ fn inscriptions_page_has_next_and_previous() {
   let Inscribe { inscription: c, .. } = inscribe(&rpc_server);
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
-    format!("/shibescription/{b}"),
+    format!("/inscription/{b}"),
     format!(
-      ".*<h1>Shibescription 1</h1>.*
+      ".*<h1>Inscription 1</h1>.*
 <div class=inscription>
-<a class=prev href=/shibescription/{a}>❮</a>
+<a class=prev href=/inscription/{a}>❮</a>
 <iframe .* src=/preview/{b}></iframe>
-<a class=next href=/shibescription/{c}>❯</a>
+<a class=next href=/inscription/{c}>❯</a>
 </div>.*",
     ),
   );

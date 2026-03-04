@@ -1,11 +1,11 @@
 [package]
 name = "test-bitcoincore-rpc"
-description = "Test Dogecoin Core RPC server"
+description = "Test Pepecoin Core RPC server"
 version = "0.0.1"
 edition = "2021"
 license = "CC0-1.0"
-homepage = "https://github.com/apezord/ord-dogecoin"
-repository = "https://github.com/apezord/ord-dogecoin"
+homepage = "https://github.com/mvdnbrk/ord-pepecoin"
+repository = "https://github.com/mvdnbrk/ord-pepecoin"
 
 [dependencies]
 bitcoin = { version = "0.29.1", features = ["serde", "rand"] }
