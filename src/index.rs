@@ -468,11 +468,11 @@ impl Index {
     self.reorged.load(atomic::Ordering::Relaxed)
   }
 
-  fn begin_read(&self) -> Result<rtx::Rtx> {
+  fn begin_read(&self) -> Result<rtx::Rtx<'_>> {
     Ok(rtx::Rtx(self.database.begin_read()?))
   }
 
-  fn begin_write(&self) -> Result<WriteTransaction> {
+  fn begin_write(&self) -> Result<WriteTransaction<'_>> {
     if cfg!(test) {
       let mut tx = self.database.begin_write()?;
       tx.set_durability(redb::Durability::None);
@@ -837,6 +837,7 @@ impl Index {
     Ok(ids)
   }
 
+  #[allow(dead_code)]
   pub(crate) fn get_inscription_address(
     &self,
     inscription_id: InscriptionId,
