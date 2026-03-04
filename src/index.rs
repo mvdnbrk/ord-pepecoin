@@ -18,6 +18,7 @@ use {
   log::log_enabled,
   redb::{Database, ReadableTable, Table, TableDefinition, WriteStrategy, WriteTransaction},
   std::collections::HashMap,
+  std::io::{self, BufWriter, Write},
   std::sync::atomic::{self, AtomicBool},
 };
 
@@ -380,6 +381,81 @@ impl Index {
 
   pub(crate) fn update(&self) -> Result {
     Updater::update(self)
+  }
+
+  pub(crate) fn export(&self, tsv: Option<PathBuf>, include_addresses: bool) -> Result {
+    let mut writer: Box<dyn Write> = match tsv {
+      Some(path) => Box::new(BufWriter::new(File::create(path)?)),
+      None => Box::new(BufWriter::new(io::stdout())),
+    };
+
+    let rtx = self.database.begin_read()?;
+
+    let blocks_indexed = rtx
+      .open_table(HEIGHT_TO_BLOCK_HASH)?
+      .range(0..)?
+      .rev()
+      .next()
+      .map(|(height, _hash)| height.value() + 1)
+      .unwrap_or(0);
+
+    writeln!(writer, "# export at block height {}", blocks_indexed)?;
+
+    for result in rtx
+      .open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?
+      .range(0..)?
+    {
+      let (number, id) = result;
+      let inscription_id = InscriptionId::load(*id.value());
+
+      let satpoint = self
+        .get_inscription_satpoint_by_id(inscription_id)?
+        .ok_or_else(|| anyhow!("inscription {inscription_id} has no satpoint"))?;
+
+      write!(
+        writer,
+        "{}\t{}\t{}",
+        number.value(),
+        inscription_id,
+        satpoint
+      )?;
+
+      if include_addresses {
+        let address = if satpoint.outpoint == OutPoint::null() {
+          "unbound".to_string()
+        } else {
+          match self.get_transaction(satpoint.outpoint.txid)? {
+            Some(tx) => {
+              if let Some(output) = tx.output.get(satpoint.outpoint.vout as usize) {
+                match self.client.get_raw_transaction_info(&satpoint.outpoint.txid) {
+                  Ok(info) => {
+                    if let Some(vout) = info.vout.get(satpoint.outpoint.vout as usize) {
+                      vout
+                        .script_pub_key
+                        .address
+                        .clone()
+                        .map(|a| a.to_string())
+                        .unwrap_or_else(|| "no-address".to_string())
+                    } else {
+                      "output-not-found-in-rpc".to_string()
+                    }
+                  }
+                  Err(e) => e.to_string(),
+                }
+              } else {
+                "output-not-found".to_string()
+              }
+            }
+            None => "transaction-not-found".to_string(),
+          }
+        };
+        write!(writer, "\t{}", address)?;
+      }
+      writeln!(writer)?;
+    }
+
+    writer.flush()?;
+    Ok(())
   }
 
   pub(crate) fn is_reorged(&self) -> bool {

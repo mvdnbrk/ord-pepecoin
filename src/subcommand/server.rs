@@ -17,7 +17,7 @@ use {
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::get,
-    Router, TypedHeader,
+    Json, Router, TypedHeader,
   },
   axum_server::Handle,
   rust_embed::RustEmbed,
@@ -37,6 +37,78 @@ use {
 };
 
 mod error;
+
+pub(crate) struct AcceptJson(pub(crate) bool);
+
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for AcceptJson
+where
+  S: Send + Sync,
+{
+  type Rejection = (StatusCode, &'static str);
+
+  async fn from_request_parts(
+    parts: &mut http::request::Parts,
+    _state: &S,
+  ) -> Result<Self, Self::Rejection> {
+    Ok(Self(
+      parts
+        .headers
+        .get("accept")
+        .map(|value| value == "application/json")
+        .unwrap_or_default(),
+    ))
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct InscriptionJson {
+  pub address: Option<String>,
+  pub content_length: Option<usize>,
+  pub content_type: Option<String>,
+  pub genesis_fee: u64,
+  pub genesis_height: u64,
+  pub genesis_transaction: Txid,
+  pub inscription_id: InscriptionId,
+  pub location: SatPoint,
+  pub number: u64,
+  pub output_value: Option<u64>,
+  pub timestamp: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct InscriptionsJson {
+  pub inscriptions: Vec<InscriptionId>,
+  pub prev: Option<u64>,
+  pub next: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OutputJson {
+  pub value: u64,
+  pub script_pubkey: String,
+  pub address: Option<String>,
+  pub transaction: Txid,
+  pub inscriptions: Vec<InscriptionId>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BlockJson {
+  pub hash: BlockHash,
+  pub target: String,
+  pub best_block: bool,
+  pub height: u64,
+  pub chainweight: Option<usize>,
+  pub mediantime: i64,
+  pub nonce: u32,
+  pub bits: String,
+  pub difficulty: f64,
+  pub chainwork: String,
+  pub confirmations: i32,
+  pub previousblockhash: Option<BlockHash>,
+  pub nextblockhash: Option<BlockHash>,
+  pub inscriptions: Vec<InscriptionId>,
+}
 
 enum BlockQuery {
   Height(u64),
@@ -380,8 +452,9 @@ impl Server {
   async fn output(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(outpoint): Path<OutPoint>,
-  ) -> ServerResult<PageHtml<OutputHtml>> {
+  ) -> ServerResult<Response> {
     let list = if index.has_sat_index()? {
       index.list(outpoint)?
     } else {
@@ -413,16 +486,27 @@ impl Server {
 
     let inscriptions = index.get_inscriptions_on_output(outpoint)?;
 
-    Ok(
-      OutputHtml {
-        outpoint,
+    if accept_json.0 {
+      Ok(Json(OutputJson {
+        value: output.value,
+        script_pubkey: output.script_pubkey.to_string(),
+        address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
+        transaction: outpoint.txid,
         inscriptions,
-        list,
-        chain: page_config.chain,
-        output,
-      }
-      .page(page_config, index.has_sat_index()?),
-    )
+      }).into_response())
+    } else {
+      Ok(
+        OutputHtml {
+          outpoint,
+          inscriptions,
+          list,
+          chain: page_config.chain,
+          output,
+        }
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
+      )
+    }
   }
 
   async fn range(
@@ -467,8 +551,9 @@ impl Server {
   async fn block(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(DeserializeFromStr(query)): Path<DeserializeFromStr<BlockQuery>>,
-  ) -> ServerResult<PageHtml<BlockHtml>> {
+  ) -> ServerResult<Response> {
     let (block, height) = match query {
       BlockQuery::Height(height) => {
         let block = index
@@ -490,10 +575,35 @@ impl Server {
       }
     };
 
-    Ok(
-      BlockHtml::new(block, Height(height), Self::index_height(&index)?)
-        .page(page_config, index.has_sat_index()?),
-    )
+    let inscriptions = index.get_inscriptions_on_output(OutPoint::null())?;
+
+    if accept_json.0 {
+      let info = index.block_header_info(block.header.block_hash())?
+        .ok_or_not_found(|| format!("block {}", block.header.block_hash()))?;
+
+      Ok(Json(BlockJson {
+        hash: block.header.block_hash(),
+        target: block.header.target().to_string(),
+        best_block: true,
+        height,
+        chainweight: None,
+        mediantime: block.header.time as i64,
+        nonce: block.header.nonce,
+        bits: format!("{:x}", block.header.bits),
+        difficulty: info.difficulty,
+        chainwork: hex::encode(info.chainwork),
+        confirmations: info.confirmations as i32,
+        previousblockhash: info.previous_block_hash,
+        nextblockhash: info.next_block_hash,
+        inscriptions,
+      }).into_response())
+    } else {
+      Ok(
+        BlockHtml::new(block, Height(height), Self::index_height(&index)?)
+          .page(page_config, index.has_sat_index()?)
+          .into_response(),
+      )
+    }
   }
 
   async fn transaction(
@@ -802,8 +912,9 @@ impl Server {
   async fn inscription(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(inscription_id): Path<InscriptionId>,
-  ) -> ServerResult<PageHtml<InscriptionHtml>> {
+  ) -> ServerResult<Response> {
     let entry = index
       .get_inscription_entry(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
@@ -824,66 +935,95 @@ impl Server {
       .nth(satpoint.outpoint.vout.try_into().unwrap())
       .ok_or_not_found(|| format!("inscription {inscription_id} current transaction output"))?;
 
-    let previous = if let Some(previous) = entry.number.checked_sub(1) {
-      Some(
-        index
-          .get_inscription_id_by_inscription_number(previous)?
-          .ok_or_not_found(|| format!("inscription {previous}"))?,
-      )
-    } else {
-      None
-    };
-
-    let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
-
-    Ok(
-      InscriptionHtml {
-        chain: page_config.chain,
+    if accept_json.0 {
+      Ok(Json(InscriptionJson {
+        address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
+        content_length: inscription.body().map(|body| body.len()),
+        content_type: inscription.content_type().map(|s| s.to_string()),
         genesis_fee: entry.fee,
         genesis_height: entry.height,
-        inscription,
+        genesis_transaction: inscription_id.txid,
         inscription_id,
-        next,
+        location: satpoint,
         number: entry.number,
-        output,
-        previous,
-        sat: entry.sat,
-        satpoint,
-        timestamp: timestamp(entry.timestamp),
-      }
-      .page(page_config, index.has_sat_index()?),
-    )
+        output_value: Some(output.value),
+        timestamp: entry.timestamp as i64,
+      }).into_response())
+    } else {
+      let previous = if let Some(previous) = entry.number.checked_sub(1) {
+        Some(
+          index
+            .get_inscription_id_by_inscription_number(previous)?
+            .ok_or_not_found(|| format!("inscription {previous}"))?,
+        )
+      } else {
+        None
+      };
+
+      let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
+
+      Ok(
+        InscriptionHtml {
+          chain: page_config.chain,
+          genesis_fee: entry.fee,
+          genesis_height: entry.height,
+          inscription,
+          inscription_id,
+          next,
+          number: entry.number,
+          output,
+          previous,
+          sat: entry.sat,
+          satpoint,
+          timestamp: timestamp(entry.timestamp),
+        }
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
+      )
+    }
   }
 
   async fn inscriptions(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-  ) -> ServerResult<PageHtml<InscriptionsHtml>> {
-    Self::inscriptions_inner(page_config, index, None).await
+    accept_json: AcceptJson,
+  ) -> ServerResult<Response> {
+    Self::inscriptions_inner(page_config, index, accept_json, None).await
   }
 
   async fn inscriptions_from(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(from): Path<u64>,
-  ) -> ServerResult<PageHtml<InscriptionsHtml>> {
-    Self::inscriptions_inner(page_config, index, Some(from)).await
+  ) -> ServerResult<Response> {
+    Self::inscriptions_inner(page_config, index, accept_json, Some(from)).await
   }
 
   async fn inscriptions_inner(
     page_config: Arc<PageConfig>,
     index: Arc<Index>,
+    accept_json: AcceptJson,
     from: Option<u64>,
-  ) -> ServerResult<PageHtml<InscriptionsHtml>> {
+  ) -> ServerResult<Response> {
     let (inscriptions, prev, next) = index.get_latest_inscriptions_with_prev_and_next(100, from)?;
-    Ok(
-      InscriptionsHtml {
+    if accept_json.0 {
+      Ok(Json(InscriptionsJson {
         inscriptions,
-        next,
         prev,
-      }
-      .page(page_config, index.has_sat_index()?),
-    )
+        next,
+      }).into_response())
+    } else {
+      Ok(
+        InscriptionsHtml {
+          inscriptions,
+          next,
+          prev,
+        }
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
+      )
+    }
   }
 
   async fn redirect_http_to_https(
