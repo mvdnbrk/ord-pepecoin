@@ -27,7 +27,7 @@ mod fetcher;
 mod rtx;
 mod updater;
 
-const SCHEMA_VERSION: u64 = 3;
+const SCHEMA_VERSION: u64 = 4;
 
 macro_rules! define_table {
   ($name:ident, $key:ty, $value:ty) => {
@@ -49,6 +49,8 @@ define_table! { SAT_TO_INSCRIPTION_ID, u128, &InscriptionIdValue }
 define_table! { SAT_TO_SATPOINT, u128, &SatPointValue }
 define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
+define_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &[u8] }
+define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
 pub(crate) struct Index {
   auth: Auth,
@@ -61,6 +63,7 @@ pub(crate) struct Index {
   height_limit: Option<u64>,
   reorged: AtomicBool,
   rpc_url: String,
+  chain: Chain,
 }
 
 #[derive(Debug, PartialEq)]
@@ -221,6 +224,8 @@ impl Index {
         tx.open_table(SAT_TO_INSCRIPTION_ID)?;
         tx.open_table(SAT_TO_SATPOINT)?;
         tx.open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?;
+        tx.open_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+        tx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
 
         tx.open_table(STATISTIC_TO_COUNT)?
           .insert(&Statistic::Schema.key(), &SCHEMA_VERSION)?;
@@ -251,6 +256,7 @@ impl Index {
       height_limit: options.height_limit,
       reorged: AtomicBool::new(false),
       rpc_url,
+      chain: options.chain(),
     })
   }
 
@@ -426,7 +432,7 @@ impl Index {
         } else {
           match self.get_transaction(satpoint.outpoint.txid)? {
             Some(tx) => {
-              if let Some(output) = tx.output.get(satpoint.outpoint.vout as usize) {
+              if let Some(_output) = tx.output.get(satpoint.outpoint.vout as usize) {
                 match self.client.get_raw_transaction_info(&satpoint.outpoint.txid) {
                   Ok(info) => {
                     if let Some(vout) = info.vout.get(satpoint.outpoint.vout as usize) {
@@ -809,6 +815,38 @@ impl Index {
         }
       }
     }
+  }
+
+  pub(crate) fn get_inscriptions_by_address(&self, address: &str) -> Result<Vec<InscriptionId>> {
+    let rtx = self.database.begin_read()?;
+    let table = rtx.open_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+
+    let ids = match table.get(address)? {
+      Some(data) => {
+        let bytes = data.value();
+        let mut ids = Vec::new();
+        for chunk in bytes.chunks_exact(36) {
+          let mut arr = [0u8; 36];
+          arr.copy_from_slice(chunk);
+          ids.push(InscriptionId::load(arr));
+        }
+        ids
+      }
+      None => Vec::new(),
+    };
+    Ok(ids)
+  }
+
+  pub(crate) fn get_inscription_address(
+    &self,
+    inscription_id: InscriptionId,
+  ) -> Result<Option<String>> {
+    let rtx = self.database.begin_read()?;
+    let table = rtx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
+    let address = table
+      .get(&inscription_id.store())?
+      .map(|v| v.value().to_string());
+    Ok(address)
   }
 
   pub(crate) fn blocktime(&self, height: Height) -> Result<Blocktime> {

@@ -6,7 +6,8 @@ use {
   super::*,
   crate::page_config::PageConfig,
   crate::templates::{
-    BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsHtml, OutputHtml, PageContent,
+    AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsHtml, OutputHtml,
+ PageContent,
     PageHtml, PreviewAudioHtml, PreviewImageHtml, PreviewPdfHtml, PreviewTextHtml,
     PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, TransactionHtml,
   },
@@ -89,6 +90,12 @@ pub struct OutputJson {
   pub script_pubkey: String,
   pub address: Option<String>,
   pub transaction: Txid,
+  pub inscriptions: Vec<InscriptionId>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AddressJson {
+  pub address: String,
   pub inscriptions: Vec<InscriptionId>,
 }
 
@@ -217,7 +224,9 @@ impl Server {
       let router = Router::new()
         .route("/", get(Self::home))
         .route("/block-count", get(Self::block_count))
+        .route("/address/:address", get(Self::address))
         .route("/block/:query", get(Self::block))
+
         .route("/bounties", get(Self::bounties))
         .route("/content/:inscription_id", get(Self::content))
         .route("/faq", get(Self::faq))
@@ -546,6 +555,34 @@ impl Server {
 
   async fn install_script() -> Redirect {
     Redirect::to("https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/master/install.sh")
+  }
+
+  async fn address(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
+    Path(address): Path<String>,
+  ) -> ServerResult<Response> {
+    let inscriptions = index.get_inscriptions_by_address(&address)?;
+
+    if accept_json.0 {
+      Ok(
+        Json(AddressJson {
+          address,
+          inscriptions,
+        })
+        .into_response(),
+      )
+    } else {
+      Ok(
+        AddressHtml {
+          address,
+          inscriptions,
+        }
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
+      )
+    }
   }
 
   async fn block(

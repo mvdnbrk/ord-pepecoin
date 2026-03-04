@@ -1,6 +1,7 @@
 use {super::*, boilerplate::Boilerplate};
 
 pub(crate) use {
+  address::AddressHtml,
   block::BlockHtml,
   home::HomeHtml,
   iframe::Iframe,
@@ -19,6 +20,7 @@ pub(crate) use {
   transaction::TransactionHtml,
 };
 
+mod address;
 mod block;
 mod home;
 mod iframe;

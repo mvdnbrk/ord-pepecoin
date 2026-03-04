@@ -30,6 +30,9 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
   value_cache: &'a mut HashMap<OutPoint, u64>,
+  address_to_inscription_ids: &'a mut Table<'db, 'tx, &'static str, &'static [u8]>,
+  id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
+  network: Network,
 }
 
 impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
@@ -48,6 +51,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
     value_cache: &'a mut HashMap<OutPoint, u64>,
+    address_to_inscription_ids: &'a mut Table<'db, 'tx, &'static str, &'static [u8]>,
+    id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
+    network: Network,
   ) -> Result<Self> {
     let next_number = number_to_id
       .iter()?
@@ -74,6 +80,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
       satpoint_to_id,
       timestamp,
       value_cache,
+      address_to_inscription_ids,
+      id_to_address,
+      network,
     })
   }
 
@@ -243,6 +252,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           input_sat_ranges,
           inscriptions.next().unwrap(),
           new_satpoint,
+          Some(&tx_out.script_pubkey),
         )?;
       }
 
@@ -263,7 +273,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
           outpoint: OutPoint::null(),
           offset: self.lost_sats + flotsam.offset - output_value,
         };
-        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint)?;
+        self.update_inscription_location(input_sat_ranges, flotsam, new_satpoint, None)?;
       }
 
       Ok(self.reward - output_value)
@@ -282,12 +292,44 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     input_sat_ranges: Option<&VecDeque<(u128, u128)>>,
     flotsam: Flotsam,
     new_satpoint: SatPoint,
+    script_pubkey: Option<&Script>,
   ) -> Result {
     let inscription_id = flotsam.inscription_id.store();
+
+    let new_address = match script_pubkey {
+      Some(script) => Address::from_script(script, self.network)
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "unknown".to_string()),
+      None => "unbound".to_string(),
+    };
 
     match flotsam.origin {
       Origin::Old(old_satpoint) => {
         self.satpoint_to_id.remove(&old_satpoint.store())?;
+
+        if let Some(old_address) = self.id_to_address.get(&inscription_id)? {
+          let old_address = old_address.value().to_string();
+          let bytes = self
+            .address_to_inscription_ids
+            .get(old_address.as_str())?
+            .map(|v| v.value().to_vec());
+
+          if let Some(bytes) = bytes {
+            let mut new_bytes = Vec::with_capacity(bytes.len().saturating_sub(36));
+            for chunk in bytes.chunks_exact(36) {
+              if chunk != inscription_id {
+                new_bytes.extend_from_slice(chunk);
+              }
+            }
+            if new_bytes.is_empty() {
+              self.address_to_inscription_ids.remove(old_address.as_str())?;
+            } else {
+              self
+                .address_to_inscription_ids
+                .insert(old_address.as_str(), new_bytes.as_slice())?;
+            }
+          }
+        }
       }
       Origin::New(fee) => {
         self
@@ -324,6 +366,19 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         self.next_number += 1;
       }
     }
+
+    // Add to new address
+    let mut ids = match self.address_to_inscription_ids.get(new_address.as_str())? {
+      Some(data) => data.value().to_vec(),
+      None => Vec::new(),
+    };
+    ids.extend_from_slice(&inscription_id);
+    self
+      .address_to_inscription_ids
+      .insert(new_address.as_str(), ids.as_slice())?;
+    self
+      .id_to_address
+      .insert(&inscription_id, new_address.as_str())?;
 
     let new_satpoint = new_satpoint.store();
 

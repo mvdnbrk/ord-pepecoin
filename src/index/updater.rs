@@ -416,6 +416,8 @@ impl Updater {
     let mut sat_to_inscription_id = wtx.open_table(SAT_TO_INSCRIPTION_ID)?;
     let mut satpoint_to_inscription_id = wtx.open_table(SATPOINT_TO_INSCRIPTION_ID)?;
     let mut statistic_to_count = wtx.open_table(STATISTIC_TO_COUNT)?;
+    let mut address_to_inscription_ids = wtx.open_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+    let mut id_to_address = wtx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
 
     let mut lost_sats = statistic_to_count
       .get(&Statistic::LostSats.key())?
@@ -437,6 +439,9 @@ impl Updater {
       &mut satpoint_to_inscription_id,
       block.header.time,
       value_cache,
+      &mut address_to_inscription_ids,
+      &mut id_to_address,
+      index.chain.network(),
     )?;
 
     if self.index_sats {
