@@ -4,7 +4,7 @@ Ordinal indexer and block explorer for **Pepecoin**, forked from [apezord/ord-do
 
 Inscriptions on Pepecoin use `script_sig` (no SegWit). The indexer and explorer support PRC-20 tokens and all inscription content types.
 
-> **Note:** Pepecoin has more reorgs than Bitcoin due to its 1-minute block times. Periodically create checkpoints of the redb database. See [this issue](https://github.com/casey/ord/issues/148).
+> **Note:** Pepecoin has more reorgs than Bitcoin due to its 1-minute block times. Reorg resistance has been implemented upstream (see [ordinals/ord#2320](https://github.com/ordinals/ord/pull/2320)) but is not yet ported to this fork. Periodically create checkpoints of the redb database.
 
 ## Requirements
 
