@@ -8,6 +8,9 @@ use {
 
 mod inscription_updater;
 
+const SAVEPOINT_INTERVAL: u64 = 10;
+const MAX_SAVEPOINTS: usize = 2;
+
 struct BlockData {
   header: BlockHeader,
   txdata: Vec<(Transaction, Txid)>,
@@ -48,7 +51,10 @@ impl Updater {
       .range(0..)?
       .rev()
       .next()
-      .map(|(height, _hash)| height.value() + 1)
+      .map(|result| {
+        let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+        height.value() + 1
+      })
       .unwrap_or(0);
 
     wtx
@@ -61,6 +67,8 @@ impl Updater {
           .unwrap_or(0),
       )?;
 
+    wtx.commit()?;
+
     let mut updater = Self {
       range_cache: HashMap::new(),
       height,
@@ -71,14 +79,11 @@ impl Updater {
       outputs_traversed: 0,
     };
 
-    updater.update_index(index, wtx)
+    updater.update_index(index)
   }
 
-  fn update_index<'index>(
-    &mut self,
-    index: &'index Index,
-    mut wtx: WriteTransaction<'index>,
-  ) -> Result {
+  fn update_index(&mut self, index: &Index) -> Result {
+    let mut wtx = index.begin_write()?;
     let starting_height = index.client.get_block_count()? + 1;
 
     let mut progress_bar = if cfg!(test)
@@ -108,14 +113,55 @@ impl Updater {
         Err(mpsc::RecvError) => break,
       };
 
-      self.index_block(
+      match self.index_block(
         index,
         &mut outpoint_sender,
         &mut value_receiver,
         &mut wtx,
         block,
         &mut value_cache,
-      )?;
+      ) {
+        Ok(()) => {}
+        Err(error) => {
+          let error_msg = error.to_string();
+          if error_msg.contains("reorg detected") {
+            log::warn!("{}", error_msg);
+            drop(wtx);
+
+            let mut recovery_wtx = index.begin_write()?;
+            let savepoints: Vec<u64> = recovery_wtx.list_persistent_savepoints()?.collect();
+
+            if savepoints.is_empty() {
+              log::error!("No savepoints available for reorg recovery");
+              index.unrecoverably_reorged.store(true, atomic::Ordering::Relaxed);
+              return Err(anyhow!("unrecoverable reorg: no savepoints available"));
+            }
+
+            let oldest_id = *savepoints.iter().min().unwrap();
+            let savepoint = recovery_wtx.get_persistent_savepoint(oldest_id)?;
+            recovery_wtx.restore_savepoint(&savepoint)?;
+            recovery_wtx.commit()?;
+
+            let restored_height = index
+              .database
+              .begin_read()?
+              .open_table(HEIGHT_TO_BLOCK_HASH)?
+              .range(0..)?
+              .rev()
+              .next()
+              .map(|result| {
+                let (h, _) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+                h.value()
+              })
+              .unwrap_or(0);
+
+            log::info!("Restored to height {} from savepoint", restored_height);
+            index.reorged.store(true, atomic::Ordering::Relaxed);
+            return Ok(());
+          }
+          return Err(error);
+        }
+      }
 
       if let Some(progress_bar) = &mut progress_bar {
         progress_bar.inc(1);
@@ -141,7 +187,10 @@ impl Updater {
           .range(0..)?
           .rev()
           .next()
-          .map(|(height, _hash)| height.value() + 1)
+          .map(|result| {
+            let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+            height.value() + 1
+          })
           .unwrap_or(0);
         if height != self.height {
           // another update has run between committing and beginning the new
@@ -157,6 +206,23 @@ impl Updater {
               .map(|duration| duration.as_millis())
               .unwrap_or(0),
           )?;
+
+        let blocks_behind = starting_height.saturating_sub(self.height);
+        if blocks_behind < SAVEPOINT_INTERVAL * (MAX_SAVEPOINTS as u64 + 1) {
+          if self.height % SAVEPOINT_INTERVAL == 0 {
+            wtx.set_durability(redb::Durability::Immediate);
+            let savepoint_id = wtx.persistent_savepoint()?;
+            log::info!("Created savepoint {} at height {}", savepoint_id, self.height);
+
+            let mut savepoints: Vec<u64> = wtx.list_persistent_savepoints()?.collect();
+            savepoints.sort();
+            while savepoints.len() > MAX_SAVEPOINTS {
+              let old_id = savepoints.remove(0);
+              wtx.delete_persistent_savepoint(old_id)?;
+              log::info!("Deleted old savepoint {}", old_id);
+            }
+          }
+        }
       }
 
       if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
@@ -336,6 +402,18 @@ impl Updater {
     block: BlockData,
     value_cache: &mut HashMap<OutPoint, u64>,
   ) -> Result<()> {
+    // Check for reorg FIRST, before opening all tables
+    if let Some(prev_height) = self.height.checked_sub(1) {
+      let table = wtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
+      let prev_hash = table
+        .get(&prev_height)?
+        .ok_or_else(|| anyhow!("Could not find block hash for height {prev_height}"))?;
+
+      if BlockHash::from_inner(*prev_hash.value()) != block.header.prev_blockhash {
+        return Err(anyhow!("reorg detected at or before {prev_height}"));
+      }
+    }
+
     // If value_receiver still has values something went wrong with the last block
     // Could be an assert, shouldn't recover from this and commit the last block
     let Err(TryRecvError::Empty) = value_receiver.try_recv() else {
@@ -394,15 +472,6 @@ impl Updater {
       time,
       block.txdata.len()
     );
-
-    if let Some(prev_height) = self.height.checked_sub(1) {
-      let prev_hash = height_to_block_hash.get(&prev_height)?.unwrap();
-
-      if prev_hash.value() != block.header.prev_blockhash.as_ref() {
-        index.reorged.store(true, atomic::Ordering::Relaxed);
-        return Err(anyhow!("reorg detected at or before {prev_height}"));
-      }
-    }
 
     let mut inscription_id_to_inscription_entry =
       wtx.open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?;

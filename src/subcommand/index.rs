@@ -2,6 +2,8 @@ use super::*;
 
 #[derive(Debug, Parser)]
 pub(crate) enum IndexSubcommand {
+  #[clap(about = "Compact the index database")]
+  Compact,
   #[clap(about = "Export index to TSV")]
   Export(Export),
   #[clap(about = "Update the index")]
@@ -13,6 +15,10 @@ pub(crate) enum IndexSubcommand {
 impl IndexSubcommand {
   pub(crate) fn run(self, options: Options) -> Result {
     match self {
+      Self::Compact => {
+        let mut index = Index::open(&options)?;
+        index.compact()
+      }
       Self::Export(export) => export.run(options),
       Self::Run | Self::Update => run(options),
     }

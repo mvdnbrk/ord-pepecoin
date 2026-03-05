@@ -11,7 +11,10 @@ impl Rtx<'_> {
         .range(0..)?
         .rev()
         .next()
-        .map(|(height, _hash)| Height(height.value())),
+        .map(|result| {
+          let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+          Height(height.value())
+        }),
     )
   }
 
@@ -23,7 +26,10 @@ impl Rtx<'_> {
         .range(0..)?
         .rev()
         .next()
-        .map(|(height, _hash)| height.value() + 1)
+        .map(|result| {
+          let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+          height.value() + 1
+        })
         .unwrap_or(0),
     )
   }

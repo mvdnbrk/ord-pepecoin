@@ -17,20 +17,18 @@ use {
   indicatif::{ProgressBar, ProgressStyle},
   log::log_enabled,
   redb::{
-    Database, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table, TableDefinition,
-    WriteStrategy, WriteTransaction,
+    Database, DatabaseError, MultimapTableDefinition, ReadableMultimapTable, ReadableTable,
+    StorageError, Table, TableDefinition, TableError, WriteTransaction,
   },
+
   std::collections::HashMap,
   std::io::{self, BufWriter, Write},
   std::sync::atomic::{self, AtomicBool},
 };
-
 mod entry;
 mod fetcher;
 mod rtx;
 mod updater;
-
-const SCHEMA_VERSION: u64 = 4;
 
 macro_rules! define_table {
   ($name:ident, $key:ty, $value:ty) => {
@@ -62,7 +60,10 @@ define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
 define_multimap_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
+const SCHEMA_VERSION: u64 = 5;
+
 pub(crate) struct Index {
+
   auth: Auth,
   client: Client,
   database: Database,
@@ -72,6 +73,7 @@ pub(crate) struct Index {
   genesis_block_coinbase_txid: Txid,
   height_limit: Option<u64>,
   reorged: AtomicBool,
+  unrecoverably_reorged: AtomicBool,
   rpc_url: String,
   chain: Chain,
 }
@@ -177,13 +179,16 @@ impl Index {
       data_dir.join("index.redb")
     };
 
-    let database = match unsafe { Database::builder().open_mmapped(&path) } {
+    let database: Database = match Database::builder()
+        .set_cache_size(1024 * 1024 * 1024)
+        .open(&path)
+    {
       Ok(database) => {
         let schema_version = database
           .begin_read()?
           .open_table(STATISTIC_TO_COUNT)?
           .get(&Statistic::Schema.key())?
-          .map(|x| x.value())
+          .map(|x: redb::AccessGuard<u64>| x.value())
           .unwrap_or(0);
 
         match schema_version.cmp(&SCHEMA_VERSION) {
@@ -203,24 +208,11 @@ impl Index {
 
         database
       }
-      Err(redb::Error::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
-        let database = unsafe {
-          Database::builder()
-            .set_write_strategy(if cfg!(test) {
-              WriteStrategy::Checksum
-            } else {
-              WriteStrategy::TwoPhase
-            })
-            .create_mmapped(&path)?
-        };
+      Err(DatabaseError::Storage(StorageError::Io(error))) if error.kind() == io::ErrorKind::NotFound => {
+        let database = Database::builder()
+            .set_cache_size(1024 * 1024 * 1024)
+            .create(&path)?;
         let tx = database.begin_write()?;
-
-        #[cfg(test)]
-        let tx = {
-          let mut tx = tx;
-          tx.set_durability(redb::Durability::None);
-          tx
-        };
 
         tx.open_table(HEIGHT_TO_BLOCK_HASH)?;
         tx.open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?;
@@ -249,7 +241,7 @@ impl Index {
 
         database
       }
-      Err(error) => return Err(error.into()),
+      Err(error) => return Err(anyhow!("{error}")),
     };
 
     let genesis_block_coinbase_transaction =
@@ -265,6 +257,7 @@ impl Index {
       genesis_block_coinbase_transaction,
       height_limit: options.height_limit,
       reorged: AtomicBool::new(false),
+      unrecoverably_reorged: AtomicBool::new(false),
       rpc_url,
       chain: options.chain(),
     })
@@ -331,7 +324,7 @@ impl Index {
   pub(crate) fn has_sat_index(&self) -> Result<bool> {
     match self.begin_read()?.0.open_table(OUTPOINT_TO_SAT_RANGES) {
       Ok(_) => Ok(true),
-      Err(redb::Error::TableDoesNotExist(_)) => Ok(false),
+      Err(TableError::TableDoesNotExist(_)) => Ok(false),
       Err(err) => Err(err.into()),
     }
   }
@@ -366,29 +359,34 @@ impl Index {
           .range(0..)?
           .rev()
           .next()
-          .map(|(height, _hash)| height.value() + 1)
+          .map(|result| {
+            let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+            height.value() + 1
+          })
           .unwrap_or(0),
-        branch_pages: stats.branch_pages(),
-        fragmented_bytes: stats.fragmented_bytes(),
+        branch_pages: stats.branch_pages() as usize,
+        fragmented_bytes: stats.fragmented_bytes() as usize,
         index_file_size: fs::metadata(&self.path)?.len(),
-        leaf_pages: stats.leaf_pages(),
-        metadata_bytes: stats.metadata_bytes(),
+        leaf_pages: stats.leaf_pages() as usize,
+        metadata_bytes: stats.metadata_bytes() as usize,
         sat_ranges,
         outputs_traversed,
         page_size: stats.page_size(),
-        stored_bytes: stats.stored_bytes(),
+        stored_bytes: stats.stored_bytes() as usize,
         transactions: wtx
           .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
           .range(0..)?
-          .map(
-            |(starting_block_count, starting_timestamp)| TransactionInfo {
+          .map(|result| {
+            let (starting_block_count, starting_timestamp) =
+              result.expect("Error reading from starting block count table");
+            TransactionInfo {
               starting_block_count: starting_block_count.value(),
               starting_timestamp: starting_timestamp.value(),
-            },
-          )
+            }
+          })
           .collect(),
-        tree_height: stats.tree_height(),
-        utxos_indexed: wtx.open_table(OUTPOINT_TO_SAT_RANGES)?.len()?,
+        tree_height: stats.tree_height() as usize,
+        utxos_indexed: wtx.open_table(OUTPOINT_TO_SAT_RANGES)?.len()? as usize,
       }
     };
 
@@ -396,7 +394,22 @@ impl Index {
   }
 
   pub(crate) fn update(&self) -> Result {
-    Updater::update(self)
+    loop {
+      match Updater::update(self) {
+        Ok(()) => return Ok(()),
+        Err(error) => {
+          if self.unrecoverably_reorged.load(atomic::Ordering::Relaxed) {
+            return Err(error);
+          }
+          if self.reorged.load(atomic::Ordering::Relaxed) {
+            self.reorged.store(false, atomic::Ordering::Relaxed);
+            log::info!("Recovered from reorg, resuming indexing...");
+            continue;
+          }
+          return Err(error);
+        }
+      }
+    }
   }
 
   pub(crate) fn export(&self, tsv: Option<PathBuf>, include_addresses: bool) -> Result {
@@ -412,7 +425,10 @@ impl Index {
       .range(0..)?
       .rev()
       .next()
-      .map(|(height, _hash)| height.value() + 1)
+      .map(|result| {
+        let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+        height.value() + 1
+      })
       .unwrap_or(0);
 
     writeln!(writer, "# export at block height {}", blocks_indexed)?;
@@ -421,7 +437,7 @@ impl Index {
       .open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?
       .range(0..)?
     {
-      let (number, id) = result;
+      let (number, id) = result.expect("Error reading from inscription number table");
       let inscription_id = InscriptionId::load(*id.value());
 
       let satpoint = self
@@ -474,8 +490,32 @@ impl Index {
     Ok(())
   }
 
+  pub(crate) fn compact(&mut self) -> Result {
+    if self.database.compact()? {
+      log::info!("Database compacted successfully");
+    } else {
+      log::info!("Database is already compact");
+    }
+    Ok(())
+  }
+
+  #[allow(dead_code)]
   pub(crate) fn is_reorged(&self) -> bool {
     self.reorged.load(atomic::Ordering::Relaxed)
+  }
+
+  pub(crate) fn is_unrecoverably_reorged(&self) -> bool {
+    self.unrecoverably_reorged.load(atomic::Ordering::Relaxed)
+  }
+
+  #[allow(dead_code)]
+  pub(crate) fn block_hash(&self, height: u64) -> Result<Option<BlockHash>> {
+    let rtx = self.database.begin_read()?;
+    let table = rtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
+    let hash = table
+      .get(&height)?
+      .map(|hash| BlockHash::from_inner(*hash.value()));
+    Ok(hash)
   }
 
   fn begin_read(&self) -> Result<rtx::Rtx<'_>> {
@@ -488,7 +528,9 @@ impl Index {
       tx.set_durability(redb::Durability::None);
       Ok(tx)
     } else {
-      Ok(self.database.begin_write()?)
+      let mut tx = self.database.begin_write()?;
+      tx.set_durability(redb::Durability::Paranoid);
+      Ok(tx)
     }
   }
 
@@ -535,7 +577,8 @@ impl Index {
     let height_to_block_hash = rtx.0.open_table(HEIGHT_TO_BLOCK_HASH)?;
 
     for next in height_to_block_hash.range(0..block_count)?.rev().take(take) {
-      blocks.push((next.0.value(), Entry::load(*next.1.value())));
+      let (height, hash) = next.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+      blocks.push((height.value(), Entry::load(*hash.value())));
     }
 
     Ok(blocks)
@@ -543,17 +586,18 @@ impl Index {
 
   pub(crate) fn rare_sat_satpoints(&self) -> Result<Option<Vec<(Sat, SatPoint)>>> {
     if self.has_sat_index()? {
-      let mut result = Vec::new();
+      let mut result_vec = Vec::new();
 
       let rtx = self.database.begin_read()?;
 
       let sat_to_satpoint = rtx.open_table(SAT_TO_SATPOINT)?;
 
-      for (sat, satpoint) in sat_to_satpoint.range(0..)? {
-        result.push((Sat(sat.value()), Entry::load(*satpoint.value())));
+      for result in sat_to_satpoint.range(0..)? {
+        let (sat, satpoint) = result.expect("Error reading from SAT_TO_SATPOINT table");
+        result_vec.push((Sat(sat.value()), Entry::load(*satpoint.value())));
       }
 
-      Ok(Some(result))
+      Ok(Some(result_vec))
     } else {
       Ok(None)
     }
@@ -609,7 +653,10 @@ impl Index {
       .open_table(HEIGHT_TO_BLOCK_HASH)?
       .range(0..)?
       .rev()
-      .any(|(_, block_hash)| block_hash.value() == hash.as_inner());
+      .any(|result| {
+        let (_height, block_hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+        block_hash.value() == hash.as_inner()
+      });
 
     if !indexed {
       return Ok(None);
@@ -625,9 +672,10 @@ impl Index {
         .begin_read()?
         .open_table(SAT_TO_INSCRIPTION_ID)?
         .get(&sat.n())?
-        .map(|inscription_id| Entry::load(*inscription_id.value())),
+        .map(|id: redb::AccessGuard<&InscriptionIdValue>| Entry::load(*id.value())),
     )
   }
+
 
   pub(crate) fn get_inscription_id_by_inscription_number(
     &self,
@@ -775,7 +823,8 @@ impl Index {
 
     let outpoint_to_sat_ranges = rtx.0.open_table(OUTPOINT_TO_SAT_RANGES)?;
 
-    for (key, value) in outpoint_to_sat_ranges.range::<&[u8; 36]>(&[0; 36]..)? {
+    for result in outpoint_to_sat_ranges.range::<&[u8; 36]>(&[0; 36]..)? {
+      let (key, value) = result.expect("Error reading from OUTPOINT_TO_SAT_RANGES table");
       let mut offset = 0;
       for chunk in value.value().chunks_exact(24) {
         let (start, end) = SatRange::load(chunk.try_into().unwrap());
@@ -833,7 +882,8 @@ impl Index {
 
     let mut ids = Vec::new();
     for result in table.get(address)? {
-      ids.push(InscriptionId::load(*result.value()));
+      let value = result?;
+      ids.push(InscriptionId::load(*value.value()));
     }
     Ok(ids)
   }
@@ -864,8 +914,10 @@ impl Index {
           .range(0..)?
           .rev()
           .next()
-          .map(|(height, _hash)| height)
-          .map(|x| x.value())
+          .map(|result| {
+            let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
+            height.value()
+          })
           .unwrap_or(0);
 
         let expected_blocks = height.checked_sub(current).with_context(|| {
@@ -894,7 +946,11 @@ impl Index {
         .begin_read()?
         .open_table(SATPOINT_TO_INSCRIPTION_ID)?
         .range::<&[u8; 44]>(&[0; 44]..)?
-        .map(|(satpoint, id)| (Entry::load(*satpoint.value()), Entry::load(*id.value())))
+        .map(|result| {
+          let (satpoint, id) =
+            result.expect("Error reading from satpoint to inscription id table");
+          (Entry::load(*satpoint.value()), Entry::load(*id.value()))
+        })
         .take(n.unwrap_or(usize::MAX))
         .collect(),
     )
@@ -908,11 +964,15 @@ impl Index {
         .open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?
         .iter()?
         .rev()
-        .take(8)
-        .map(|(_number, id)| Entry::load(*id.value()))
+        .take(10)
+        .map(|result| {
+          let (_number, id) = result.expect("Error reading from inscription number table");
+          Entry::load(*id.value())
+        })
         .collect(),
     )
   }
+
 
   pub(crate) fn get_latest_inscriptions_with_prev_and_next(
     &self,
@@ -925,7 +985,10 @@ impl Index {
       rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
 
     let latest = match inscription_number_to_inscription_id.iter()?.rev().next() {
-      Some((number, _id)) => number.value(),
+      Some(result) => {
+        let (number, _id) = result.expect("Error reading from inscription number table");
+        number.value()
+      }
       None => return Ok(Default::default()),
     };
 
@@ -954,7 +1017,10 @@ impl Index {
       .range(..=from)?
       .rev()
       .take(n)
-      .map(|(_number, id)| Entry::load(*id.value()))
+      .map(|result| {
+        let (_number, id) = result.expect("Error reading from inscription number table");
+        Entry::load(*id.value())
+      })
       .collect();
 
     Ok((inscriptions, prev, next))
@@ -969,10 +1035,14 @@ impl Index {
         .iter()?
         .rev()
         .take(n)
-        .map(|(number, id)| (number.value(), Entry::load(*id.value())))
+        .map(|result| {
+          let (number, id) = result.expect("Error reading from inscription number table");
+          (number.value(), Entry::load(*id.value()))
+        })
         .collect(),
     )
   }
+
 
   pub(crate) fn get_inscription_entry(
     &self,
@@ -1076,7 +1146,11 @@ impl Index {
     Ok(
       satpoint_to_id
         .range::<&[u8; 44]>(&start..=&end)?
-        .map(|(satpoint, id)| (Entry::load(*satpoint.value()), Entry::load(*id.value()))),
+        .map(|result| {
+          let (satpoint, id) =
+            result.expect("Error reading from satpoint to inscription id table");
+          (Entry::load(*satpoint.value()), Entry::load(*id.value()))
+        }),
     )
   }
 }

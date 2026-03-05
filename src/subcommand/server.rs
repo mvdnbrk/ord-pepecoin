@@ -667,7 +667,7 @@ impl Server {
   }
 
   async fn status(Extension(index): Extension<Arc<Index>>) -> (StatusCode, &'static str) {
-    if index.is_reorged() {
+    if index.is_unrecoverably_reorged() {
       (
         StatusCode::OK,
         "reorg detected, please rebuild the database.",
@@ -976,8 +976,8 @@ impl Server {
     if accept_json.0 {
       Ok(Json(InscriptionJson {
         address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
-        content_length: inscription.body().map(|body| body.len()),
-        content_type: inscription.content_type().map(|s| s.to_string()),
+        content_length: inscription.body().map(|body: &[u8]| body.len()),
+        content_type: inscription.content_type().map(|s: &str| s.to_string()),
         genesis_fee: entry.fee,
         genesis_height: entry.height,
         genesis_transaction: inscription_id.txid,
