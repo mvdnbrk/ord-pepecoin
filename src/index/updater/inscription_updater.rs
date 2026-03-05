@@ -1,5 +1,4 @@
-use super::*;
-use crate::inscription::ParsedInscription;
+use {super::*, crate::inscription::ParsedInscription, redb::MultimapTable};
 
 pub(super) struct Flotsam {
   inscription_id: InscriptionId,
@@ -30,7 +29,7 @@ pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
   satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
   value_cache: &'a mut HashMap<OutPoint, u64>,
-  address_to_inscription_ids: &'a mut Table<'db, 'tx, &'static str, &'static [u8]>,
+  address_to_inscription_ids: &'a mut MultimapTable<'db, 'tx, &'static str, &'static InscriptionIdValue>,
   id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
   network: Network,
 }
@@ -51,7 +50,7 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
     value_cache: &'a mut HashMap<OutPoint, u64>,
-    address_to_inscription_ids: &'a mut Table<'db, 'tx, &'static str, &'static [u8]>,
+    address_to_inscription_ids: &'a mut MultimapTable<'db, 'tx, &'static str, &'static InscriptionIdValue>,
     id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
     network: Network,
   ) -> Result<Self> {
@@ -308,27 +307,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
         self.satpoint_to_id.remove(&old_satpoint.store())?;
 
         if let Some(old_address) = self.id_to_address.get(&inscription_id)? {
-          let old_address = old_address.value().to_string();
-          let bytes = self
+          self
             .address_to_inscription_ids
-            .get(old_address.as_str())?
-            .map(|v| v.value().to_vec());
-
-          if let Some(bytes) = bytes {
-            let mut new_bytes = Vec::with_capacity(bytes.len().saturating_sub(36));
-            for chunk in bytes.chunks_exact(36) {
-              if chunk != inscription_id {
-                new_bytes.extend_from_slice(chunk);
-              }
-            }
-            if new_bytes.is_empty() {
-              self.address_to_inscription_ids.remove(old_address.as_str())?;
-            } else {
-              self
-                .address_to_inscription_ids
-                .insert(old_address.as_str(), new_bytes.as_slice())?;
-            }
-          }
+            .remove(old_address.value(), &inscription_id)?;
         }
       }
       Origin::New(fee) => {
@@ -368,14 +349,9 @@ impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
     }
 
     // Add to new address
-    let mut ids = match self.address_to_inscription_ids.get(new_address.as_str())? {
-      Some(data) => data.value().to_vec(),
-      None => Vec::new(),
-    };
-    ids.extend_from_slice(&inscription_id);
     self
       .address_to_inscription_ids
-      .insert(new_address.as_str(), ids.as_slice())?;
+      .insert(new_address.as_str(), &inscription_id)?;
     self
       .id_to_address
       .insert(&inscription_id, new_address.as_str())?;

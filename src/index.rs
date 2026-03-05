@@ -16,7 +16,10 @@ use {
   chrono::SubsecRound,
   indicatif::{ProgressBar, ProgressStyle},
   log::log_enabled,
-  redb::{Database, ReadableTable, Table, TableDefinition, WriteStrategy, WriteTransaction},
+  redb::{
+    Database, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table, TableDefinition,
+    WriteStrategy, WriteTransaction,
+  },
   std::collections::HashMap,
   std::io::{self, BufWriter, Write},
   std::sync::atomic::{self, AtomicBool},
@@ -35,6 +38,13 @@ macro_rules! define_table {
   };
 }
 
+macro_rules! define_multimap_table {
+  ($name:ident, $key:ty, $value:ty) => {
+    const $name: MultimapTableDefinition<$key, $value> =
+      MultimapTableDefinition::new(stringify!($name));
+  };
+}
+
 define_table! { HEIGHT_TO_BLOCK_HASH, u64, &BlockHashValue }
 define_table! { INSCRIPTION_ID_TO_INSCRIPTION_ENTRY, &InscriptionIdValue, InscriptionEntryValue }
 define_table! { INSCRIPTION_ID_TO_SATPOINT, &InscriptionIdValue, &SatPointValue }
@@ -49,7 +59,7 @@ define_table! { SAT_TO_INSCRIPTION_ID, u128, &InscriptionIdValue }
 define_table! { SAT_TO_SATPOINT, u128, &SatPointValue }
 define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
-define_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &[u8] }
+define_multimap_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
 pub(crate) struct Index {
@@ -224,7 +234,7 @@ impl Index {
         tx.open_table(SAT_TO_INSCRIPTION_ID)?;
         tx.open_table(SAT_TO_SATPOINT)?;
         tx.open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?;
-        tx.open_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+        tx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
         tx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
 
         tx.open_table(STATISTIC_TO_COUNT)?
@@ -819,21 +829,12 @@ impl Index {
 
   pub(crate) fn get_inscriptions_by_address(&self, address: &str) -> Result<Vec<InscriptionId>> {
     let rtx = self.database.begin_read()?;
-    let table = rtx.open_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+    let table = rtx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
 
-    let ids = match table.get(address)? {
-      Some(data) => {
-        let bytes = data.value();
-        let mut ids = Vec::new();
-        for chunk in bytes.chunks_exact(36) {
-          let mut arr = [0u8; 36];
-          arr.copy_from_slice(chunk);
-          ids.push(InscriptionId::load(arr));
-        }
-        ids
-      }
-      None => Vec::new(),
-    };
+    let mut ids = Vec::new();
+    for result in table.get(address)? {
+      ids.push(InscriptionId::load(*result.value()));
+    }
     Ok(ids)
   }
 
