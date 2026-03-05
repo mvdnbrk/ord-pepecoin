@@ -5,14 +5,14 @@ set -euxo pipefail
 VERSION=${REF#"refs/tags/"}
 DIST=`pwd`/dist
 
-echo "Packaging ord $VERSION for $TARGET..."
+echo "Packaging ord-pepecoin $VERSION for $TARGET..."
 
 test -f Cargo.lock || cargo generate-lockfile
 
-echo "Building ord..."
+echo "Building ord-pepecoin..."
 RUSTFLAGS="--deny warnings $TARGET_RUSTFLAGS" \
-  cargo build --bin ord --target $TARGET --release
-EXECUTABLE=target/$TARGET/release/ord
+  cargo build --bin ord-pepecoin --target $TARGET --release
+EXECUTABLE=target/$TARGET/release/ord-pepecoin
 
 if [[ $OS == windows-latest ]]; then
   EXECUTABLE=$EXECUTABLE.exe
@@ -32,13 +32,13 @@ cd $DIST
 echo "Creating release archive..."
 case $OS in
   ubuntu-latest | macos-latest)
-    ARCHIVE=$DIST/ord-$VERSION-$TARGET.tar.gz
+    ARCHIVE=$DIST/ord-pepecoin-$VERSION-$TARGET.tar.gz
     tar czf $ARCHIVE *
     echo "::set-output name=archive::$ARCHIVE"
     ;;
   windows-latest)
-    ARCHIVE=$DIST/ord-$VERSION-$TARGET.zip
+    ARCHIVE=$DIST/ord-pepecoin-$VERSION-$TARGET.zip
     7z a $ARCHIVE *
-    echo "::set-output name=archive::`pwd -W`/ord-$VERSION-$TARGET.zip"
+    echo "::set-output name=archive::`pwd -W`/ord-pepecoin-$VERSION-$TARGET.zip"
     ;;
 esac

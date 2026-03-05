@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-    - master
+    - main
   pull_request:
     branches:
-    - master
+    - main
 
 defaults:
   run:
@@ -107,8 +107,8 @@ jobs:
 
     - uses: Swatinem/rust-cache@v2
 
-    - name: Install Bitcoin Core
-      run: ./bin/install-bitcoin-core-linux
+    - name: Install Pepecoin Core
+      run: ./bin/install-pepecoin-core-linux
 
-    - name: Test
+    - name: Integration Test
       run: cargo test --all -- --ignored
