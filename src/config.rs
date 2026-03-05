@@ -2,7 +2,16 @@ use super::*;
 
 #[derive(Deserialize, Default, PartialEq, Debug)]
 pub(crate) struct Config {
+  #[serde(default)]
   pub(crate) hidden: HashSet<InscriptionId>,
+  pub(crate) pepecoin_rpc_username: Option<String>,
+  pub(crate) pepecoin_rpc_password: Option<String>,
+  pub(crate) pepecoin_data_dir: Option<PathBuf>,
+  pub(crate) rpc_url: Option<String>,
+  pub(crate) data_dir: Option<PathBuf>,
+  pub(crate) index: Option<PathBuf>,
+  pub(crate) index_sats: Option<bool>,
+  pub(crate) cookie_file: Option<PathBuf>,
 }
 
 impl Config {
@@ -27,6 +36,7 @@ mod tests {
 
     let config = Config {
       hidden: iter::once(a).collect(),
+      ..Default::default()
     };
 
     assert!(config.is_hidden(a));

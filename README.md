@@ -4,8 +4,6 @@ Ordinal indexer and block explorer for **Pepecoin**, forked from [apezord/ord-do
 
 Inscriptions on Pepecoin use `script_sig` (no SegWit). The indexer and explorer support PRC-20 tokens and all inscription content types.
 
-> **Note:** Pepecoin has more reorgs than Bitcoin due to its 1-minute block times. Reorg resistance has been implemented upstream (see [ordinals/ord#2320](https://github.com/ordinals/ord/pull/2320)) but is not yet ported to this fork. Periodically create checkpoints of the redb database.
-
 ## Requirements
 
 - Synced `pepecoind` node with `-txindex`
@@ -21,17 +19,64 @@ cargo build --release
 
 The binary is at `./target/release/ord-pepecoin`.
 
+## Configuration
+
+`ord-pepecoin` can be configured with command-line flags, a YAML configuration file, or both. Command-line flags take precedence over the configuration file.
+
+### Configuration file
+
+Create an `ord.yaml` file:
+
+```yaml
+pepecoin_rpc_username: "your_rpc_user"
+pepecoin_rpc_password: "your_rpc_password"
+rpc_url: "127.0.0.1:33873"
+data_dir: "/data/ord-pepecoin"
+index: "/data/ord-pepecoin/index.redb"
+```
+
+The configuration file is loaded from the first location found:
+
+1. `--config <path>` — explicit path (errors if not found)
+2. `--config-dir <dir>/ord.yaml`
+3. `--data-dir <dir>/ord.yaml`
+4. Default data directory (`ord.yaml`)
+
+All configuration file fields are optional:
+
+| Field | Description |
+|---|---|
+| `pepecoin_rpc_username` | RPC username (alternative to cookie auth) |
+| `pepecoin_rpc_password` | RPC password (alternative to cookie auth) |
+| `rpc_url` | Pepecoin Core RPC URL |
+| `pepecoin_data_dir` | Pepecoin Core data directory |
+| `data_dir` | ord-pepecoin data directory |
+| `index` | Path to the index database |
+| `index_sats` | Track location of all satoshis (`true`/`false`) |
+| `cookie_file` | Path to RPC cookie file |
+| `hidden` | List of inscription IDs to hide |
+
+### Authentication
+
+RPC authentication is resolved in this order:
+
+1. `pepecoin_rpc_username` + `pepecoin_rpc_password` in config file (username/password auth)
+2. `--cookie-file` flag or `cookie_file` in config (cookie auth)
+3. Default cookie file location (`~/.pepecoin/.cookie`)
+
 ## Usage
 
-### Start the explorer server
+### With a configuration file
+
+```bash
+ord-pepecoin --config /path/to/ord.yaml server --http-port 3080
+ord-pepecoin --config /path/to/ord.yaml index update
+```
+
+### With command-line flags
 
 ```bash
 ord-pepecoin --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie server --http-port 3080
-```
-
-### Update the index
-
-```bash
 ord-pepecoin --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie index update
 ```
 
@@ -39,6 +84,12 @@ ord-pepecoin --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie index u
 
 ```bash
 ord-pepecoin index export --include-addresses > inscriptions.tsv
+```
+
+### Compact the database
+
+```bash
+ord-pepecoin index compact
 ```
 
 ### JSON API
@@ -50,9 +101,14 @@ curl -H "Accept: application/json" http://localhost:3080/inscription/<inscriptio
 curl -H "Accept: application/json" http://localhost:3080/inscriptions
 curl -H "Accept: application/json" http://localhost:3080/output/<outpoint>
 curl -H "Accept: application/json" http://localhost:3080/block/<height>
+curl -H "Accept: application/json" http://localhost:3080/address/<address>
 ```
 
 Raw inscription content is always available at `/content/<inscription_id>`.
+
+## Reorg Resistance
+
+The indexer automatically creates database savepoints near the chain tip. If a blockchain reorganization is detected, it restores the most recent savepoint and re-indexes from there. This is important for Pepecoin due to its 1-minute block times which make reorgs more frequent than Bitcoin.
 
 ## Wallet
 

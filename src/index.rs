@@ -156,14 +156,20 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 impl Index {
   pub(crate) fn open(options: &Options) -> Result<Self> {
     let rpc_url = options.rpc_url();
-    let cookie_file = options.cookie_file()?;
+    let auth = options.auth()?;
 
-    log::info!(
-      "Connecting to Pepecoin Core RPC server at {rpc_url} using credentials from `{}`",
-      cookie_file.display()
-    );
-
-    let auth = Auth::CookieFile(cookie_file);
+    match &auth {
+      Auth::CookieFile(path) => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} using cookie file `{}`",
+        path.display()
+      ),
+      Auth::UserPass(user, _) => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} as user `{user}`"
+      ),
+      Auth::None => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} without authentication"
+      ),
+    }
 
     let client = Client::new(&rpc_url, auth.clone()).context("failed to connect to RPC URL")?;
 
@@ -173,8 +179,11 @@ impl Index {
       bail!("failed to create data dir `{}`: {err}", data_dir.display());
     }
 
-    let path = if let Some(path) = &options.index {
-      path.clone()
+    let config = options.load_config().unwrap_or_default();
+    let index_sats = options.index_sats || config.index_sats.unwrap_or(false);
+
+    let path = if let Some(path) = options.index.clone().or(config.index) {
+      path
     } else {
       data_dir.join("index.redb")
     };
@@ -232,7 +241,7 @@ impl Index {
         tx.open_table(STATISTIC_TO_COUNT)?
           .insert(&Statistic::Schema.key(), &SCHEMA_VERSION)?;
 
-        if options.index_sats {
+        if index_sats {
           tx.open_table(OUTPOINT_TO_SAT_RANGES)?
             .insert(&OutPoint::null().store(), [].as_slice())?;
         }

@@ -72,23 +72,68 @@ impl Options {
     }
   }
 
+  pub(crate) fn load_config(&self) -> Result<Config> {
+    match &self.config {
+      Some(path) => Ok(serde_yaml::from_reader(File::open(path)?)?),
+      None => {
+        // Check --config-dir, then --data-dir CLI flag, then default data dir
+        let candidates = [
+          self.config_dir.as_ref().map(|d| d.join("ord.yaml")),
+          self.data_dir.as_ref().map(|d| d.join("ord.yaml")),
+          dirs::data_dir().map(|d| d.join("ord").join("ord.yaml")),
+        ];
+
+        for candidate in candidates.iter().flatten() {
+          if candidate.exists() {
+            return Ok(serde_yaml::from_reader(File::open(candidate)?)?);
+          }
+        }
+
+        Ok(Default::default())
+      }
+    }
+  }
+
   pub(crate) fn rpc_url(&self) -> String {
-    self.rpc_url.clone().unwrap_or_else(|| {
-      format!(
-        "127.0.0.1:{}/wallet/{}",
-        self.chain().default_rpc_port(),
-        self.wallet
-      )
-    })
+    let config = self.load_config().unwrap_or_default();
+
+    self
+      .rpc_url
+      .clone()
+      .or(config.rpc_url)
+      .unwrap_or_else(|| {
+        format!(
+          "127.0.0.1:{}/wallet/{}",
+          self.chain().default_rpc_port(),
+          self.wallet
+        )
+      })
+  }
+
+  pub(crate) fn auth(&self) -> Result<Auth> {
+    let config = self.load_config().unwrap_or_default();
+
+    if let (Some(user), Some(pass)) = (config.pepecoin_rpc_username, config.pepecoin_rpc_password) {
+      return Ok(Auth::UserPass(user, pass));
+    }
+
+    let cookie_file = self.cookie_file()?;
+    Ok(Auth::CookieFile(cookie_file))
   }
 
   pub(crate) fn cookie_file(&self) -> Result<PathBuf> {
-    if let Some(cookie_file) = &self.cookie_file {
-      return Ok(cookie_file.clone());
+    let config = self.load_config().unwrap_or_default();
+
+    if let Some(cookie_file) = self.cookie_file.clone().or(config.cookie_file) {
+      return Ok(cookie_file);
     }
 
-    let path = if let Some(pepecoin_data_dir) = &self.pepecoin_data_dir {
-      pepecoin_data_dir.clone()
+    let path = if let Some(pepecoin_data_dir) = self
+      .pepecoin_data_dir
+      .clone()
+      .or(config.pepecoin_data_dir)
+    {
+      pepecoin_data_dir
     } else if cfg!(target_os = "linux") {
       dirs::home_dir()
         .ok_or_else(|| anyhow!("failed to retrieve home dir"))?
@@ -105,26 +150,18 @@ impl Options {
   }
 
   pub(crate) fn data_dir(&self) -> Result<PathBuf> {
-    let base = match &self.data_dir {
-      Some(base) => base.clone(),
+    // Note: uses load_config() which does NOT call data_dir() to avoid circular dependency.
+    // load_config() only checks config_dir, data_dir CLI flag, and default data dir directly.
+    let config = self.load_config().unwrap_or_default();
+
+    let base = match self.data_dir.clone().or(config.data_dir) {
+      Some(base) => base,
       None => dirs::data_dir()
         .ok_or_else(|| anyhow!("failed to retrieve data dir"))?
         .join("ord"),
     };
 
     Ok(self.chain().join_with_data_dir(&base))
-  }
-
-  pub(crate) fn load_config(&self) -> Result<Config> {
-    match &self.config {
-      Some(path) => Ok(serde_yaml::from_reader(File::open(path)?)?),
-      None => match &self.config_dir {
-        Some(dir) if dir.join("ord.yaml").exists() => {
-          Ok(serde_yaml::from_reader(File::open(dir.join("ord.yaml"))?)?)
-        }
-        Some(_) | None => Ok(Default::default()),
-      },
-    }
   }
 
   fn format_pepecoin_core_version(version: usize) -> String {
@@ -138,24 +175,24 @@ impl Options {
   }
 
   pub(crate) fn pepecoin_rpc_client(&self) -> Result<Client> {
-    let cookie_file = self
-      .cookie_file()
-      .map_err(|err| anyhow!("failed to get cookie file path: {err}"))?;
-
     let rpc_url = self.rpc_url();
+    let auth = self.auth()?;
 
-    log::info!(
-      "Connecting to Pepecoin Core RPC server at {rpc_url} using credentials from `{}`",
-      cookie_file.display()
-    );
+    match &auth {
+      Auth::CookieFile(path) => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} using cookie file `{}`",
+        path.display()
+      ),
+      Auth::UserPass(user, _) => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} as user `{user}`"
+      ),
+      Auth::None => log::info!(
+        "Connecting to Pepecoin Core RPC server at {rpc_url} without authentication"
+      ),
+    }
 
-    let client =
-      Client::new(&rpc_url, Auth::CookieFile(cookie_file.clone())).with_context(|| {
-        format!(
-          "failed to connect to Pepecoin Core RPC at {rpc_url} using cookie file {}",
-          cookie_file.display()
-        )
-      })?;
+    let client = Client::new(&rpc_url, auth)
+      .with_context(|| format!("failed to connect to Pepecoin Core RPC at {rpc_url}"))?;
 
     let rpc_chain = match client.get_blockchain_info()?.chain.as_str() {
       "main" => Chain::Mainnet,
