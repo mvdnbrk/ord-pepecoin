@@ -80,7 +80,7 @@ impl Options {
         let candidates = [
           self.config_dir.as_ref().map(|d| d.join("ord.yaml")),
           self.data_dir.as_ref().map(|d| d.join("ord.yaml")),
-          dirs::data_dir().map(|d| d.join("ord").join("ord.yaml")),
+          dirs::data_dir().map(|d| d.join("ord-pepecoin").join("ord.yaml")),
         ];
 
         for candidate in candidates.iter().flatten() {
@@ -158,7 +158,7 @@ impl Options {
       Some(base) => base,
       None => dirs::data_dir()
         .ok_or_else(|| anyhow!("failed to retrieve data dir"))?
-        .join("ord"),
+        .join("ord-pepecoin"),
     };
 
     Ok(self.chain().join_with_data_dir(&base))

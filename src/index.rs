@@ -17,10 +17,9 @@ use {
   indicatif::{ProgressBar, ProgressStyle},
   log::log_enabled,
   redb::{
-    Database, DatabaseError, MultimapTableDefinition, ReadableMultimapTable, ReadableTable,
-    StorageError, Table, TableDefinition, TableError, WriteTransaction,
+    Database, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table,
+    TableDefinition, TableError, WriteTransaction,
   },
-
   std::collections::HashMap,
   std::io::{self, BufWriter, Write},
   std::sync::atomic::{self, AtomicBool},
@@ -188,39 +187,38 @@ impl Index {
       data_dir.join("index.redb")
     };
 
-    let database: Database = match Database::builder()
+    let database: Database = if path.exists() {
+      let database = Database::builder()
         .set_cache_size(1024 * 1024 * 1024)
-        .open(&path)
-    {
-      Ok(database) => {
-        let schema_version = database
-          .begin_read()?
-          .open_table(STATISTIC_TO_COUNT)?
-          .get(&Statistic::Schema.key())?
-          .map(|x: redb::AccessGuard<u64>| x.value())
-          .unwrap_or(0);
+        .open(&path)?;
 
-        match schema_version.cmp(&SCHEMA_VERSION) {
-          cmp::Ordering::Less =>
-            bail!(
-              "index at `{}` appears to have been built with an older, incompatible version of ord, consider deleting and rebuilding the index: index schema {schema_version}, ord schema {SCHEMA_VERSION}",
-              path.display()
-            ),
-          cmp::Ordering::Greater =>
-            bail!(
-              "index at `{}` appears to have been built with a newer, incompatible version of ord, consider updating ord: index schema {schema_version}, ord schema {SCHEMA_VERSION}",
-              path.display()
-            ),
-          cmp::Ordering::Equal => {
-          }
+      let schema_version = database
+        .begin_read()?
+        .open_table(STATISTIC_TO_COUNT)?
+        .get(&Statistic::Schema.key())?
+        .map(|x: redb::AccessGuard<u64>| x.value())
+        .unwrap_or(0);
+
+      match schema_version.cmp(&SCHEMA_VERSION) {
+        cmp::Ordering::Less =>
+          bail!(
+            "index at `{}` appears to have been built with an older, incompatible version of ord, consider deleting and rebuilding the index: index schema {schema_version}, ord schema {SCHEMA_VERSION}",
+            path.display()
+          ),
+        cmp::Ordering::Greater =>
+          bail!(
+            "index at `{}` appears to have been built with a newer, incompatible version of ord, consider updating ord: index schema {schema_version}, ord schema {SCHEMA_VERSION}",
+            path.display()
+          ),
+        cmp::Ordering::Equal => {
         }
-
-        database
       }
-      Err(DatabaseError::Storage(StorageError::Io(error))) if error.kind() == io::ErrorKind::NotFound => {
-        let database = Database::builder()
-            .set_cache_size(1024 * 1024 * 1024)
-            .create(&path)?;
+
+      database
+    } else {
+      let database = Database::builder()
+        .set_cache_size(1024 * 1024 * 1024)
+        .create(&path)?;
         let tx = database.begin_write()?;
 
         tx.open_table(HEIGHT_TO_BLOCK_HASH)?;
@@ -249,8 +247,6 @@ impl Index {
         tx.commit()?;
 
         database
-      }
-      Err(error) => return Err(anyhow!("{error}")),
     };
 
     let genesis_block_coinbase_transaction =
