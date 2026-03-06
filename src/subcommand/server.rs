@@ -95,8 +95,8 @@ pub struct OutputJson {
 
 #[derive(Serialize, Deserialize)]
 pub struct AddressJson {
-  pub address: String,
   pub inscriptions: Vec<InscriptionId>,
+  pub outputs: Vec<OutPoint>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -564,13 +564,13 @@ impl Server {
     accept_json: AcceptJson,
     Path(address): Path<String>,
   ) -> ServerResult<Response> {
-    let inscriptions = index.get_inscriptions_by_address(&address)?;
+    let (inscriptions, outputs) = index.get_inscriptions_by_address(&address)?;
 
     if accept_json.0 {
       Ok(
         Json(AddressJson {
-          address,
           inscriptions,
+          outputs,
         })
         .into_response(),
       )

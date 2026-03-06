@@ -881,16 +881,25 @@ impl Index {
     }
   }
 
-  pub(crate) fn get_inscriptions_by_address(&self, address: &str) -> Result<Vec<InscriptionId>> {
+  pub(crate) fn get_inscriptions_by_address(&self, address: &str) -> Result<(Vec<InscriptionId>, Vec<OutPoint>)> {
     let rtx = self.database.begin_read()?;
     let table = rtx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
+    let satpoint_table = rtx.open_table(INSCRIPTION_ID_TO_SATPOINT)?;
 
     let mut ids = Vec::new();
+    let mut outputs = Vec::new();
     for result in table.get(address)? {
       let value = result?;
-      ids.push(InscriptionId::load(*value.value()));
+      let inscription_id = InscriptionId::load(*value.value());
+      if let Some(satpoint) = satpoint_table.get(&inscription_id.store())? {
+        let satpoint: SatPoint = Entry::load(*satpoint.value());
+        if !outputs.contains(&satpoint.outpoint) {
+          outputs.push(satpoint.outpoint);
+        }
+      }
+      ids.push(inscription_id);
     }
-    Ok(ids)
+    Ok((ids, outputs))
   }
 
   #[allow(dead_code)]
