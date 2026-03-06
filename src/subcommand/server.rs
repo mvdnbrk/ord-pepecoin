@@ -219,7 +219,7 @@ impl Server {
 
       let page_config = Arc::new(PageConfig {
         chain: options.chain(),
-        domain: acme_domains.first().cloned(),
+        domain: self.acme_domain.first().cloned(),
       });
 
       let router = Router::new()
