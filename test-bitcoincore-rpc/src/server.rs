@@ -19,7 +19,7 @@ impl Server {
     Self { network, state }
   }
 
-  fn state(&self) -> MutexGuard<State> {
+  fn state(&self) -> MutexGuard<'_, State> {
     self.state.lock().unwrap()
   }
 
