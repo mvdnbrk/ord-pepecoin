@@ -233,7 +233,7 @@ impl Server {
 
       let router = Router::new()
         .route("/", get(Self::home))
-        .route("/block-count", get(Self::block_count))
+        .route("/blockcount", get(Self::block_count))
         .route("/address/:address", get(Self::address))
         .route("/block/:query", get(Self::block))
 
@@ -1556,14 +1556,14 @@ mod tests {
   fn block_count_endpoint() {
     let test_server = TestServer::new();
 
-    let response = test_server.get("/block-count");
+    let response = test_server.get("/blockcount");
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.text().unwrap(), "1");
 
     test_server.mine_blocks(1);
 
-    let response = test_server.get("/block-count");
+    let response = test_server.get("/blockcount");
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.text().unwrap(), "2");
