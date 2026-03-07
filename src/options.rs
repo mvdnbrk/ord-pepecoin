@@ -599,6 +599,7 @@ mod tests {
         .unwrap(),
       Config {
         hidden: iter::once(id).collect(),
+        ..Default::default()
       }
     );
   }
@@ -630,6 +631,7 @@ mod tests {
       .unwrap(),
       Config {
         hidden: iter::once(id).collect(),
+        ..Default::default()
       }
     );
   }
