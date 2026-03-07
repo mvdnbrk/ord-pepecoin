@@ -97,11 +97,36 @@ ord-pepecoin index compact
 The server returns JSON when the `Accept: application/json` header is set:
 
 ```bash
-curl -H "Accept: application/json" http://localhost:3080/inscription/<inscription_id>
-curl -H "Accept: application/json" http://localhost:3080/inscriptions
-curl -H "Accept: application/json" http://localhost:3080/output/<outpoint>
-curl -H "Accept: application/json" http://localhost:3080/block/<height>
-curl -H "Accept: application/json" http://localhost:3080/address/<address>
+curl -s -H "Accept: application/json" http://localhost:3080/status
+curl -s -H "Accept: application/json" http://localhost:3080/inscription/<inscription_id>
+curl -s -H "Accept: application/json" http://localhost:3080/inscriptions
+curl -s -H "Accept: application/json" http://localhost:3080/output/<outpoint>
+curl -s -H "Accept: application/json" http://localhost:3080/block/<height>
+curl -s -H "Accept: application/json" http://localhost:3080/address/<address>
+curl -s http://localhost:3080/blockcount
+curl -s http://localhost:3080/content/<inscription_id>
+```
+
+The `/address/<address>` endpoint returns inscription IDs and their corresponding output points, useful for inscription-aware UTXO selection in wallets:
+
+```json
+{
+  "inscriptions": ["<inscription_id>", ...],
+  "outputs": ["<txid>:<vout>", ...]
+}
+```
+
+The `/status` endpoint returns index information:
+
+```json
+{
+  "address_index": true,
+  "chain": "mainnet",
+  "height": 945000,
+  "inscriptions": 12345,
+  "sat_index": false,
+  "unrecoverably_reorged": false
+}
 ```
 
 Raw inscription content is always available at `/content/<inscription_id>`.
@@ -109,6 +134,10 @@ Raw inscription content is always available at `/content/<inscription_id>`.
 ## Reorg Resistance
 
 The indexer automatically creates database savepoints near the chain tip. If a blockchain reorganization is detected, it restores the most recent savepoint and re-indexes from there. This is important for Pepecoin due to its 1-minute block times which make reorgs more frequent than Bitcoin.
+
+## Graceful Shutdown
+
+The server handles SIGTERM signals from systemd, ensuring the index database is committed cleanly before the process exits. This prevents database corruption on service restarts.
 
 ## Wallet
 
