@@ -100,6 +100,16 @@ pub struct AddressJson {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct StatusJson {
+  pub address_index: bool,
+  pub chain: String,
+  pub height: Option<u64>,
+  pub inscriptions: u64,
+  pub sat_index: bool,
+  pub unrecoverably_reorged: bool,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct BlockJson {
   pub hash: BlockHash,
   pub target: String,
@@ -679,17 +689,33 @@ impl Server {
     )
   }
 
-  async fn status(Extension(index): Extension<Arc<Index>>) -> (StatusCode, &'static str) {
-    if index.is_unrecoverably_reorged() {
-      (
-        StatusCode::OK,
-        "reorg detected, please rebuild the database.",
+  async fn status(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
+  ) -> ServerResult<Response> {
+    if accept_json.0 {
+      Ok(
+        Json(StatusJson {
+          address_index: true,
+          chain: page_config.chain.to_string(),
+          height: index.block_count().ok(),
+          inscriptions: index.inscription_count().unwrap_or(0),
+          sat_index: index.has_sat_index().unwrap_or(false),
+          unrecoverably_reorged: index.is_unrecoverably_reorged(),
+        })
+        .into_response(),
+      )
+    } else if index.is_unrecoverably_reorged() {
+      Ok(
+        (
+          StatusCode::OK,
+          "unrecoverable reorg detected, please rebuild the database.",
+        )
+          .into_response(),
       )
     } else {
-      (
-        StatusCode::OK,
-        StatusCode::OK.canonical_reason().unwrap_or_default(),
-      )
+      Ok((StatusCode::OK, "OK").into_response())
     }
   }
 

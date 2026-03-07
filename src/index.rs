@@ -572,6 +572,16 @@ impl Index {
     self.begin_read()?.block_count()
   }
 
+  pub(crate) fn inscription_count(&self) -> Result<u64> {
+    Ok(
+      self
+        .database
+        .begin_read()?
+        .open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?
+        .len()?,
+    )
+  }
+
   pub(crate) fn blocks(&self, take: usize) -> Result<Vec<(u64, BlockHash)>> {
     let mut blocks = Vec::new();
 
