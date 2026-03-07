@@ -207,11 +207,20 @@ impl Server {
   pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> Result {
     Runtime::new()?.block_on(async {
       let clone = index.clone();
-      thread::spawn(move || loop {
+      let index_thread = thread::spawn(move || loop {
+        if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
+          log::info!("Index thread shutting down gracefully");
+          break;
+        }
         if let Err(error) = clone.update() {
           log::warn!("{error}");
         }
-        thread::sleep(Duration::from_millis(5000));
+        for _ in 0..50 {
+          if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
+            break;
+          }
+          thread::sleep(Duration::from_millis(100));
+        }
       });
 
       let config = options.load_config()?;
@@ -308,6 +317,10 @@ impl Server {
         }
         (None, None) => unreachable!(),
       }
+
+      log::info!("Waiting for index thread to finish...");
+      index_thread.join().unwrap_or_else(|e| log::error!("Index thread panicked: {:?}", e));
+      log::info!("Index thread finished, shutting down");
 
       Ok(())
     })

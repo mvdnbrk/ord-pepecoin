@@ -134,7 +134,7 @@ fn timestamp(seconds: u32) -> DateTime<Utc> {
   Utc.timestamp_opt(seconds.into(), 0).unwrap()
 }
 
-const INTERRUPT_LIMIT: u64 = 5;
+const INTERRUPT_LIMIT: u64 = 2;
 
 pub fn main() {
   env_logger::init();
@@ -144,7 +144,7 @@ pub fn main() {
       .lock()
       .unwrap()
       .iter()
-      .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_millis(100))));
+      .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_secs(5))));
 
     println!("Detected Ctrl-C, attempting to shut down ord gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
 
