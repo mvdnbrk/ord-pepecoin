@@ -1,8 +1,10 @@
 use {
   super::*,
   bitcoin::{
+    hashes::hex::ToHex,
     psbt::serialize::Deserialize,
     secp256k1::{rand, KeyPair, Secp256k1, XOnlyPublicKey},
+    util::key::PublicKey,
     Address, Witness,
   },
   bitcoincore_rpc::RawTx,
@@ -431,8 +433,9 @@ impl Api for Server {
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
     let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (public_key, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let address = Address::p2tr(&secp256k1, public_key, None, self.network);
+    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
+    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let address = Address::p2pkh(&pubkey, self.network);
 
     Ok(address)
   }
@@ -473,10 +476,39 @@ impl Api for Server {
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
     let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (public_key, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let address = Address::p2tr(&secp256k1, public_key, None, self.network);
+    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
+    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let address = Address::p2pkh(&pubkey, self.network);
+
+    self.state().address_pubkeys.insert(address.clone(), pubkey);
 
     Ok(address)
+  }
+
+  fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    let addr: Address = address.parse().map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
+    let pubkey = self.state().address_pubkeys.get(&addr).cloned();
+    Ok(serde_json::json!({
+      "address": address,
+      "scriptPubKey": addr.script_pubkey().to_hex(),
+      "ismine": true,
+      "solvable": true,
+      "isscript": false,
+      "iswitness": false,
+      "pubkey": pubkey.map(|pk| pk.to_string()),
+    }))
+  }
+
+  fn import_private_key(
+    &self,
+    _privkey: String,
+    _label: Option<String>,
+    _rescan: Option<bool>,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    Ok(serde_json::Value::Null)
   }
 
   fn list_transactions(

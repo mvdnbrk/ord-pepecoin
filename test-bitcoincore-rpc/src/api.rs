@@ -127,6 +127,20 @@ pub trait Api {
     address_type: Option<bitcoincore_rpc::json::AddressType>,
   ) -> Result<bitcoin::Address, jsonrpc_core::Error>;
 
+  #[rpc(name = "getaddressinfo")]
+  fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+
+  #[rpc(name = "importprivkey")]
+  fn import_private_key(
+    &self,
+    privkey: String,
+    label: Option<String>,
+    rescan: Option<bool>,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+
   #[rpc(name = "listtransactions")]
   fn list_transactions(
     &self,

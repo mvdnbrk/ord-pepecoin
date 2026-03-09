@@ -206,18 +206,12 @@ impl Inscribe {
 
   fn get_pubkey(&self, client: &Client) -> Result<PublicKey> {
     let address = client.get_new_address(None, Some(bitcoincore_rpc::json::AddressType::Legacy))?;
-    match client.call::<GetAddressInfoResult>("getaddressinfo", &[address.to_string().into()]) {
-        Ok(info) => info.pubkey.ok_or_else(|| anyhow!("Could not get pubkey for address")),
-        Err(e) => {
-            if let bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(err)) = &e {
-                if err.code == -32601 {
-                    let pubkey_bytes = hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap();
-                    return Ok(PublicKey::from_slice(&pubkey_bytes).unwrap());
-                }
-            }
-            Err(e.into())
-        }
-    }
+    let info: GetAddressInfoResult = client
+      .call("getaddressinfo", &[address.to_string().into()])
+      .context("failed to get address info")?;
+    info
+      .pubkey
+      .ok_or_else(|| anyhow!("could not get pubkey for address {address}"))
   }
 
   fn create_inscription_transactions(
