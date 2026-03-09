@@ -58,6 +58,15 @@ pub trait Api {
     sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error>;
 
+  #[rpc(name = "signrawtransaction")]
+  fn sign_raw_transaction(
+    &self,
+    tx: String,
+    utxos: Option<Vec<serde_json::Value>>,
+    privkeys: Option<Vec<String>>,
+    sighash_type: Option<String>,
+  ) -> Result<Value, jsonrpc_core::Error>;
+
   #[rpc(name = "sendrawtransaction")]
   fn send_raw_transaction(&self, tx: String) -> Result<String, jsonrpc_core::Error>;
 
@@ -129,6 +138,12 @@ pub trait Api {
 
   #[rpc(name = "getaddressinfo")]
   fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+
+  #[rpc(name = "validateaddress")]
+  fn validate_address(
     &self,
     address: String,
   ) -> Result<serde_json::Value, jsonrpc_core::Error>;

@@ -242,6 +242,16 @@ impl Api for Server {
     _utxos: Option<Vec<serde_json::Value>>,
     _sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error> {
+    self.sign_raw_transaction(tx, _utxos, None, _sighash_type)
+  }
+
+  fn sign_raw_transaction(
+    &self,
+    tx: String,
+    _utxos: Option<Vec<serde_json::Value>>,
+    _privkeys: Option<Vec<String>>,
+    _sighash_type: Option<String>,
+  ) -> Result<Value, jsonrpc_core::Error> {
     let mut transaction = Transaction::deserialize(&hex::decode(tx).unwrap()).unwrap();
     for input in &mut transaction.input {
       input.witness = Witness::from_vec(vec![vec![0; 64]]);
@@ -486,6 +496,13 @@ impl Api for Server {
   }
 
   fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    self.validate_address(address)
+  }
+
+  fn validate_address(
     &self,
     address: String,
   ) -> Result<serde_json::Value, jsonrpc_core::Error> {

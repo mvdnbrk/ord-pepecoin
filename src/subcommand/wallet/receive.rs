@@ -6,9 +6,8 @@ pub struct Output {
 }
 
 pub(crate) fn run(options: Options) -> Result {
-  let address = options
-    .pepecoin_rpc_client_for_wallet_command(false)?
-    .get_new_address(None, Some(bitcoincore_rpc::json::AddressType::Bech32m))?;
+  let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
+  let address: Address = client.call("getnewaddress", &[])?;
 
   print_json(Output { address })?;
 

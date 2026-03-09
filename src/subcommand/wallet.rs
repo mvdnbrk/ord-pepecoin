@@ -67,7 +67,7 @@ impl Wallet {
 
 fn get_change_address(client: &Client) -> Result<Address> {
   client
-    .call("getrawchangeaddress", &["legacy".into()])
+    .call("getrawchangeaddress", &[])
     .context("could not get change addresses from wallet")
 }
 

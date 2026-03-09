@@ -87,9 +87,17 @@ impl Send {
       postage,
     )?;
 
-    let signed_tx = client
-      .sign_raw_transaction_with_wallet(&unsigned_transaction, None, None)?
-      .hex;
+    let tx_hex = bitcoin::consensus::encode::serialize_hex(&unsigned_transaction);
+    let result: serde_json::Value = client
+      .call("signrawtransaction", &[tx_hex.into()])
+      .context("failed to sign transaction")?;
+    let signed_hex = result["hex"]
+      .as_str()
+      .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
+    if result["complete"].as_bool() != Some(true) {
+      bail!("Failed to sign transaction: {}", result["errors"]);
+    }
+    let signed_tx = hex::decode(signed_hex)?;
 
     let txid = client.send_raw_transaction(&signed_tx)?;
 

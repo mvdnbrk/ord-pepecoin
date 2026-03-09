@@ -6,7 +6,6 @@ use {
     util::key::{PublicKey},
     PackedLockTime, Witness,
   },
-  bitcoincore_rpc::bitcoincore_rpc_json::SignRawTransactionInput,
   std::collections::BTreeSet,
 };
 
@@ -66,13 +65,17 @@ impl Inscribe {
 
     let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
 
-    let network_info = client.get_network_info()?;
-    if network_info.version < 1010000 {
-      let version = network_info.version;
+    let network_info: serde_json::Value = client
+      .call("getnetworkinfo", &[])
+      .context("failed to get network info")?;
+    let version = network_info["version"]
+      .as_u64()
+      .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))? as usize;
+    if version < 1010000 {
       let major = version / 1000000;
       let minor = (version % 1000000) / 10000;
       let patch = (version % 10000) / 100;
-      bail!("Pepecoin Core 1.1.0.0 or newer required, current version is {}.{}.{}", 
+      bail!("Pepecoin Core 1.1.0.0 or newer required, current version is {}.{}.{}",
         major, minor, patch
       );
     }
@@ -121,14 +124,20 @@ impl Inscribe {
       let mut signed_txs = Vec::new();
       let mut last_txid;
       
-      let result = client.sign_raw_transaction_with_wallet(&txs[0], None, None)?;
-      if !result.complete {
-          bail!("Failed to sign commit transaction: {:?}", result.errors);
+      let commit_hex = bitcoin::consensus::encode::serialize_hex(&txs[0]);
+      let result: serde_json::Value = client
+        .call("signrawtransaction", &[commit_hex.into()])
+        .context("failed to sign commit transaction")?;
+      let signed_hex = result["hex"]
+        .as_str()
+        .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
+      if result["complete"].as_bool() != Some(true) {
+        bail!("Failed to sign commit transaction: {}", result["errors"]);
       }
-      
-      let signed_commit_tx: Transaction = bitcoin::consensus::encode::deserialize(&result.hex)?;
+      let signed_bytes = hex::decode(signed_hex)?;
+      let signed_commit_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_bytes)?;
       last_txid = signed_commit_tx.txid();
-      signed_txs.push(result.hex);
+      signed_txs.push(signed_bytes);
 
       for i in 1..txs.len() {
         let (redeem_script, partial_script) = &scripts[i-1];
@@ -136,25 +145,24 @@ impl Inscribe {
         let mut tx_to_sign = txs[i].clone();
         tx_to_sign.input[0].previous_output.txid = last_txid;
         
-        let sign_input = SignRawTransactionInput {
-            txid: tx_to_sign.input[0].previous_output.txid,
-            vout: tx_to_sign.input[0].previous_output.vout,
-            script_pub_key: redeem_script.to_p2sh(),
-            redeem_script: Some(redeem_script.clone()),
-            amount: None,
-        };
-
-        let result = client.sign_raw_transaction_with_wallet(
-            &tx_to_sign,
-            Some(&[sign_input]),
-            None,
-        )?;
-
-        if !result.complete {
-            bail!("Failed to sign reveal transaction {}: {:?}", i, result.errors);
+        let tx_hex = bitcoin::consensus::encode::serialize_hex(&tx_to_sign);
+        let prevtxs = serde_json::json!([{
+          "txid": tx_to_sign.input[0].previous_output.txid.to_string(),
+          "vout": tx_to_sign.input[0].previous_output.vout,
+          "scriptPubKey": format!("{:x}", redeem_script.to_p2sh()),
+          "redeemScript": format!("{:x}", redeem_script),
+        }]);
+        let result: serde_json::Value = client
+          .call("signrawtransaction", &[tx_hex.into(), prevtxs])
+          .context(format!("failed to sign reveal transaction {}", i))?;
+        let signed_hex = result["hex"]
+          .as_str()
+          .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
+        if result["complete"].as_bool() != Some(true) {
+          bail!("Failed to sign reveal transaction {}: {}", i, result["errors"]);
         }
 
-        let mut signed_tx: Transaction = bitcoin::consensus::encode::deserialize(&result.hex)?;
+        let mut signed_tx: Transaction = bitcoin::consensus::encode::deserialize(&hex::decode(signed_hex)?)?;
         
         let mut new_script_sig = script::Builder::new();
         for instruction in partial_script.instructions() {
@@ -205,7 +213,7 @@ impl Inscribe {
   }
 
   fn get_pubkey(&self, client: &Client) -> Result<PublicKey> {
-    let address = client.get_new_address(None, Some(bitcoincore_rpc::json::AddressType::Legacy))?;
+    let address: Address = client.call("getnewaddress", &[])?;
     let result: serde_json::Value = client
       .call("validateaddress", &[address.to_string().into()])
       .context("failed to validate address")?;
