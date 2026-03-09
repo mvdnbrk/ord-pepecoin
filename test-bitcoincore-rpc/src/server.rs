@@ -237,15 +237,19 @@ impl Api for Server {
   fn sign_raw_transaction_with_wallet(
     &self,
     tx: String,
-    utxos: Option<()>,
-    sighash_type: Option<()>,
+    _utxos: Option<Vec<serde_json::Value>>,
+    _sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error> {
-    assert_eq!(utxos, None, "utxos param not supported");
-    assert_eq!(sighash_type, None, "sighash_type param not supported");
-
     let mut transaction = Transaction::deserialize(&hex::decode(tx).unwrap()).unwrap();
     for input in &mut transaction.input {
       input.witness = Witness::from_vec(vec![vec![0; 64]]);
+      // Add a dummy signature to script_sig if it's empty (for P2SH)
+      if input.script_sig.is_empty() {
+        input.script_sig = script::Builder::new()
+          .push_slice(&[0; 71]) // dummy sig
+          .push_slice(&[0; 33]) // dummy redeem script (will be replaced by inscriber)
+          .into_script();
+      }
     }
 
     Ok(

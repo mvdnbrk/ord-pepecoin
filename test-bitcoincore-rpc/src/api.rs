@@ -54,8 +54,8 @@ pub trait Api {
   fn sign_raw_transaction_with_wallet(
     &self,
     tx: String,
-    utxos: Option<()>,
-    sighash_type: Option<()>,
+    utxos: Option<Vec<serde_json::Value>>,
+    sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error>;
 
   #[rpc(name = "sendrawtransaction")]

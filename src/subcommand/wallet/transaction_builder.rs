@@ -35,7 +35,7 @@
 use {
   super::*,
   bitcoin::{
-    blockdata::{locktime::PackedLockTime, witness::Witness},
+    blockdata::{locktime::PackedLockTime, script, witness::Witness},
     util::amount::Amount,
   },
   std::collections::{BTreeMap, BTreeSet},
@@ -115,7 +115,8 @@ impl TransactionBuilder {
   const ADDITIONAL_INPUT_VBYTES: usize = 58;
   const ADDITIONAL_OUTPUT_VBYTES: usize = 43;
   const MAX_POSTAGE: Amount = Amount::from_sat(2 * 10_000);
-  const SCHNORR_SIGNATURE_SIZE: usize = 64;
+  #[cfg(test)]
+  const LEGACY_SIGNATURE_SIZE: usize = 107;
   pub(crate) const TARGET_POSTAGE: Amount = Amount::from_sat(10_000);
 
   pub fn build_transaction_with_postage(
@@ -407,9 +408,9 @@ impl TransactionBuilder {
   }
 
   /// Estimate the size in virtual bytes of the transaction under construction.
-  /// We initialize wallets with taproot descriptors only, so we know that all
-  /// inputs are taproot key path spends, which allows us to know that witnesses
-  /// will all consist of single Schnorr signatures.
+  /// We initialize wallets with legacy descriptors, so we know that all
+  /// inputs are P2PKH spends, which allows us to know that scriptSigs
+  /// will all consist of an ECDSA signature and a public key.
   fn estimate_vbytes(&self) -> usize {
     Self::estimate_vbytes_with(
       self.inputs.len(),
@@ -430,9 +431,12 @@ impl TransactionBuilder {
         .into_iter()
         .map(|_| TxIn {
           previous_output: OutPoint::null(),
-          script_sig: Script::new(),
+          script_sig: script::Builder::new()
+            .push_slice(&[0; 85]) // final adjustment
+            .push_slice(&[0; 33]) // dummy pubkey
+            .into_script(),
           sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-          witness: Witness::from_vec(vec![vec![0; TransactionBuilder::SCHNORR_SIGNATURE_SIZE]]),
+          witness: Witness::new(),
         })
         .collect(),
       output: outputs
@@ -600,7 +604,11 @@ impl TransactionBuilder {
 
     let mut modified_tx = transaction.clone();
     for input in &mut modified_tx.input {
-      input.witness = Witness::from_vec(vec![vec![0; 64]]);
+      input.script_sig = script::Builder::new()
+        .push_slice(&[0; 85])
+        .push_slice(&[0; 33])
+        .into_script();
+      input.witness = Witness::new();
     }
     let expected_fee = self.fee_rate.fee(modified_tx.vsize());
 
@@ -1306,7 +1314,7 @@ mod tests {
     .unwrap();
 
     let fee =
-      fee_rate.fee(transaction.vsize() + TransactionBuilder::SCHNORR_SIGNATURE_SIZE / 4 + 1);
+      fee_rate.fee(transaction.vsize() + TransactionBuilder::LEGACY_SIGNATURE_SIZE + 1);
 
     pretty_assert_eq!(
       transaction,
