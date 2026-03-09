@@ -66,6 +66,17 @@ impl Inscribe {
 
     let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
 
+    let network_info = client.get_network_info()?;
+    if network_info.version < 1010000 {
+      let version = network_info.version;
+      let major = version / 1000000;
+      let minor = (version % 1000000) / 10000;
+      let patch = (version % 10000) / 100;
+      bail!("Pepecoin Core 1.1.0.0 or newer required, current version is {}.{}.{}", 
+        major, minor, patch
+      );
+    }
+
     let utxos = index.get_unspent_outputs(Wallet::load(&options)?)?;
 
     let inscriptions = index.get_inscriptions(None)?;
@@ -99,7 +110,7 @@ impl Inscribe {
     )?;
 
     if self.dry_run {
-      let inscription_id = txs[0].txid().into();
+      let inscription_id = txs[1].txid().into();
       print_json(Output {
         commit: txs[0].txid(),
         reveal: txs.last().unwrap().txid(),
@@ -173,7 +184,8 @@ impl Inscribe {
       let reveal_tx: Transaction = bitcoin::consensus::encode::deserialize(signed_txs.last().unwrap())?;
       let reveal = reveal_tx.txid();
       
-      let inscription_id = commit.into();
+      let inscription_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_txs[1])?;
+      let inscription_id = inscription_tx.txid().into();
 
       for (i, signed_tx_bytes) in signed_txs.iter().enumerate() {
         client
@@ -197,7 +209,7 @@ impl Inscribe {
     match client.call::<GetAddressInfoResult>("getaddressinfo", &[address.to_string().into()]) {
         Ok(info) => info.pubkey.ok_or_else(|| anyhow!("Could not get pubkey for address")),
         Err(e) => {
-            if let bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(ref err)) = e {
+            if let bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(err)) = &e {
                 if err.code == -32601 {
                     let pubkey_bytes = hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap();
                     return Ok(PublicKey::from_slice(&pubkey_bytes).unwrap());
@@ -292,7 +304,7 @@ impl Inscribe {
     for batch in &batches {
         let num_chunks = batch.instructions().count();
         let estimated_sig_size = batch.len() + 1 + 72 + 1 + (33 + 1 + num_chunks + 1);
-        let tx_vsize = 82 + estimated_sig_size + 50; // Increased buffer for better accuracy
+        let tx_vsize = 82 + estimated_sig_size; 
         let fee = reveal_fee_rate.fee(tx_vsize).to_sat();
         total_reveal_fees += fee;
         reveal_fees.push(fee);

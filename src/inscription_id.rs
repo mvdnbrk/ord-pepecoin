@@ -8,7 +8,7 @@ pub struct InscriptionId {
 
 impl InscriptionId {
   pub(crate) fn value(self) -> Vec<u8> {
-    let mut value = self.txid.into_inner().to_vec();
+    let mut value = self.txid.to_vec();
     value.reverse();
 
     if self.index > 0 {
