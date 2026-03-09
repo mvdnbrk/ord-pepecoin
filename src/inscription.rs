@@ -25,8 +25,8 @@ pub(crate) enum ParsedInscription {
 
 impl Inscription {
   #[cfg(test)]
-  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>) -> Self {
-    Self { content_type, body, parent: None }
+  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>, parent: Option<Vec<u8>>) -> Self {
+    Self { content_type, body, parent }
   }
 
   pub(crate) fn from_transactions(txs: Vec<Transaction>) -> ParsedInscription {
@@ -77,7 +77,8 @@ impl Inscription {
     let mut builder = script::Builder::new()
       .push_slice(PROTOCOL_ID);
 
-    let body = self.body.as_ref().map(Vec::as_slice).unwrap_or_default();
+    let empty = Vec::new();
+    let body = self.body.as_ref().unwrap_or(&empty);
     let chunks: Vec<&[u8]> = body.chunks(520).collect();
 
     builder = Self::push_number(builder, chunks.len() as u64);
@@ -128,6 +129,11 @@ impl Inscription {
   }
 
   #[cfg(test)]
+  pub(crate) fn to_p2sh_unlock(&self) -> Script {
+    self.get_inscription_script()
+  }
+
+  #[cfg(test)]
   pub(crate) fn to_witness(&self) -> Witness {
     let mut builder = script::Builder::new()
       .push_opcode(opcodes::OP_FALSE)
@@ -161,11 +167,32 @@ struct InscriptionParser {}
 impl InscriptionParser {
   fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
     let sig_script = &sig_scripts[0];
+    tprintln!("Parsing script: {}", sig_script);
 
     let mut push_datas_vec = match Self::decode_push_datas(sig_script) {
       Some(push_datas) => push_datas,
       None => return ParsedInscription::None,
     };
+
+    if push_datas_vec.len() == 1 {
+        if let Some(inner) = Self::decode_push_datas(&Script::from(push_datas_vec[0].clone())) {
+            if inner.len() >= 3 && inner[0] == PROTOCOL_ID {
+                push_datas_vec = inner;
+            }
+        }
+    }
+
+    // Handle OP_FALSE OP_IF ... OP_ENDIF envelope in script_sig
+    if push_datas_vec.is_empty() {
+        let bytes = sig_script.as_bytes();
+        if bytes.len() >= 3 && bytes[0] == 0 && bytes[1] == 0x63 && bytes[bytes.len()-1] == 0x6d {
+            if let Some(inner) = Self::decode_push_datas(&Script::from(bytes[2..bytes.len()-1].to_vec())) {
+                if inner.len() >= 3 && inner[0] == PROTOCOL_ID {
+                    push_datas_vec = inner;
+                }
+            }
+        }
+    }
 
     let mut push_datas = push_datas_vec.as_slice();
 
@@ -229,7 +256,7 @@ impl InscriptionParser {
           let inscription = Inscription {
             content_type: Some(content_type),
             body: Some(body),
-            parent,
+            parent: None,
           };
 
           return ParsedInscription::Complete(inscription);

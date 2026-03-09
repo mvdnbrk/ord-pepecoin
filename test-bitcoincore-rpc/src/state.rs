@@ -49,6 +49,18 @@ impl State {
   }
 
   pub(crate) fn push_block(&mut self, subsidy: u64) -> Block {
+    let mut fees = 0;
+    for tx in &self.mempool {
+        let input_value: u64 = tx.input.iter().map(|txin| {
+            self.transactions.get(&txin.previous_output.txid)
+                .map(|prev_tx| prev_tx.output[txin.previous_output.vout as usize].value)
+                .unwrap_or(0)
+        }).sum();
+        let output_value: u64 = tx.output.iter().map(|txout| txout.value).sum();
+        fees += input_value.saturating_sub(output_value);
+        self.transactions.insert(tx.txid(), tx.clone());
+    }
+
     let coinbase = Transaction {
       version: 0,
       lock_time: PackedLockTime(0),
@@ -61,26 +73,7 @@ impl State {
         witness: Witness::new(),
       }],
       output: vec![TxOut {
-        value: subsidy
-          + self
-            .mempool
-            .iter()
-            .map(|tx| {
-              let fee = tx
-                .input
-                .iter()
-                .map(|txin| {
-                  self.transactions[&txin.previous_output.txid].output
-                    [txin.previous_output.vout as usize]
-                    .value
-                })
-                .sum::<u64>()
-                - tx.output.iter().map(|txout| txout.value).sum::<u64>();
-              self.transactions.insert(tx.txid(), tx.clone());
-
-              fee
-            })
-            .sum::<u64>(),
+        value: subsidy + fees,
         script_pubkey: Script::new(),
       }],
     };
@@ -139,7 +132,11 @@ impl State {
       total_value += tx.output[*vout].value;
       input.push(TxIn {
         previous_output: OutPoint::new(tx.txid(), *vout as u32),
-        script_sig: Script::new(),
+        script_sig: if i == 0 {
+          template.script_sig.clone()
+        } else {
+          Script::new()
+        },
         sequence: Sequence::MAX,
         witness: if i == 0 {
           template.witness.clone()
@@ -149,26 +146,26 @@ impl State {
       });
     }
 
-    let value_per_output = (total_value - template.fee) / template.outputs as u64;
-    assert_eq!(
-      value_per_output * template.outputs as u64 + template.fee,
-      total_value
-    );
+    let mut remaining = total_value - template.fee;
+    let mut outputs = Vec::new();
+    for i in 0..template.outputs {
+        let value = if let Some(v) = template.output_values.get(i) {
+            *v
+        } else {
+            remaining / (template.outputs - i) as u64
+        };
+        remaining -= value;
+        outputs.push(TxOut {
+          value,
+          script_pubkey: script::Builder::new().into_script(),
+        });
+    }
 
     let tx = Transaction {
       version: 0,
       lock_time: PackedLockTime(0),
       input,
-      output: (0..template.outputs)
-        .map(|i| TxOut {
-          value: template
-            .output_values
-            .get(i)
-            .cloned()
-            .unwrap_or(value_per_output),
-          script_pubkey: script::Builder::new().into_script(),
-        })
-        .collect(),
+      output: outputs,
     };
     self.mempool.push(tx.clone());
 

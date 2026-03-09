@@ -90,7 +90,7 @@ impl CommandBuilder {
   }
 
   pub(crate) fn command(&self) -> Command {
-    let mut command = Command::new(executable_path("ord-pepecoin"));
+    let mut command = Command::new(executable_path("ord"));
 
     if let Some(rpc_server_url) = &self.rpc_server_url {
       let cookiefile = self.tempdir.path().join("cookie");

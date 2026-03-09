@@ -2164,6 +2164,7 @@ mod tests {
     assert_eq!(
       Server::content_response(Inscription::new(
         Some("text/plain".as_bytes().to_vec()),
+        None,
         None
       )),
       None
@@ -2175,6 +2176,7 @@ mod tests {
     let (headers, body) = Server::content_response(Inscription::new(
       Some("text/plain".as_bytes().to_vec()),
       Some(vec![1, 2, 3]),
+      None,
     ))
     .unwrap();
 
@@ -2185,7 +2187,7 @@ mod tests {
   #[test]
   fn content_response_no_content_type() {
     let (headers, body) =
-      Server::content_response(Inscription::new(None, Some(Vec::new()))).unwrap();
+      Server::content_response(Inscription::new(None, Some(Vec::new()), None)).unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());
@@ -2200,7 +2202,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain;charset=utf-8", "hello").to_witness(),
+        script_sig: inscription("text/plain;charset=utf-8", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2223,7 +2225,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain;charset=utf-8", b"\xc3\x28").to_witness(),
+        script_sig: inscription("text/plain;charset=utf-8", b"\xc3\x28").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2245,11 +2247,11 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription(
+        script_sig: inscription(
           "text/plain;charset=utf-8",
           "<script>alert('hello');</script>",
         )
-        .to_witness(),
+        .to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2272,7 +2274,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("audio/flac", "hello").to_witness(),
+        script_sig: inscription("audio/flac", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
     let inscription_id = InscriptionId::from(txid);
@@ -2295,7 +2297,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("application/pdf", "hello").to_witness(),
+        script_sig: inscription("application/pdf", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
     let inscription_id = InscriptionId::from(txid);
@@ -2318,7 +2320,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("image/png", "hello").to_witness(),
+        script_sig: inscription("image/png", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
     let inscription_id = InscriptionId::from(txid);
@@ -2342,7 +2344,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/html;charset=utf-8", "hello").to_witness(),
+        script_sig: inscription("text/html;charset=utf-8", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2365,7 +2367,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2388,7 +2390,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("video/webm", "hello").to_witness(),
+        script_sig: inscription("video/webm", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
     let inscription_id = InscriptionId::from(txid);
@@ -2411,7 +2413,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2433,7 +2435,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2455,7 +2457,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2489,7 +2491,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2511,7 +2513,12 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: Inscription::new(Some("foo/bar".as_bytes().to_vec()), None).to_witness(),
+        script_sig: Inscription {
+          content_type: Some("foo/bar".as_bytes().to_vec()),
+          body: None,
+          parent: None,
+        }
+        .to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2535,7 +2542,12 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: Inscription::new(Some("image/png".as_bytes().to_vec()), None).to_witness(),
+        script_sig: Inscription {
+          content_type: Some("image/png".as_bytes().to_vec()),
+          body: None,
+          parent: None,
+        }
+        .to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2559,7 +2571,7 @@ mod tests {
       .pepecoin_rpc_server
       .broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/foo", "hello").to_witness(),
+        script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2593,7 +2605,7 @@ mod tests {
         .pepecoin_rpc_server
         .broadcast_tx(TransactionTemplate {
           inputs: &[(i + 1, 0, 0)],
-          witness: inscription("text/foo", "hello").to_witness(),
+          script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
           ..Default::default()
         });
     }
@@ -2617,7 +2629,7 @@ mod tests {
         .pepecoin_rpc_server
         .broadcast_tx(TransactionTemplate {
           inputs: &[(i + 1, 0, 0)],
-          witness: inscription("text/foo", "hello").to_witness(),
+          script_sig: inscription("text/foo", "hello").to_p2sh_unlock(),
           ..Default::default()
         });
     }
@@ -2681,7 +2693,7 @@ mod tests {
     pepecoin_rpc_server.mine_blocks(1);
     let txid = pepecoin_rpc_server.broadcast_tx(TransactionTemplate {
       inputs: &[(1, 0, 0)],
-      witness: inscription("text/plain;charset=utf-8", "hello").to_witness(),
+      script_sig: inscription("text/plain;charset=utf-8", "hello").to_p2sh_unlock(),
       ..Default::default()
     });
     let inscription = InscriptionId::from(txid);
