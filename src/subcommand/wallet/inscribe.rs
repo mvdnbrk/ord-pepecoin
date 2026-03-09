@@ -6,7 +6,7 @@ use {
     util::key::{PublicKey},
     PackedLockTime, Witness,
   },
-  bitcoincore_rpc::bitcoincore_rpc_json::{SignRawTransactionInput, GetAddressInfoResult},
+  bitcoincore_rpc::bitcoincore_rpc_json::SignRawTransactionInput,
   std::collections::BTreeSet,
 };
 
@@ -206,12 +206,16 @@ impl Inscribe {
 
   fn get_pubkey(&self, client: &Client) -> Result<PublicKey> {
     let address = client.get_new_address(None, Some(bitcoincore_rpc::json::AddressType::Legacy))?;
-    let info: GetAddressInfoResult = client
-      .call("getaddressinfo", &[address.to_string().into()])
-      .context("failed to get address info")?;
-    info
-      .pubkey
-      .ok_or_else(|| anyhow!("could not get pubkey for address {address}"))
+    let result: serde_json::Value = client
+      .call("validateaddress", &[address.to_string().into()])
+      .context("failed to validate address")?;
+    let pubkey_hex = result["pubkey"]
+      .as_str()
+      .ok_or_else(|| anyhow!("no pubkey in validateaddress response for {address}"))?;
+    let pubkey_bytes = hex::decode(pubkey_hex)
+      .context("invalid pubkey hex")?;
+    PublicKey::from_slice(&pubkey_bytes)
+      .context("invalid pubkey")
   }
 
   fn create_inscription_transactions(

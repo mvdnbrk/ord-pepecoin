@@ -194,7 +194,15 @@ impl Options {
     let client = Client::new(&rpc_url, auth)
       .with_context(|| format!("failed to connect to Pepecoin Core RPC at {rpc_url}"))?;
 
-    let rpc_chain = match client.get_blockchain_info()?.chain.as_str() {
+    let blockchain_info: serde_json::Value = client
+      .call("getblockchaininfo", &[])
+      .context("failed to get blockchain info")?;
+
+    let chain_str = blockchain_info["chain"]
+      .as_str()
+      .ok_or_else(|| anyhow!("missing chain field in getblockchaininfo"))?;
+
+    let rpc_chain = match chain_str {
       "main" => Chain::Mainnet,
       "test" => Chain::Testnet,
       "regtest" => Chain::Regtest,
@@ -225,12 +233,7 @@ impl Options {
       );
     }
 
-    if !create {
-      if !client.list_wallets()?.contains(&self.wallet) {
-        client.load_wallet(&self.wallet)?;
-      }
-    }
-
+    // Pepecoin Core uses a single default wallet (no multi-wallet support)
     Ok(client)
   }
 }
