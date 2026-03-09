@@ -167,32 +167,11 @@ struct InscriptionParser {}
 impl InscriptionParser {
   fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
     let sig_script = &sig_scripts[0];
-    tprintln!("Parsing script: {}", sig_script);
 
     let mut push_datas_vec = match Self::decode_push_datas(sig_script) {
       Some(push_datas) => push_datas,
       None => return ParsedInscription::None,
     };
-
-    if push_datas_vec.len() == 1 {
-        if let Some(inner) = Self::decode_push_datas(&Script::from(push_datas_vec[0].clone())) {
-            if inner.len() >= 3 && inner[0] == PROTOCOL_ID {
-                push_datas_vec = inner;
-            }
-        }
-    }
-
-    // Handle OP_FALSE OP_IF ... OP_ENDIF envelope in script_sig
-    if push_datas_vec.is_empty() {
-        let bytes = sig_script.as_bytes();
-        if bytes.len() >= 3 && bytes[0] == 0 && bytes[1] == 0x63 && bytes[bytes.len()-1] == 0x6d {
-            if let Some(inner) = Self::decode_push_datas(&Script::from(bytes[2..bytes.len()-1].to_vec())) {
-                if inner.len() >= 3 && inner[0] == PROTOCOL_ID {
-                    push_datas_vec = inner;
-                }
-            }
-        }
-    }
 
     let mut push_datas = push_datas_vec.as_slice();
 
@@ -225,22 +204,10 @@ impl InscriptionParser {
 
     push_datas = &push_datas[3..];
 
-    // read optional tags
-    let mut parent = None;
-    while push_datas.len() >= 2 {
-        let tag = match Self::push_data_to_number(&push_datas[0]) {
-            Some(n) => n,
-            None => break,
-        };
-        
-        if tag == 3 {
-            parent = Some(push_datas[1].clone());
-            push_datas = &push_datas[2..];
-        } else {
-            // Unrecognized tag, might be start of body chunks
-            break;
-        }
-    }
+    // TODO: Add tag parsing for parent/child (Tag 3) once we define a format
+    // that doesn't collide with body countdown numbers. Currently, an inscription
+    // with exactly 4 chunks has countdown starting at 3, which collides with Tag 3.
+    let parent: Option<Vec<u8>> = None;
 
     // read body
 
@@ -256,7 +223,7 @@ impl InscriptionParser {
           let inscription = Inscription {
             content_type: Some(content_type),
             body: Some(body),
-            parent: None,
+            parent,
           };
 
           return ParsedInscription::Complete(inscription);

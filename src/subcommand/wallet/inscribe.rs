@@ -47,8 +47,10 @@ pub(crate) struct Inscribe {
   pub(crate) no_backup: bool,
   #[clap(long, help = "Send inscription to <DESTINATION>.")]
   pub(crate) destination: Option<Address>,
-  #[clap(long, help = "Parent inscription <PARENT>.")]
-  pub(crate) parent: Option<InscriptionId>,
+  // TODO: Parent/child disabled until tag format collision with countdown is resolved.
+  // See memory/parent-child-inscriptions.md for details.
+  // #[clap(long, help = "Parent inscription <PARENT>.")]
+  // pub(crate) parent: Option<InscriptionId>,
   #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
   pub(crate) postage: Option<Amount>,
 }
@@ -57,9 +59,7 @@ impl Inscribe {
   pub(crate) fn run(self, options: Options) -> Result {
     let mut inscription = Inscription::from_file(options.chain(), &self.file)?;
 
-    if let Some(parent) = self.parent {
-      inscription.parent = Some(parent.value());
-    }
+
 
     let index = Index::open(&options)?;
     index.update()?;
