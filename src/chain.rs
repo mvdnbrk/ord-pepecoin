@@ -1,4 +1,4 @@
-use {super::*, clap::ValueEnum};
+use {super::*, bitcoin::Amount, clap::ValueEnum};
 
 #[derive(Default, ValueEnum, Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -28,6 +28,18 @@ impl Chain {
       Self::Regtest => 18332,
       Self::Signet => 38332,
       Self::Testnet => 44873,
+    }
+  }
+
+  pub(crate) fn default_fee_rate(self) -> f64 {
+    match self {
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 1000.0,
+    }
+  }
+
+  pub(crate) fn default_postage(self) -> Amount {
+    match self {
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => Amount::from_sat(100_000),
     }
   }
 

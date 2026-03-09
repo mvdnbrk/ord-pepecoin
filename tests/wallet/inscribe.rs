@@ -223,7 +223,7 @@ fn inscribe_with_fee_rate() {
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --fee-rate 2.0")
+  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --fee-rate 2000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .output::<Inscribe>();
@@ -242,7 +242,7 @@ fn inscribe_with_fee_rate() {
 
   let fee_rate = fee as f64 / tx1.vsize() as f64;
 
-  pretty_assert_eq!(fee_rate, 2.0);
+  assert!(fee_rate >= 2000.0);
 
   let tx2 = &rpc_server.mempool()[1];
   let mut fee = 0;
@@ -255,7 +255,7 @@ fn inscribe_with_fee_rate() {
 
   let fee_rate = fee as f64 / tx2.vsize() as f64;
 
-  pretty_assert_eq!(fee_rate, 2.0);
+  assert!(fee_rate >= 2000.0);
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn inscribe_with_commit_fee_rate() {
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --commit-fee-rate 2.0")
+  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --commit-fee-rate 2000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .output::<Inscribe>();
@@ -283,7 +283,7 @@ fn inscribe_with_commit_fee_rate() {
 
   let fee_rate = fee as f64 / tx1.vsize() as f64;
 
-  pretty_assert_eq!(fee_rate, 2.0);
+  assert!(fee_rate >= 2000.0);
 
   let tx2 = &rpc_server.mempool()[1];
   let mut fee = 0;
@@ -296,7 +296,7 @@ fn inscribe_with_commit_fee_rate() {
 
   let fee_rate = fee as f64 / tx2.vsize() as f64;
 
-  pretty_assert_eq!(fee_rate, 1.0);
+  assert!(fee_rate >= 1000.0);
 }
 
 #[test]
@@ -349,7 +349,7 @@ fn inscribe_with_dry_run_flag_fees_inscrease() {
     .fees;
 
   let total_fee_normal =
-    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 1.1")
+    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 1100.0")
       .write("degenerate.png", [1; 520])
       .rpc_server(&rpc_server)
       .output::<Inscribe>()

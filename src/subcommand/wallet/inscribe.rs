@@ -26,10 +26,9 @@ pub(crate) struct Inscribe {
   pub(crate) satpoint: Option<SatPoint>,
   #[clap(
     long,
-    default_value = "1.0",
-    help = "Use fee rate of <FEE_RATE> sats/vB"
+    help = "Use fee rate of <FEE_RATE> sats/vB. [default: 1000.0]"
   )]
-  pub(crate) fee_rate: FeeRate,
+  pub(crate) fee_rate: Option<FeeRate>,
   #[clap(
     long,
     help = "Use <COMMIT_FEE_RATE> sats/vbyte for commit transaction.\nDefaults to <FEE_RATE> if unset."
@@ -50,6 +49,8 @@ pub(crate) struct Inscribe {
   pub(crate) destination: Option<Address>,
   #[clap(long, help = "Parent inscription <PARENT>.")]
   pub(crate) parent: Option<InscriptionId>,
+  #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
+  pub(crate) postage: Option<Amount>,
 }
 
 impl Inscribe {
@@ -65,6 +66,17 @@ impl Inscribe {
 
     let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
 
+    let network_info = client.get_network_info()?;
+    if network_info.version < 1010000 {
+      let version = network_info.version;
+      let major = version / 1000000;
+      let minor = (version % 1000000) / 10000;
+      let patch = (version % 10000) / 100;
+      bail!("Pepecoin Core 1.1.0.0 or newer required, current version is {}.{}.{}", 
+        major, minor, patch
+      );
+    }
+
     let utxos = index.get_unspent_outputs(Wallet::load(&options)?)?;
 
     let inscriptions = index.get_inscriptions(None)?;
@@ -79,6 +91,10 @@ impl Inscribe {
 
     let pubkey = self.get_pubkey(&client)?;
 
+    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(options.chain().default_fee_rate()).unwrap());
+
+    let postage = self.postage.unwrap_or(options.chain().default_postage());
+
     let (txs, scripts, fees) = Inscribe::create_inscription_transactions(
       self.satpoint,
       inscription,
@@ -87,9 +103,10 @@ impl Inscribe {
       utxos.clone(),
       commit_tx_change,
       reveal_tx_destination,
-      self.commit_fee_rate.unwrap_or(self.fee_rate),
-      self.fee_rate,
+      self.commit_fee_rate.unwrap_or(fee_rate),
+      fee_rate,
       pubkey,
+      postage,
     )?;
 
     if self.dry_run {
@@ -214,6 +231,7 @@ impl Inscribe {
     commit_fee_rate: FeeRate,
     reveal_fee_rate: FeeRate,
     pubkey: PublicKey,
+    postage: Amount,
   ) -> Result<(Vec<Transaction>, Vec<(Script, Script)>, u64)> {
     let satpoint = if let Some(satpoint) = satpoint {
       satpoint
@@ -309,7 +327,7 @@ impl Inscribe {
     }
 
     let first_lock_address = Address::p2sh(&locks[0], network).unwrap();
-    let postage = TransactionBuilder::TARGET_POSTAGE + Amount::from_sat(total_reveal_fees);
+    let total_postage = postage + Amount::from_sat(total_reveal_fees);
     let unsigned_commit_tx = TransactionBuilder::build_transaction_with_value(
       satpoint,
       inscriptions.clone(),
@@ -317,7 +335,7 @@ impl Inscribe {
       first_lock_address.clone(),
       change.clone(),
       commit_fee_rate,
-      postage,
+      total_postage,
     )?;
 
     fees += Self::calculate_fee(&unsigned_commit_tx, &utxos);
@@ -375,7 +393,7 @@ mod tests {
 
   #[test]
   fn reveal_transaction_pays_fee() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(100000))];
+    let utxos = vec![(outpoint(1), Amount::from_sat(200000))];
     let inscription = inscription("text/plain", "ord");
     let commit_address = change(0);
     let reveal_address = recipient();
@@ -392,12 +410,13 @@ mod tests {
       FeeRate::try_from(1.0).unwrap(),
       FeeRate::try_from(1.0).unwrap(),
       pubkey,
+      Amount::from_sat(100_000),
     )
     .unwrap();
 
     assert!(fees > 0);
     
-    let total_input = 100000;
+    let total_input = 200000;
     
     let final_output_value = txs.last().unwrap().output[0].value;
     let commit_tx = &txs[0];
@@ -411,7 +430,7 @@ mod tests {
 
   #[test]
   fn inscript_tansactions_opt_in_to_rbf() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(20000))];
+    let utxos = vec![(outpoint(1), Amount::from_sat(200000))];
     let inscription = inscription("text/plain", "ord");
     let commit_address = change(0);
     let reveal_address = recipient();
@@ -428,6 +447,7 @@ mod tests {
       FeeRate::try_from(1.0).unwrap(),
       FeeRate::try_from(1.0).unwrap(),
       pubkey,
+      Amount::from_sat(100_000),
     )
     .unwrap();
 
@@ -465,6 +485,7 @@ mod tests {
       FeeRate::try_from(1.0).unwrap(),
       FeeRate::try_from(1.0).unwrap(),
       pubkey,
+      Amount::from_sat(100_000),
     )
     .unwrap_err()
     .to_string();
