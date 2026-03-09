@@ -7,8 +7,6 @@ pub(crate) enum IndexSubcommand {
   #[clap(about = "Export index to TSV")]
   Export(Export),
   #[clap(about = "Update the index")]
-  Run,
-  #[clap(about = "Update the index")]
   Update,
 }
 
@@ -20,7 +18,7 @@ impl IndexSubcommand {
         index.compact()
       }
       Self::Export(export) => export.run(options),
-      Self::Run | Self::Update => run(options),
+      Self::Update => run(options),
     }
   }
 }
