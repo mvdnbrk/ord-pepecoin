@@ -534,7 +534,7 @@ impl Index {
       Ok(tx)
     } else {
       let mut tx = self.database.begin_write()?;
-      tx.set_durability(redb::Durability::Paranoid);
+      tx.set_durability(redb::Durability::Immediate);
       Ok(tx)
     }
   }
