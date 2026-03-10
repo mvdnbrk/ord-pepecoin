@@ -146,7 +146,14 @@ The server handles SIGTERM signals from systemd, ensuring the index database is 
 - Pepecoin Core is not aware of inscriptions and does not perform sat control. Using `pepecoin-cli` commands with `ord-pepecoin` wallets may lead to loss of inscriptions.
 - Keep ordinal and cardinal wallets segregated.
 
-> **Note:** The `wallet inscribe` command currently uses Taproot transaction construction, which is not compatible with Pepecoin (SegWit is disabled). Inscriptions must be created using external tools that build `script_sig`-based transactions.
+### Inscribing
+
+```bash
+ord-pepecoin --config /path/to/ord.yaml wallet inscribe /path/to/file.png
+ord-pepecoin --config /path/to/ord.yaml wallet inscribe --dry-run /path/to/file.png
+```
+
+Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large files are split across multiple chained transactions using 240-byte data chunks. Reveal transactions are signed locally.
 
 ## Credits
 
