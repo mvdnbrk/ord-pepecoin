@@ -404,7 +404,7 @@ impl Api for Server {
                             "asm": "",
                             "hex": hex::encode(output.script_pubkey.as_bytes()),
                             "type": "pubkeyhash",
-                            "address": Address::from_script(&output.script_pubkey, self.network).map(|a| a.to_string()).unwrap_or_else(|_| "none".to_string())
+                            "address": Address::from_script(&output.script_pubkey, self.network).map(|a| a.to_string()).ok()
                         }
                     })
                 }).collect::<Vec<_>>()
