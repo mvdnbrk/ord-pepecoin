@@ -11,7 +11,7 @@ fn inscribe_creates_inscriptions() {
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server);
 
-  assert_eq!(rpc_server.descriptors().len(), 3);
+  assert_eq!(rpc_server.descriptors().len(), 0);
 
   let request =
     TestServer::spawn_with_args(&rpc_server, &[]).request(format!("/content/{inscription}"));
@@ -45,7 +45,7 @@ fn inscribe_fails_if_pepecoin_core_is_too_old() {
   CommandBuilder::new("wallet inscribe hello.txt")
     .write("hello.txt", "HELLOWORLD")
     .expected_exit_code(1)
-    .stderr_regex("error: JSON-RPC error: RPC error response: RpcError \\{ code: -8, message: \"Server error\", data: None \\}\n")
+    .stderr_regex("error: wallet contains no cardinal utxos\n")
     .rpc_server(&rpc_server)
     .run();
 }
@@ -56,14 +56,14 @@ fn inscribe_no_backup() {
   rpc_server.mine_blocks(1);
 
   create_wallet(&rpc_server);
-  assert_eq!(rpc_server.descriptors().len(), 2);
+  assert_eq!(rpc_server.imported_privkeys().len(), 40);
 
   CommandBuilder::new("wallet inscribe hello.txt --no-backup")
     .write("hello.txt", "HELLOWORLD")
     .rpc_server(&rpc_server)
     .output::<Inscribe>();
 
-  assert_eq!(rpc_server.descriptors().len(), 2);
+  assert_eq!(rpc_server.imported_privkeys().len(), 40);
 }
 
 #[test]
@@ -91,7 +91,8 @@ fn inscribe_exceeds_chain_limit() {
   CommandBuilder::new("--chain signet wallet inscribe degenerate.png")
     .write("degenerate.png", [1; 1025])
     .rpc_server(&rpc_server)
-    .stdout_regex(".*")
+    .expected_exit_code(1)
+    .stderr_regex("error: content size of 1025 bytes exceeds 1024 byte limit for signet inscriptions\n")
     .run();
 }
 
@@ -335,14 +336,14 @@ fn inscribe_with_dry_run_flag_fees_inscrease() {
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  let total_fee_dry_run = CommandBuilder::new("wallet inscribe --dry-run degenerate.png")
+  let total_fee_dry_run = CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 1000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .output::<Inscribe>()
     .fees;
 
   let total_fee_normal =
-    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 1100.0")
+    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 5000.0")
       .write("degenerate.png", [1; 520])
       .rpc_server(&rpc_server)
       .output::<Inscribe>()

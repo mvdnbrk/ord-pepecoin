@@ -8,14 +8,16 @@ use {
     consensus::encode::{deserialize, serialize},
     hash_types::BlockHash,
     hashes::Hash,
+    secp256k1::{rand, Secp256k1},
     util::amount::SignedAmount,
+    util::key::PublicKey,
     Address, Amount, Block, BlockHeader, Network, OutPoint, PackedLockTime, Script, Sequence,
-    Transaction, TxIn, TxMerkleNode, TxOut, Txid, Witness, Wtxid,
+    Transaction, TxIn, TxMerkleNode, TxOut, Txid, Witness,
   },
   bitcoincore_rpc::json::{
     Bip125Replaceable, CreateRawTransactionInput, Descriptor, EstimateMode, GetBalancesResult,
     GetBalancesResultEntry, GetBlockHeaderResult, GetBlockchainInfoResult, GetDescriptorInfoResult,
-    GetNetworkInfoResult, GetRawTransactionResult, GetTransactionResult,
+    GetNetworkInfoResult, GetTransactionResult,
     GetTransactionResultDetail, GetTransactionResultDetailCategory, GetWalletInfoResult,
     ImportDescriptors, ImportMultiResult, ListDescriptorsResult, ListTransactionResult,
     ListUnspentResultEntry, LoadWalletResult, SignRawTransactionResult, Timestamp, WalletTxInfo,
@@ -233,8 +235,36 @@ impl Handle {
     }
   }
 
+  pub fn network_enum(&self) -> Network {
+    self.state().network
+  }
+
   pub fn loaded_wallets(&self) -> BTreeSet<String> {
     self.state().loaded_wallets.clone()
+  }
+
+  pub fn imported_privkeys(&self) -> Vec<(String, Option<String>)> {
+    self.state().imported_privkeys.clone()
+  }
+
+  pub fn set_coinbase_address(&self, address: &Address) {
+    self.state().coinbase_address = Some(address.clone());
+  }
+
+  pub fn get_new_address(&self) -> Address {
+    let mut state = self.state();
+    let network = state.network;
+    let secp256k1 = Secp256k1::new();
+    let (secret_key, public_key) = secp256k1.generate_keypair(&mut rand::thread_rng());
+    let pubkey = PublicKey::new(public_key);
+    let address = Address::p2pkh(&pubkey, network);
+
+    let privkey = bitcoin::PrivateKey::new(secret_key, network);
+
+    state.address_pubkeys.insert(address.clone(), pubkey);
+    state.address_privkeys.insert(address.clone(), privkey);
+
+    address
   }
 }
 

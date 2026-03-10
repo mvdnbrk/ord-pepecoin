@@ -95,7 +95,7 @@ pub trait Api {
     &self,
     txid: Txid,
     verbose: Option<bool>,
-    blockhash: Option<BlockHash>,
+    blockhash: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error>;
 
   #[rpc(name = "listunspent")]

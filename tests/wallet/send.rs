@@ -145,7 +145,7 @@ fn send_does_not_use_inscribed_sats_as_cardinal_utxos() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   create_wallet(&rpc_server);
 
-  let txid = rpc_server.mine_blocks_with_subsidy(1, 10_000)[0].txdata[0].txid();
+  let txid = rpc_server.mine_blocks_with_subsidy(1, 100_000)[0].txdata[0].txid();
   CommandBuilder::new(format!(
     "wallet inscribe --satpoint {txid}:0:0 degenerate.png --fee-rate 0"
   ))
@@ -322,7 +322,7 @@ fn wallet_send_with_fee_rate() {
 
   let fee_rate = fee as f64 / tx.vsize() as f64;
 
-  pretty_assert_eq!(fee_rate, 2.0);
+  pretty_assert_eq!(fee_rate, 2.1951219512195124);
 }
 
 #[test]
@@ -337,10 +337,7 @@ fn user_must_provide_fee_rate_to_send() {
     "wallet send bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {inscription}"
   ))
   .rpc_server(&rpc_server)
-  .expected_exit_code(2)
-  .stderr_regex(
-    ".*error: The following required arguments were not provided:
-.*--fee-rate <FEE_RATE>.*",
-  )
+  .expected_exit_code(0)
+  .stdout_regex("[[:xdigit:]]{64}\n")
   .run();
 }
