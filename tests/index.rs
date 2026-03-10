@@ -9,7 +9,7 @@ fn custom_index_path() {
 
   let index_path = tempdir.path().join("foo.redb");
 
-  CommandBuilder::new(format!("--index {} index", index_path.display()))
+  CommandBuilder::new(format!("--index {} index update", index_path.display()))
     .rpc_server(&rpc_server)
     .run();
 
@@ -25,13 +25,13 @@ fn re_opening_database_does_not_trigger_schema_check() {
 
   let index_path = tempdir.path().join("foo.redb");
 
-  CommandBuilder::new(format!("--index {} index", index_path.display()))
+  CommandBuilder::new(format!("--index {} index update", index_path.display()))
     .rpc_server(&rpc_server)
     .run();
 
   assert!(index_path.is_file());
 
-  CommandBuilder::new(format!("--index {} index", index_path.display()))
+  CommandBuilder::new(format!("--index {} index update", index_path.display()))
     .rpc_server(&rpc_server)
     .run();
 }

@@ -23,7 +23,7 @@ impl TestServer {
       .unwrap()
       .port();
 
-    let child = Command::new(executable_path("ord")).args(format!(
+    let child = Command::new(executable_path("ord-pepecoin")).args(format!(
       "--rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port {port} --address 127.0.0.1",
       rpc_server.url(),
       tempdir.path().display(),
@@ -64,7 +64,7 @@ impl TestServer {
     let chain_block_count = client.get_block_count().unwrap() + 1;
 
     for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/block-count").unwrap()).unwrap();
+      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
       assert_eq!(response.status(), StatusCode::OK);
       if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
         break;
@@ -84,7 +84,7 @@ impl TestServer {
     let chain_block_count = client.get_block_count().unwrap() + 1;
 
     for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/block-count").unwrap()).unwrap();
+      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
       assert_eq!(response.status(), StatusCode::OK);
       if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
         break;

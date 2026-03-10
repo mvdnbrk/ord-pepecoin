@@ -1530,8 +1530,8 @@ mod tests {
   #[test]
   fn search_for_blockhash_returns_block() {
     TestServer::new().assert_redirect(
-      "/search/1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691",
-      "/block/1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691",
+      "/search/37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa",
+      "/block/37981c0c48b8d48965376c8a42ece9a0838daadb93ff975cb091f57f8c2a5faa",
     );
   }
 
@@ -1946,7 +1946,7 @@ mod tests {
     test_server.pepecoin_rpc_server.invalidate_tip();
     test_server.pepecoin_rpc_server.mine_blocks(2);
 
-    test_server.assert_response_regex("/status", StatusCode::OK, "reorg detected.*");
+    test_server.assert_response_regex("/status", StatusCode::OK, "unrecoverable reorg detected.*");
   }
 
   #[test]

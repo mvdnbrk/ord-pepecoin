@@ -16,6 +16,7 @@ pub(crate) struct State {
   pub(crate) wallets: BTreeSet<String>,
   pub(crate) loaded_wallets: BTreeSet<String>,
   pub(crate) address_pubkeys: BTreeMap<Address, bitcoin::util::key::PublicKey>,
+  pub(crate) address_privkeys: BTreeMap<Address, bitcoin::PrivateKey>,
 }
 
 impl State {
@@ -47,6 +48,7 @@ impl State {
       wallets: BTreeSet::new(),
       loaded_wallets: BTreeSet::new(),
       address_pubkeys: BTreeMap::new(),
+      address_privkeys: BTreeMap::new(),
     }
   }
 

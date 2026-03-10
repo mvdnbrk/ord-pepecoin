@@ -194,15 +194,19 @@ impl InscriptionParser {
       None => return ParsedInscription::None,
     };
 
-    if npieces == 0 {
-      return ParsedInscription::None;
-    }
-
     // read content type
 
     let content_type = push_datas[2].clone();
 
     push_datas = &push_datas[3..];
+
+    if npieces == 0 {
+      return ParsedInscription::Complete(Inscription {
+        content_type: Some(content_type),
+        body: None,
+        parent: None,
+      });
+    }
 
     // TODO: Add tag parsing for parent/child (Tag 3) once we define a format
     // that doesn't collide with body countdown numbers. Currently, an inscription
@@ -704,7 +708,7 @@ mod tests {
   }
 
   #[test]
-  fn no_content_type() {
+  fn no_body_inscription() {
     let mut script: Vec<&[u8]> = Vec::new();
     script.push(&[3]);
     script.push(b"ord");
@@ -713,7 +717,11 @@ mod tests {
     script.push(b"woof");
     assert_eq!(
       InscriptionParser::parse(vec![Script::from(script.concat())]),
-      ParsedInscription::None,
+      ParsedInscription::Complete(Inscription {
+        content_type: Some(b"woof".to_vec()),
+        body: None,
+        parent: None,
+      }),
     );
   }
 

@@ -57,17 +57,23 @@ impl Updater {
       })
       .unwrap_or(0);
 
-    wtx
-      .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
-      .insert(
-        &height,
-        &SystemTime::now()
-          .duration_since(SystemTime::UNIX_EPOCH)
-          .map(|duration| duration.as_millis())
-          .unwrap_or(0),
-      )?;
+    let rpc_height = index.client.get_block_count()? + 1;
 
-    wtx.commit()?;
+    if rpc_height > height {
+      wtx
+        .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
+        .insert(
+          &height,
+          &SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0),
+        )?;
+
+      wtx.commit()?;
+    } else {
+      drop(wtx);
+    }
 
     let mut updater = Self {
       range_cache: HashMap::new(),

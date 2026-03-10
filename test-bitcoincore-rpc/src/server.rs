@@ -490,9 +490,25 @@ impl Api for Server {
     let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
     let address = Address::p2pkh(&pubkey, self.network);
 
-    self.state().address_pubkeys.insert(address.clone(), pubkey);
+    let secret_key = key_pair.secret_key();
+    let privkey = bitcoin::PrivateKey::new(secret_key, self.network);
+
+    let mut state = self.state();
+    state.address_pubkeys.insert(address.clone(), pubkey);
+    state.address_privkeys.insert(address.clone(), privkey);
 
     Ok(address)
+  }
+
+  fn dump_private_key(
+    &self,
+    address: Address,
+  ) -> Result<String, jsonrpc_core::Error> {
+    let state = self.state();
+    match state.address_privkeys.get(&address) {
+      Some(privkey) => Ok(privkey.to_wif()),
+      None => Err(Self::not_found()),
+    }
   }
 
   fn get_address_info(

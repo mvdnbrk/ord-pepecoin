@@ -148,6 +148,12 @@ pub trait Api {
     address: String,
   ) -> Result<serde_json::Value, jsonrpc_core::Error>;
 
+  #[rpc(name = "dumpprivkey")]
+  fn dump_private_key(
+    &self,
+    address: Address,
+  ) -> Result<String, jsonrpc_core::Error>;
+
   #[rpc(name = "importprivkey")]
   fn import_private_key(
     &self,

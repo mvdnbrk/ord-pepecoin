@@ -4,7 +4,7 @@ use {super::*, ord::subcommand::list::Output};
 fn output_found() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let output = CommandBuilder::new(
-    "--index-sats list 5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69:0",
+    "--index-sats list d22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512:0",
   )
   .rpc_server(&rpc_server)
   .output::<Vec<Output>>();
@@ -12,7 +12,7 @@ fn output_found() {
   assert_eq!(
     output,
     vec![Output {
-      output: "5b2a3f53f605d62c53e62932dac6925e3d74afa5a4b459745c36d42d0ed26a69:0"
+      output: "d22a1ba59a39cbd5904624933efb822c8baa121f97060c4cc9ea2f00a4bc6512:0"
         .parse()
         .unwrap(),
       start: 0,

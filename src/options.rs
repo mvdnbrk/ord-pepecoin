@@ -250,7 +250,7 @@ mod tests {
   #[test]
   fn rpc_url_overrides_network() {
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--rpc-url=127.0.0.1:1234", "--chain=signet", "index"])
+      Arguments::try_parse_from(["ord", "--rpc-url=127.0.0.1:1234", "--chain=signet", "index", "update"])
         .unwrap()
         .options
         .rpc_url(),
@@ -261,7 +261,7 @@ mod tests {
   #[test]
   fn cookie_file_overrides_network() {
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--cookie-file=/foo/bar", "--chain=signet", "index"])
+      Arguments::try_parse_from(["ord", "--cookie-file=/foo/bar", "--chain=signet", "index", "update"])
         .unwrap()
         .options
         .cookie_file()
@@ -272,7 +272,7 @@ mod tests {
 
   #[test]
   fn use_default_network() {
-    let arguments = Arguments::try_parse_from(["ord", "index"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ord", "index", "update"]).unwrap();
 
     assert_eq!(arguments.options.rpc_url(), "127.0.0.1:33873/wallet/ord");
 
@@ -285,7 +285,7 @@ mod tests {
 
   #[test]
   fn uses_network_defaults() {
-    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"]).unwrap();
 
     assert_eq!(arguments.options.rpc_url(), "127.0.0.1:38332/wallet/ord");
 
@@ -304,7 +304,7 @@ mod tests {
 
   #[test]
   fn mainnet_cookie_file_path() {
-    let cookie_file = Arguments::try_parse_from(["ord", "index"])
+    let cookie_file = Arguments::try_parse_from(["ord", "index", "update"])
       .unwrap()
       .options
       .cookie_file()
@@ -323,7 +323,7 @@ mod tests {
 
   #[test]
   fn othernet_cookie_file_path() {
-    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"]).unwrap();
 
     let cookie_file = arguments
       .options
@@ -344,7 +344,7 @@ mod tests {
   #[test]
   fn cookie_file_defaults_to_pepecoin_data_dir() {
     let arguments =
-      Arguments::try_parse_from(["ord", "--pepecoin-data-dir=foo", "--chain=signet", "index"])
+      Arguments::try_parse_from(["ord", "--pepecoin-data-dir=foo", "--chain=signet", "index", "update"])
         .unwrap();
 
     let cookie_file = arguments
@@ -363,7 +363,7 @@ mod tests {
 
   #[test]
   fn mainnet_data_dir() {
-    let data_dir = Arguments::try_parse_from(["ord", "index"])
+    let data_dir = Arguments::try_parse_from(["ord", "index", "update"])
       .unwrap()
       .options
       .data_dir()
@@ -371,14 +371,14 @@ mod tests {
       .display()
       .to_string();
     assert!(
-      data_dir.ends_with(if cfg!(windows) { r"\ord" } else { "/ord" }),
+      data_dir.ends_with(if cfg!(windows) { r"\ord-pepecoin" } else { "/ord-pepecoin" }),
       "{data_dir}"
     );
   }
 
   #[test]
   fn othernet_data_dir() {
-    let data_dir = Arguments::try_parse_from(["ord", "--chain=signet", "index"])
+    let data_dir = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"])
       .unwrap()
       .options
       .data_dir()
@@ -387,9 +387,9 @@ mod tests {
       .to_string();
     assert!(
       data_dir.ends_with(if cfg!(windows) {
-        r"\ord\signet"
+        r"\ord-pepecoin\signet"
       } else {
-        "/ord/signet"
+        "/ord-pepecoin/signet"
       }),
       "{data_dir}"
     );
@@ -398,7 +398,7 @@ mod tests {
   #[test]
   fn network_is_joined_with_data_dir() {
     let data_dir =
-      Arguments::try_parse_from(["ord", "--chain=signet", "--data-dir", "foo", "index"])
+      Arguments::try_parse_from(["ord", "--chain=signet", "--data-dir", "foo", "index", "update"])
         .unwrap()
         .options
         .data_dir()
@@ -418,7 +418,7 @@ mod tests {
   #[test]
   fn network_accepts_aliases() {
     fn check_network_alias(alias: &str, suffix: &str) {
-      let data_dir = Arguments::try_parse_from(["ord", "--chain", alias, "index"])
+      let data_dir = Arguments::try_parse_from(["ord", "--chain", alias, "index", "update"])
         .unwrap()
         .options
         .data_dir()
@@ -429,38 +429,38 @@ mod tests {
       assert!(data_dir.ends_with(suffix), "{data_dir}");
     }
 
-    check_network_alias("main", "ord");
-    check_network_alias("mainnet", "ord");
+    check_network_alias("main", "ord-pepecoin");
+    check_network_alias("mainnet", "ord-pepecoin");
     check_network_alias(
       "regtest",
       if cfg!(windows) {
-        r"ord\regtest"
+        r"ord-pepecoin\regtest"
       } else {
-        "ord/regtest"
+        "ord-pepecoin/regtest"
       },
     );
     check_network_alias(
       "signet",
       if cfg!(windows) {
-        r"ord\signet"
+        r"ord-pepecoin\signet"
       } else {
-        "ord/signet"
+        "ord-pepecoin/signet"
       },
     );
     check_network_alias(
       "test",
       if cfg!(windows) {
-        r"ord\testnet3"
+        r"ord-pepecoin\testnet3"
       } else {
-        "ord/testnet3"
+        "ord-pepecoin/testnet3"
       },
     );
     check_network_alias(
       "testnet",
       if cfg!(windows) {
-        r"ord\testnet3"
+        r"ord-pepecoin\testnet3"
       } else {
-        "ord/testnet3"
+        "ord-pepecoin/testnet3"
       },
     );
   }
@@ -493,48 +493,48 @@ mod tests {
 
   #[test]
   fn chain_flags() {
-    Arguments::try_parse_from(["ord", "--signet", "--chain", "signet", "index"]).unwrap_err();
+    Arguments::try_parse_from(["ord", "--signet", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--signet", "index"])
+      Arguments::try_parse_from(["ord", "--signet", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Signet
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-s", "index"])
+      Arguments::try_parse_from(["ord", "-s", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Signet
     );
 
-    Arguments::try_parse_from(["ord", "--regtest", "--chain", "signet", "index"]).unwrap_err();
+    Arguments::try_parse_from(["ord", "--regtest", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--regtest", "index"])
+      Arguments::try_parse_from(["ord", "--regtest", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Regtest
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-r", "index"])
+      Arguments::try_parse_from(["ord", "-r", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Regtest
     );
 
-    Arguments::try_parse_from(["ord", "--testnet", "--chain", "signet", "index"]).unwrap_err();
+    Arguments::try_parse_from(["ord", "--testnet", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--testnet", "index"])
+      Arguments::try_parse_from(["ord", "--testnet", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Testnet
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-t", "index"])
+      Arguments::try_parse_from(["ord", "-t", "index", "update"])
         .unwrap()
         .options
         .chain(),
@@ -564,7 +564,7 @@ mod tests {
   #[test]
   fn default_config_is_returned_if_config_option_is_not_passed() {
     assert_eq!(
-      Arguments::try_parse_from(["ord", "index"])
+      Arguments::try_parse_from(["ord", "index", "update"])
         .unwrap()
         .options
         .load_config()
@@ -584,7 +584,7 @@ mod tests {
     fs::write(&path, format!("hidden:\n- \"{id}\"")).unwrap();
 
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--config", path.to_str().unwrap(), "index",])
+      Arguments::try_parse_from(["ord", "--config", path.to_str().unwrap(), "index", "update"])
         .unwrap()
         .options
         .load_config()
@@ -616,6 +616,7 @@ mod tests {
         "--config-dir",
         tempdir.path().to_str().unwrap(),
         "index",
+        "update",
       ])
       .unwrap()
       .options
