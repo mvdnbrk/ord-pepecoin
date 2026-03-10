@@ -3,8 +3,9 @@ use {
   crate::wallet::Wallet,
   bitcoin::{
     blockdata::{opcodes, script},
-    util::key::{PublicKey},
-    PackedLockTime, Witness,
+    secp256k1::{self, Secp256k1},
+    util::key::{PrivateKey, PublicKey},
+    EcdsaSighashType, PackedLockTime, Witness,
   },
   std::collections::BTreeSet,
 };
@@ -92,7 +93,7 @@ impl Inscribe {
       .map(Ok)
       .unwrap_or_else(|| get_change_address(&client))?;
 
-    let pubkey = self.get_pubkey(&client)?;
+    let (pubkey, privkey) = self.get_key_pair(&client)?;
 
     let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(options.chain().default_fee_rate()).unwrap());
 
@@ -139,51 +140,38 @@ impl Inscribe {
       last_txid = signed_commit_tx.txid();
       signed_txs.push(signed_bytes);
 
+      let secp = Secp256k1::new();
+
       for i in 1..txs.len() {
         let (redeem_script, partial_script) = &scripts[i-1];
-        
-        let mut tx_to_sign = txs[i].clone();
-        tx_to_sign.input[0].previous_output.txid = last_txid;
-        
-        let tx_hex = bitcoin::consensus::encode::serialize_hex(&tx_to_sign);
-        let prevtxs = serde_json::json!([{
-          "txid": tx_to_sign.input[0].previous_output.txid.to_string(),
-          "vout": tx_to_sign.input[0].previous_output.vout,
-          "scriptPubKey": format!("{:x}", redeem_script.to_p2sh()),
-          "redeemScript": format!("{:x}", redeem_script),
-        }]);
-        let result: serde_json::Value = client
-          .call("signrawtransaction", &[tx_hex.into(), prevtxs])
-          .context(format!("failed to sign reveal transaction {}", i))?;
-        let signed_hex = result["hex"]
-          .as_str()
-          .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
-        if result["complete"].as_bool() != Some(true) {
-          bail!("Failed to sign reveal transaction {}: {}", i, result["errors"]);
-        }
 
-        let mut signed_tx: Transaction = bitcoin::consensus::encode::deserialize(&hex::decode(signed_hex)?)?;
-        
-        let mut new_script_sig = script::Builder::new();
+        let mut reveal_tx = txs[i].clone();
+        reveal_tx.input[0].previous_output.txid = last_txid;
+
+        // Compute P2SH sighash and sign locally
+        let sighash = reveal_tx.signature_hash(0, redeem_script, EcdsaSighashType::All as u32);
+        let msg = secp256k1::Message::from_slice(&sighash[..])?;
+        let sig = secp.sign_ecdsa(&msg, &privkey.inner);
+
+        // Build DER signature with sighash type byte
+        let mut sig_bytes = sig.serialize_der().to_vec();
+        sig_bytes.push(EcdsaSighashType::All as u8);
+
+        // Build scriptSig: <inscription_data> <signature> <redeem_script>
+        let mut script_sig = script::Builder::new();
         for instruction in partial_script.instructions() {
-            match instruction {
-                Ok(script::Instruction::PushBytes(data)) => { new_script_sig = new_script_sig.push_slice(data); }
-                Ok(script::Instruction::Op(op)) => { new_script_sig = new_script_sig.push_opcode(op); }
-                _ => {}
-            }
+          match instruction {
+            Ok(script::Instruction::PushBytes(data)) => { script_sig = script_sig.push_slice(data); }
+            Ok(script::Instruction::Op(op)) => { script_sig = script_sig.push_opcode(op); }
+            _ => {}
+          }
         }
-        
-        for instruction in signed_tx.input[0].script_sig.instructions() {
-            match instruction {
-                Ok(script::Instruction::PushBytes(data)) => { new_script_sig = new_script_sig.push_slice(data); }
-                Ok(script::Instruction::Op(op)) => { new_script_sig = new_script_sig.push_opcode(op); }
-                _ => {}
-            }
-        }
-        
-        signed_tx.input[0].script_sig = new_script_sig.into_script();
-        last_txid = signed_tx.txid();
-        signed_txs.push(bitcoin::consensus::encode::serialize(&signed_tx));
+        script_sig = script_sig.push_slice(&sig_bytes);
+        script_sig = script_sig.push_slice(redeem_script.as_bytes());
+
+        reveal_tx.input[0].script_sig = script_sig.into_script();
+        last_txid = reveal_tx.txid();
+        signed_txs.push(bitcoin::consensus::encode::serialize(&reveal_tx));
       }
 
       let commit_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_txs[0])?;
@@ -212,7 +200,7 @@ impl Inscribe {
     Ok(())
   }
 
-  fn get_pubkey(&self, client: &Client) -> Result<PublicKey> {
+  fn get_key_pair(&self, client: &Client) -> Result<(PublicKey, PrivateKey)> {
     let address: Address = client.call("getnewaddress", &[])?;
     let result: serde_json::Value = client
       .call("validateaddress", &[address.to_string().into()])
@@ -222,8 +210,16 @@ impl Inscribe {
       .ok_or_else(|| anyhow!("no pubkey in validateaddress response for {address}"))?;
     let pubkey_bytes = hex::decode(pubkey_hex)
       .context("invalid pubkey hex")?;
-    PublicKey::from_slice(&pubkey_bytes)
-      .context("invalid pubkey")
+    let pubkey = PublicKey::from_slice(&pubkey_bytes)
+      .context("invalid pubkey")?;
+
+    let wif: String = client
+      .call("dumpprivkey", &[address.to_string().into()])
+      .context("failed to dump private key")?;
+    let privkey = PrivateKey::from_wif(&wif)
+      .context("invalid WIF private key")?;
+
+    Ok((pubkey, privkey))
   }
 
   fn create_inscription_transactions(

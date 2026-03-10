@@ -270,18 +270,25 @@ impl Index {
 
   pub(crate) fn get_unspent_outputs(&self, _wallet: Wallet) -> Result<BTreeMap<OutPoint, Amount>> {
     let mut utxos = BTreeMap::new();
-    utxos.extend(
-      self
-        .client
-        .list_unspent(None, None, None, None, None)?
-        .into_iter()
-        .map(|utxo| {
-          let outpoint = OutPoint::new(utxo.txid, utxo.vout);
-          let amount = utxo.amount;
 
-          (outpoint, amount)
-        }),
-    );
+    #[derive(Deserialize)]
+    struct UnspentEntry {
+      txid: bitcoin::Txid,
+      vout: u32,
+      amount: f64,
+    }
+
+    let unspent: Vec<UnspentEntry> = self
+      .client
+      .call("listunspent", &[])
+      .context("failed to list unspent outputs")?;
+
+    for entry in unspent {
+      let outpoint = OutPoint::new(entry.txid, entry.vout);
+      let amount = Amount::from_btc(entry.amount)
+        .map_err(|e| anyhow!("invalid amount: {e}"))?;
+      utxos.insert(outpoint, amount);
+    }
 
     #[derive(Deserialize)]
     pub(crate) struct JsonOutPoint {

@@ -33,7 +33,7 @@ impl Chain {
 
   pub(crate) fn default_fee_rate(self) -> f64 {
     match self {
-      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 1000.0,
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 10000.0,
     }
   }
 

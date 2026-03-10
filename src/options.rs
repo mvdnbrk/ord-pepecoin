@@ -224,7 +224,12 @@ impl Options {
 
     const MIN_VERSION: usize = 1010000;
 
-    let pepecoin_version = client.version()?;
+    let network_info: serde_json::Value = client
+      .call("getnetworkinfo", &[])
+      .context("failed to get network info")?;
+    let pepecoin_version = network_info["version"]
+      .as_u64()
+      .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))? as usize;
     if pepecoin_version < MIN_VERSION {
       bail!(
         "Pepecoin Core {} or newer required, current version is {}",
