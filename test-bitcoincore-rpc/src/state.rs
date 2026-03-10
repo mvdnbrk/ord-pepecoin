@@ -17,6 +17,8 @@ pub(crate) struct State {
   pub(crate) loaded_wallets: BTreeSet<String>,
   pub(crate) address_pubkeys: BTreeMap<Address, bitcoin::util::key::PublicKey>,
   pub(crate) address_privkeys: BTreeMap<Address, bitcoin::PrivateKey>,
+  pub(crate) imported_privkeys: Vec<(String, Option<String>)>,
+  pub(crate) coinbase_address: Option<Address>,
 }
 
 impl State {
@@ -49,6 +51,8 @@ impl State {
       loaded_wallets: BTreeSet::new(),
       address_pubkeys: BTreeMap::new(),
       address_privkeys: BTreeMap::new(),
+      imported_privkeys: Vec::new(),
+      coinbase_address: None,
     }
   }
 
@@ -78,9 +82,24 @@ impl State {
       }],
       output: vec![TxOut {
         value: subsidy + fees,
-        script_pubkey: Script::new(),
+        script_pubkey: self
+          .coinbase_address
+          .as_ref()
+          .map(|address| address.script_pubkey())
+          .unwrap_or_else(|| Script::new()),
       }],
     };
+
+    let coinbase_txid = coinbase.txid();
+    for (i, output) in coinbase.output.iter().enumerate() {
+      self.utxos.insert(
+        OutPoint {
+          txid: coinbase_txid,
+          vout: i as u32,
+        },
+        Amount::from_sat(output.value),
+      );
+    }
 
     self.transactions.insert(coinbase.txid(), coinbase.clone());
 

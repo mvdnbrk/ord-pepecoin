@@ -3,7 +3,12 @@
 use {
   self::{command_builder::CommandBuilder, expected::Expected, test_server::TestServer},
   bip39::Mnemonic,
-  bitcoin::{blockdata::constants::COIN_VALUE, Network, OutPoint, Txid},
+  bitcoin::{
+    blockdata::constants::COIN_VALUE,
+    secp256k1::Secp256k1,
+    util::bip32::{ChildNumber, DerivationPath, ExtendedPrivKey},
+    Address, Network, OutPoint, PrivateKey, Txid,
+  },
   executable_path::executable_path,
   pretty_assertions::assert_eq as pretty_assert_eq,
   regex::Regex,
@@ -64,9 +69,26 @@ struct Create {
 }
 
 fn create_wallet(rpc_server: &test_bitcoincore_rpc::Handle) {
-  CommandBuilder::new(format!("--chain {} wallet create", rpc_server.network()))
+  let Create { mnemonic } = CommandBuilder::new(format!("--chain {} wallet create", rpc_server.network()))
     .rpc_server(rpc_server)
     .output::<Create>();
+
+  let master_private_key = ExtendedPrivKey::new_master(rpc_server.network_enum(), &mnemonic.to_seed("")).unwrap();
+  let secp = Secp256k1::new();
+  
+  // m/44'/3434'/0'/0/0
+  let derivation_path = DerivationPath::master()
+    .child(ChildNumber::Hardened { index: 44 })
+    .child(ChildNumber::Hardened { index: 3434 })
+    .child(ChildNumber::Hardened { index: 0 })
+    .child(ChildNumber::Normal { index: 0 })
+    .child(ChildNumber::Normal { index: 0 });
+
+  let child_key = master_private_key.derive_priv(&secp, &derivation_path).unwrap();
+  let privkey = PrivateKey::new(child_key.private_key, rpc_server.network_enum());
+  let address = Address::p2pkh(&privkey.public_key(&secp), privkey.network);
+  
+  rpc_server.set_coinbase_address(&address);
 }
 
 mod command_builder;

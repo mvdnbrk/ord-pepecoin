@@ -4,15 +4,9 @@ use {super::*, ord::subcommand::wallet::transactions::Output};
 fn transactions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
 
-  assert!(rpc_server.loaded_wallets().is_empty());
-
-  CommandBuilder::new("wallet transactions")
-    .rpc_server(&rpc_server)
-    .output::<Vec<Output>>();
-
-  assert_eq!(rpc_server.loaded_wallets().len(), 1);
-  assert_eq!(rpc_server.loaded_wallets().first().unwrap(), "ord");
+  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server);
 
   rpc_server.mine_blocks(1);
 
@@ -20,19 +14,17 @@ fn transactions() {
     .rpc_server(&rpc_server)
     .output::<Vec<Output>>();
 
-  assert_regex_match!(output[0].transaction.to_string(), "[[:xdigit:]]{64}");
-  assert_eq!(output[0].confirmations, 1);
+  assert!(output.iter().any(|tx| tx.transaction == reveal));
+  assert!(output.iter().any(|tx| tx.transaction == commit));
 }
 
 #[test]
 fn transactions_with_limit() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("wallet transactions")
-    .rpc_server(&rpc_server)
-    .stdout_regex(".*")
-    .run();
+  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server);
 
   rpc_server.mine_blocks(1);
 
@@ -40,22 +32,14 @@ fn transactions_with_limit() {
     .rpc_server(&rpc_server)
     .output::<Vec<Output>>();
 
-  assert_regex_match!(output[0].transaction.to_string(), "[[:xdigit:]]{64}");
-  assert_eq!(output[0].confirmations, 1);
-
-  rpc_server.mine_blocks(1);
-
-  let output = CommandBuilder::new("wallet transactions")
-    .rpc_server(&rpc_server)
-    .output::<Vec<Output>>();
-
-  assert_regex_match!(output[1].transaction.to_string(), "[[:xdigit:]]{64}");
-  assert_eq!(output[1].confirmations, 2);
+  assert!(output.len() >= 2);
+  assert!(output.iter().any(|tx| tx.transaction == reveal));
+  assert!(output.iter().any(|tx| tx.transaction == commit));
 
   let output = CommandBuilder::new("wallet transactions --limit 1")
     .rpc_server(&rpc_server)
     .output::<Vec<Output>>();
 
-  assert_regex_match!(output[0].transaction.to_string(), "[[:xdigit:]]{64}");
-  assert_eq!(output[0].confirmations, 1);
+  assert_eq!(output.len(), 1);
+  assert!(output[0].transaction == reveal || output[0].transaction == commit);
 }

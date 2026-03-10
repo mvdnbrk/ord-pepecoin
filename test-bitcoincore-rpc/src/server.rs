@@ -3,11 +3,13 @@ use {
   bitcoin::{
     hashes::hex::ToHex,
     psbt::serialize::Deserialize,
-    secp256k1::{rand, KeyPair, Secp256k1, XOnlyPublicKey},
+    secp256k1::{rand, Secp256k1},
     util::key::PublicKey,
     Address, Witness,
   },
   bitcoincore_rpc::RawTx,
+  serde_json::json,
+  std::str::FromStr,
 };
 
 pub(crate) struct Server {
@@ -32,14 +34,11 @@ impl Server {
 
 impl Api for Server {
   fn get_balances(&self) -> Result<GetBalancesResult, jsonrpc_core::Error> {
+    let unspent = self.list_unspent(None, None, None, None, None)?;
     Ok(GetBalancesResult {
       mine: GetBalancesResultEntry {
         immature: Amount::from_sat(0),
-        trusted: self
-          .list_unspent(None, None, None, None, None)?
-          .iter()
-          .map(|entry| entry.amount)
-          .sum(),
+        trusted: unspent.iter().map(|entry| entry.amount).sum(),
         untrusted_pending: Amount::from_sat(0),
       },
       watchonly: None,
@@ -352,34 +351,79 @@ impl Api for Server {
     &self,
     txid: Txid,
     verbose: Option<bool>,
-    blockhash: Option<BlockHash>,
+    blockhash: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error> {
     assert_eq!(blockhash, None, "Blockhash param is unsupported");
     if verbose.unwrap_or(false) {
-      match self.state().transactions.get(&txid) {
-        Some(_) => Ok(
-          serde_json::to_value(GetRawTransactionResult {
-            in_active_chain: Some(true),
-            hex: Vec::new(),
-            txid: Txid::all_zeros(),
-            hash: Wtxid::all_zeros(),
-            size: 0,
-            vsize: 0,
-            version: 0,
-            locktime: 0,
-            vin: Vec::new(),
-            vout: Vec::new(),
-            blockhash: None,
-            confirmations: Some(1),
-            time: None,
-            blocktime: None,
-          })
-          .unwrap(),
-        ),
+      let state = self.state();
+      let in_active_chain = state.transactions.contains_key(&txid);
+      let tx = state.transactions.get(&txid).or_else(|| {
+        state.mempool.iter().find(|tx| tx.txid() == txid)
+      });
+      match tx {
+        Some(tx) => {
+            let blockhash = state.hashes.iter().find(|h| {
+                state.blocks.get(*h).map(|b| b.txdata.iter().any(|t| t.txid() == txid)).unwrap_or(false)
+            }).cloned().or_else(|| state.hashes.last().cloned());
+
+            let mut json = json!({
+                "in_active_chain": in_active_chain,
+                "hex": hex::encode(serialize(tx)),
+                "txid": tx.txid().to_string(),
+                "hash": tx.wtxid().to_string(),
+                "size": tx.size(),
+                "vsize": tx.vsize(),
+                "version": tx.version,
+                "locktime": tx.lock_time.0,
+                "confirmations": if in_active_chain { 1 } else { 0 },
+                "time": 0,
+                "blocktime": 0,
+                "vin": tx.input.iter().map(|input| {
+                    if input.previous_output.is_null() {
+                        json!({
+                            "coinbase": hex::encode(input.script_sig.as_bytes()),
+                            "sequence": input.sequence
+                        })
+                    } else {
+                        json!({
+                            "txid": input.previous_output.txid.to_string(),
+                            "vout": input.previous_output.vout,
+                            "scriptSig": {
+                                "asm": "",
+                                "hex": hex::encode(input.script_sig.as_bytes())
+                            },
+                            "sequence": input.sequence
+                        })
+                    }
+                }).collect::<Vec<_>>(),
+                "vout": tx.output.iter().enumerate().map(|(i, output)| {
+                    json!({
+                        "value": output.value as f64 / 100000000.0,
+                        "n": i,
+                        "scriptPubKey": {
+                            "asm": "",
+                            "hex": hex::encode(output.script_pubkey.as_bytes()),
+                            "type": "pubkeyhash",
+                            "address": Address::from_script(&output.script_pubkey, self.network).map(|a| a.to_string()).ok()
+                        }
+                    })
+                }).collect::<Vec<_>>()
+            });
+
+            if let Some(blockhash) = blockhash {
+                json.as_object_mut().unwrap().insert("blockhash".to_string(), json!(blockhash.to_string()));
+            }
+
+            Ok(json)
+        }
         None => Err(Self::not_found()),
       }
     } else {
-      match self.state().transactions.get(&txid) {
+      let state = self.state();
+      let tx = state.transactions.get(&txid).or_else(|| {
+        state.mempool.iter().find(|tx| tx.txid() == txid)
+      });
+      match tx {
         Some(tx) => Ok(Value::String(hex::encode(serialize(tx)))),
         None => Err(Self::not_found()),
       }
@@ -402,28 +446,35 @@ impl Api for Server {
 
     let state = self.state();
 
-    Ok(
-      state
-        .utxos
-        .iter()
-        .filter(|(outpoint, _amount)| !state.locked.contains(outpoint))
-        .map(|(outpoint, &amount)| ListUnspentResultEntry {
+    let mut result = Vec::new();
+    for (outpoint, &amount) in &state.utxos {
+        if state.locked.contains(outpoint) {
+            continue;
+        }
+
+        let tx = &state.transactions[&outpoint.txid];
+        let output = &tx.output[outpoint.vout as usize];
+        
+        let address = Address::from_script(&output.script_pubkey, self.network).ok();
+        
+        result.push(ListUnspentResultEntry {
           txid: outpoint.txid,
           vout: outpoint.vout,
-          address: None,
+          address,
           label: None,
           redeem_script: None,
           witness_script: None,
-          script_pub_key: Script::new(),
+          script_pub_key: output.script_pubkey.clone(),
           amount,
           confirmations: 0,
           spendable: true,
           solvable: true,
           descriptor: None,
           safe: true,
-        })
-        .collect(),
-    )
+        });
+    }
+
+    Ok(result)
   }
 
   fn list_lock_unspent(&self) -> Result<Vec<JsonOutPoint>, jsonrpc_core::Error> {
@@ -442,10 +493,15 @@ impl Api for Server {
     _address_type: Option<bitcoincore_rpc::json::AddressType>,
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
-    let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let (secret_key, public_key) = secp256k1.generate_keypair(&mut rand::thread_rng());
+    let pubkey = PublicKey::new(public_key);
     let address = Address::p2pkh(&pubkey, self.network);
+
+    let privkey = bitcoin::PrivateKey::new(secret_key, self.network);
+
+    let mut state = self.state();
+    state.address_pubkeys.insert(address.clone(), pubkey);
+    state.address_privkeys.insert(address.clone(), privkey);
 
     Ok(address)
   }
@@ -485,12 +541,10 @@ impl Api for Server {
     _address_type: Option<bitcoincore_rpc::json::AddressType>,
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
-    let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let (secret_key, public_key) = secp256k1.generate_keypair(&mut rand::thread_rng());
+    let pubkey = PublicKey::new(public_key);
     let address = Address::p2pkh(&pubkey, self.network);
 
-    let secret_key = key_pair.secret_key();
     let privkey = bitcoin::PrivateKey::new(secret_key, self.network);
 
     let mut state = self.state();
@@ -507,7 +561,14 @@ impl Api for Server {
     let state = self.state();
     match state.address_privkeys.get(&address) {
       Some(privkey) => Ok(privkey.to_wif()),
-      None => Err(Self::not_found()),
+      None => {
+          for (k, v) in &state.address_privkeys {
+              if k.script_pubkey() == address.script_pubkey() {
+                  return Ok(v.to_wif());
+              }
+          }
+          Err(Self::not_found())
+      }
     }
   }
 
@@ -522,25 +583,56 @@ impl Api for Server {
     &self,
     address: String,
   ) -> Result<serde_json::Value, jsonrpc_core::Error> {
-    let addr: Address = address.parse().map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
-    let pubkey = self.state().address_pubkeys.get(&addr).cloned();
+    let mut addr: Address = Address::from_str(&address).map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
+    
+    let mut pubkey = self.state().address_pubkeys.get(&addr).cloned();
+    
+    if pubkey.is_none() {
+        // Try other networks if it might be parsed wrong (e.g. Testnet vs Regtest)
+        for network in [Network::Bitcoin, Network::Testnet, Network::Signet, Network::Regtest] {
+            if network == addr.network { continue; }
+            if let Ok(_other_addr) = Address::from_str(&address) {
+                // Address::from_str doesn't take network, so we have to manually check variants if possible.
+                // Actually bitcoin 0.29 Address doesn't have an easy way to change network without re-parsing from script or similar.
+                // But we can just iterate over our keys and see if any matches the script_pubkey.
+                for (k, v) in &self.state().address_pubkeys {
+                    if k.script_pubkey() == addr.script_pubkey() {
+                        pubkey = Some(v.clone());
+                        addr = k.clone();
+                        break;
+                    }
+                }
+            }
+            if pubkey.is_some() { break; }
+        }
+    }
+
     Ok(serde_json::json!({
+      "isvalid": true,
       "address": address,
       "scriptPubKey": addr.script_pubkey().to_hex(),
       "ismine": true,
       "solvable": true,
       "isscript": false,
       "iswitness": false,
-      "pubkey": pubkey.map(|pk| pk.to_string()),
+      "pubkey": pubkey.map(|pk| pk.inner.to_string()),
     }))
   }
 
   fn import_private_key(
     &self,
-    _privkey: String,
-    _label: Option<String>,
+    privkey: String,
+    label: Option<String>,
     _rescan: Option<bool>,
   ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    let privkey = bitcoin::PrivateKey::from_wif(&privkey).map_err(|_| jsonrpc_core::Error::invalid_params("invalid privkey"))?;
+    let pubkey = privkey.public_key(&Secp256k1::new());
+    let address = Address::p2pkh(&pubkey, self.network);
+
+    let mut state = self.state();
+    state.imported_privkeys.push((privkey.to_wif(), label));
+    state.address_pubkeys.insert(address.clone(), pubkey);
+    state.address_privkeys.insert(address, privkey);
     Ok(serde_json::Value::Null)
   }
 
@@ -552,21 +644,59 @@ impl Api for Server {
     _include_watchonly: Option<bool>,
   ) -> Result<Vec<ListTransactionResult>, jsonrpc_core::Error> {
     let state = self.state();
+    let mut txs = Vec::new();
+
+    let is_wallet_tx = |tx: &Transaction| {
+        if tx.is_coin_base() {
+            return false;
+        }
+        for output in &tx.output {
+            if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
+                if state.address_pubkeys.contains_key(&address) {
+                    return true;
+                }
+            }
+        }
+        for input in &tx.input {
+            if let Some(prev_tx) = state.transactions.get(&input.previous_output.txid) {
+                if let Some(output) = prev_tx.output.get(input.previous_output.vout as usize) {
+                    if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
+                        if state.address_pubkeys.contains_key(&address) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    };
+
+    for block_hash in state.hashes.iter().rev() {
+        let block = &state.blocks[block_hash];
+        for tx in block.txdata.iter().rev() {
+            if is_wallet_tx(tx) {
+                txs.push(tx);
+            }
+        }
+    }
+    for tx in state.mempool.iter().rev() {
+        if is_wallet_tx(tx) {
+            txs.push(tx);
+        }
+    }
+
     Ok(
-      state
-        .transactions
-        .iter()
+      txs
+        .into_iter()
         .take(count.unwrap_or(u16::MAX).into())
-        .map(|(txid, tx)| (*txid, tx))
-        .chain(state.mempool.iter().map(|tx| (tx.txid(), tx)))
-        .map(|(txid, tx)| ListTransactionResult {
+        .map(|tx| ListTransactionResult {
           info: WalletTxInfo {
             confirmations: state.get_confirmations(tx),
             blockhash: None,
             blockindex: None,
             blocktime: None,
             blockheight: None,
-            txid,
+            txid: tx.txid(),
             time: 0,
             timereceived: 0,
             bip125_replaceable: Bip125Replaceable::Unknown,

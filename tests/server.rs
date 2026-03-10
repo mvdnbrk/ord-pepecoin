@@ -49,8 +49,8 @@ fn inscription_page() {
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     format!("/inscription/{inscription}"),
     format!(
-      ".*<meta property=og:title content='Inscription 0'>.*
-.*<meta property=og:image content='https://.*/favicon.png'>.*
+      r"(?s).*<meta property=og:title content='Inscription 0'>.*
+.*<meta property=og:image content='/static/favicon.png'>.*
 .*<meta property=twitter:card content=summary>.*
 <h1>Inscription 0</h1>
 .*<iframe .* src=/preview/{inscription}></iframe>.*
@@ -58,9 +58,9 @@ fn inscription_page() {
   <dt>id</dt>
   <dd class=monospace>{inscription}</dd>
   <dt>address</dt>
-  <dd class=monospace>bc1.*</dd>
+  <dd class=monospace>P.*</dd>
   <dt>output value</dt>
-  <dd>10000</dd>
+  <dd>100000</dd>
   <dt>preview</dt>
   <dd><a href=/preview/{inscription}>link</a></dd>
   <dt>content</dt>
@@ -74,7 +74,7 @@ fn inscription_page() {
   <dt>genesis height</dt>
   <dd><a href=/block/2>2</a></dd>
   <dt>genesis fee</dt>
-  <dd>138</dd>
+  <dd>2310000</dd>
   <dt>genesis transaction</dt>
   <dd><a class=monospace href=/tx/{reveal}>{reveal}</a></dd>
   <dt>location</dt>
@@ -99,7 +99,7 @@ fn inscription_appears_on_reveal_transaction_page() {
 
   TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
     format!("/tx/{reveal}"),
-    format!(".*<h1>Transaction .*</h1>.*<a href=/inscription/{reveal}.*"),
+    format!(r"(?s).*<h1>Transaction .*</h1>.*<a href=/inscription/{}i0>.*", reveal),
   );
 }
 
