@@ -271,52 +271,86 @@ impl Inscribe {
 
     let inscription_script = inscription.get_inscription_script();
 
-    // Collect all instruction pairs (countdown + data) from the inscription script
-    let mut chunks: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
-    let mut instructions = inscription_script.instructions();
-    while let Some(Ok(instr)) = instructions.next() {
-      let first = match instr {
-        script::Instruction::PushBytes(data) => data.to_vec(),
-        script::Instruction::Op(op) => vec![op.into_u8()],
-      };
-      if let Some(Ok(instr2)) = instructions.next() {
-        let second = match instr2 {
-          script::Instruction::PushBytes(data) => data.to_vec(),
-          script::Instruction::Op(op) => vec![op.into_u8()],
-        };
-        chunks.push((first, second));
-      } else {
-        // Odd instruction (e.g. content type) — push with empty second
-        chunks.push((first, Vec::new()));
+    // Split inscription script into batches for multi-tx inscriptions.
+    // The script structure is: "ord" <npieces> <content_type> [<countdown> <data>]*
+    // Batches must split at (countdown, data) pair boundaries so the parser
+    // sees complete pairs in each tx. We also preserve opcodes (OP_PUSHNUM_N
+    // for countdown values 1-16) rather than re-encoding them as push data.
+    #[derive(Clone)]
+    enum Elem {
+      Push(Vec<u8>),
+      Op(opcodes::All),
+    }
+
+    impl Elem {
+      fn apply(self, builder: script::Builder) -> script::Builder {
+        match self {
+          Elem::Push(data) => builder.push_slice(&data),
+          Elem::Op(op) => builder.push_opcode(op),
+        }
+      }
+      fn encoded_len(&self) -> usize {
+        match self {
+          Elem::Push(data) => {
+            let len = data.len();
+            if len <= 75 { 1 + len }
+            else if len <= 255 { 2 + len }
+            else if len <= 65535 { 3 + len }
+            else { 5 + len }
+          }
+          Elem::Op(_) => 1,
+        }
       }
     }
 
-    // Split chunks into batches that fit within MAX_PAYLOAD_LEN
+    // Collect all instructions as Elem
+    let elems: Vec<Elem> = inscription_script.instructions().filter_map(|instr| {
+      match instr.ok()? {
+        script::Instruction::PushBytes(data) => Some(Elem::Push(data.to_vec())),
+        script::Instruction::Op(op) => Some(Elem::Op(op)),
+      }
+    }).collect();
+
+    // Header = first 3 elements: "ord", npieces, content_type
+    // Data = pairs of (countdown, data) starting from index 3
+    let header = &elems[..3.min(elems.len())];
+    let data_elems = &elems[3.min(elems.len())..];
+
+    // Collect (countdown, data) pairs
+    let mut pairs: Vec<(&Elem, &Elem)> = Vec::new();
+    let mut i = 0;
+    while i + 1 < data_elems.len() {
+      pairs.push((&data_elems[i], &data_elems[i + 1]));
+      i += 2;
+    }
+
+    // Build batches: first batch gets header + initial pairs, subsequent batches get pairs only
     let mut batches = Vec::new();
-    let mut chunk_idx = 0;
-    while chunk_idx < chunks.len() {
-      let mut partial = script::Builder::new();
+    let mut partial = script::Builder::new();
+    let mut partial_len: usize = 0;
 
-      // Add at least one chunk pair per batch
-      let (ref a, ref b) = chunks[chunk_idx];
-      partial = partial.push_slice(a);
-      if !b.is_empty() { partial = partial.push_slice(b); }
-      chunk_idx += 1;
+    // Add header to first batch
+    for elem in header {
+      partial = elem.clone().apply(partial);
+      partial_len += elem.encoded_len();
+    }
 
-      // Keep adding chunk pairs while within the limit
-      while chunk_idx < chunks.len() {
-        let mut candidate = partial.clone();
-        let (ref a, ref b) = chunks[chunk_idx];
-        candidate = candidate.push_slice(a);
-        if !b.is_empty() { candidate = candidate.push_slice(b); }
+    for (countdown, data) in pairs {
+      let pair_len = countdown.encoded_len() + data.encoded_len();
 
-        if candidate.clone().into_script().len() > MAX_PAYLOAD_LEN {
-          break; // Would exceed limit, stop here
-        }
-        partial = candidate;
-        chunk_idx += 1;
+      // If adding this pair would exceed limit and we have content, start new batch
+      if partial_len + pair_len > MAX_PAYLOAD_LEN && partial_len > 0 {
+        batches.push(partial.into_script());
+        partial = script::Builder::new();
+        partial_len = 0;
       }
 
+      partial = countdown.clone().apply(partial);
+      partial = data.clone().apply(partial);
+      partial_len += pair_len;
+    }
+
+    if partial_len > 0 {
       batches.push(partial.into_script());
     }
 
@@ -516,5 +550,65 @@ mod tests {
       "{}",
       error
     );
+  }
+
+  #[test]
+  fn batched_multitx_inscription_roundtrip() {
+    use crate::inscription::{Inscription, ParsedInscription};
+
+    // Create a large inscription requiring multiple batches (20 chunks × 520 bytes)
+    // This exercises countdown values ≤ 16 which use OP_PUSHNUM opcodes
+    let body = vec![0x42u8; 520 * 20];
+    let inscription = Inscription::new(
+      Some(b"image/svg+xml".to_vec()),
+      Some(body.clone()),
+      None,
+    );
+
+    let utxos = vec![(outpoint(1), Amount::from_sat(50_000_000_000))];
+    let pubkey = PublicKey::from_slice(&hex::decode(
+      "03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000"
+    ).unwrap()).unwrap();
+
+    let (txs, scripts, _fees) = Inscribe::create_inscription_transactions(
+      Some(satpoint(1, 0)),
+      inscription,
+      BTreeMap::new(),
+      Network::Bitcoin,
+      utxos.into_iter().collect(),
+      [change(0), change(1)],
+      recipient(),
+      FeeRate::try_from(1.0).unwrap(),
+      FeeRate::try_from(1.0).unwrap(),
+      pubkey,
+      Amount::from_sat(100_000),
+    ).unwrap();
+
+    // Must be multi-tx (commit + multiple reveals)
+    assert!(txs.len() > 2, "Expected multi-tx inscription, got {} txs", txs.len());
+
+    // Reconstruct scriptSigs as the signing code would (preserving opcodes)
+    let sig_scripts: Vec<Script> = scripts.iter().map(|(_lock, batch)| {
+      let mut builder = script::Builder::new();
+      for instruction in batch.instructions() {
+        match instruction {
+          Ok(script::Instruction::PushBytes(data)) => { builder = builder.push_slice(data); }
+          Ok(script::Instruction::Op(op)) => { builder = builder.push_opcode(op); }
+          _ => {}
+        }
+      }
+      builder.into_script()
+    }).collect();
+
+    // Parser should reconstruct the complete inscription from all tx scriptSigs
+    let result = crate::inscription::InscriptionParser::parse(sig_scripts);
+    match result {
+      ParsedInscription::Complete(parsed) => {
+        assert_eq!(parsed.content_type, Some(b"image/svg+xml".to_vec()));
+        assert_eq!(parsed.body.as_ref().map(|b| b.len()), Some(body.len()));
+        assert_eq!(parsed.body, Some(body));
+      }
+      other => panic!("Expected Complete inscription, got {:?}", other),
+    }
   }
 }

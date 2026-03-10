@@ -162,10 +162,10 @@ impl Inscription {
   }
 }
 
-struct InscriptionParser {}
+pub(crate) struct InscriptionParser {}
 
 impl InscriptionParser {
-  fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
+  pub(crate) fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
     let sig_script = &sig_scripts[0];
 
     let mut push_datas_vec = match Self::decode_push_datas(sig_script) {
@@ -325,7 +325,7 @@ impl InscriptionParser {
         if bytes.len() < 3 {
           return None;
         }
-        let len = ((bytes[1] as usize) << 8) + ((bytes[0] as usize) << 0);
+        let len = (bytes[1] as usize) + ((bytes[2] as usize) << 8);
         if bytes.len() < 3 + len {
           return None;
         }
@@ -339,10 +339,10 @@ impl InscriptionParser {
         if bytes.len() < 5 {
           return None;
         }
-        let len = ((bytes[3] as usize) << 24)
-          + ((bytes[2] as usize) << 16)
-          + ((bytes[1] as usize) << 8)
-          + ((bytes[0] as usize) << 0);
+        let len = (bytes[1] as usize)
+          + ((bytes[2] as usize) << 8)
+          + ((bytes[3] as usize) << 16)
+          + ((bytes[4] as usize) << 24);
         if bytes.len() < 5 + len {
           return None;
         }
