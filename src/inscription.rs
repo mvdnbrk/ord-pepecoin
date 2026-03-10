@@ -79,7 +79,7 @@ impl Inscription {
 
     let empty = Vec::new();
     let body = self.body.as_ref().unwrap_or(&empty);
-    let chunks: Vec<&[u8]> = body.chunks(520).collect();
+    let chunks: Vec<&[u8]> = body.chunks(240).collect();
 
     builder = Self::push_number(builder, chunks.len() as u64);
 
