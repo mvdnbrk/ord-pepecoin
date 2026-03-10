@@ -270,18 +270,25 @@ impl Index {
 
   pub(crate) fn get_unspent_outputs(&self, _wallet: Wallet) -> Result<BTreeMap<OutPoint, Amount>> {
     let mut utxos = BTreeMap::new();
-    utxos.extend(
-      self
-        .client
-        .list_unspent(None, None, None, None, None)?
-        .into_iter()
-        .map(|utxo| {
-          let outpoint = OutPoint::new(utxo.txid, utxo.vout);
-          let amount = utxo.amount;
 
-          (outpoint, amount)
-        }),
-    );
+    #[derive(Deserialize)]
+    struct UnspentEntry {
+      txid: bitcoin::Txid,
+      vout: u32,
+      amount: f64,
+    }
+
+    let unspent: Vec<UnspentEntry> = self
+      .client
+      .call("listunspent", &[])
+      .context("failed to list unspent outputs")?;
+
+    for entry in unspent {
+      let outpoint = OutPoint::new(entry.txid, entry.vout);
+      let amount = Amount::from_btc(entry.amount)
+        .map_err(|e| anyhow!("invalid amount: {e}"))?;
+      utxos.insert(outpoint, amount);
+    }
 
     #[derive(Deserialize)]
     pub(crate) struct JsonOutPoint {
@@ -1309,7 +1316,7 @@ mod tests {
     let inscription = inscription("text/plain;charset=utf-8", "hello");
     let template = TransactionTemplate {
       inputs: &[(1, 0, 0)],
-      witness: inscription.to_witness(),
+      script_sig: inscription.to_p2sh_unlock(),
       ..Default::default()
     };
 
@@ -1677,7 +1684,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1703,7 +1710,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1748,7 +1755,7 @@ mod tests {
 
       let first_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -1804,7 +1811,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1854,7 +1861,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1899,7 +1906,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1937,7 +1944,7 @@ mod tests {
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         fee: 50 * COIN_VALUE,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1967,7 +1974,7 @@ mod tests {
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         fee: 50 * COIN_VALUE,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -1994,7 +2001,7 @@ mod tests {
       let first_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         fee: 50 * COIN_VALUE,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let first_inscription_id = InscriptionId::from(first_txid);
@@ -2005,7 +2012,7 @@ mod tests {
       let second_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(3, 0, 0)],
         fee: 50 * COIN_VALUE,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let second_inscription_id = InscriptionId::from(second_txid);
@@ -2125,7 +2132,7 @@ mod tests {
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(2, 0, 0)],
         outputs: 2,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -2158,7 +2165,7 @@ mod tests {
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         outputs: 2,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         output_values: &[0, 50 * COIN_VALUE],
         ..Default::default()
       });
@@ -2185,7 +2192,7 @@ mod tests {
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
         fee: 50 * COIN_VALUE,
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -2295,7 +2302,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2355,7 +2362,7 @@ mod tests {
 
       let first = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2388,7 +2395,7 @@ mod tests {
 
       let second = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(2, 1, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
 
@@ -2427,7 +2434,7 @@ mod tests {
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
-        witness: inscription("text/plain", "hello").to_witness(),
+        script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
         ..Default::default()
       });
       let inscription_id = InscriptionId::from(txid);
@@ -2454,7 +2461,7 @@ mod tests {
       for i in 0..103 {
         let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
           inputs: &[(i + 1, 0, 0)],
-          witness: inscription("text/plain", "hello").to_witness(),
+          script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
           ..Default::default()
         });
         ids.push(InscriptionId::from(txid));

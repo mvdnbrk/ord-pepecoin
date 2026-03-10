@@ -1,8 +1,10 @@
 use {
   super::*,
   bitcoin::{
+    hashes::hex::ToHex,
     psbt::serialize::Deserialize,
     secp256k1::{rand, KeyPair, Secp256k1, XOnlyPublicKey},
+    util::key::PublicKey,
     Address, Witness,
   },
   bitcoincore_rpc::RawTx,
@@ -237,15 +239,29 @@ impl Api for Server {
   fn sign_raw_transaction_with_wallet(
     &self,
     tx: String,
-    utxos: Option<()>,
-    sighash_type: Option<()>,
+    _utxos: Option<Vec<serde_json::Value>>,
+    _sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error> {
-    assert_eq!(utxos, None, "utxos param not supported");
-    assert_eq!(sighash_type, None, "sighash_type param not supported");
+    self.sign_raw_transaction(tx, _utxos, None, _sighash_type)
+  }
 
+  fn sign_raw_transaction(
+    &self,
+    tx: String,
+    _utxos: Option<Vec<serde_json::Value>>,
+    _privkeys: Option<Vec<String>>,
+    _sighash_type: Option<String>,
+  ) -> Result<Value, jsonrpc_core::Error> {
     let mut transaction = Transaction::deserialize(&hex::decode(tx).unwrap()).unwrap();
     for input in &mut transaction.input {
       input.witness = Witness::from_vec(vec![vec![0; 64]]);
+      // Add a dummy signature to script_sig if it's empty (for P2SH)
+      if input.script_sig.is_empty() {
+        input.script_sig = script::Builder::new()
+          .push_slice(&[0; 71]) // dummy sig
+          .push_slice(&[0; 33]) // dummy redeem script (will be replaced by inscriber)
+          .into_script();
+      }
     }
 
     Ok(
@@ -427,8 +443,9 @@ impl Api for Server {
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
     let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (public_key, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let address = Address::p2tr(&secp256k1, public_key, None, self.network);
+    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
+    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let address = Address::p2pkh(&pubkey, self.network);
 
     Ok(address)
   }
@@ -469,10 +486,46 @@ impl Api for Server {
   ) -> Result<bitcoin::Address, jsonrpc_core::Error> {
     let secp256k1 = Secp256k1::new();
     let key_pair = KeyPair::new(&secp256k1, &mut rand::thread_rng());
-    let (public_key, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
-    let address = Address::p2tr(&secp256k1, public_key, None, self.network);
+    let (xonly, _parity) = XOnlyPublicKey::from_keypair(&key_pair);
+    let pubkey = PublicKey::new(bitcoin::secp256k1::PublicKey::from_x_only_public_key(xonly, bitcoin::secp256k1::Parity::Even));
+    let address = Address::p2pkh(&pubkey, self.network);
+
+    self.state().address_pubkeys.insert(address.clone(), pubkey);
 
     Ok(address)
+  }
+
+  fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    self.validate_address(address)
+  }
+
+  fn validate_address(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    let addr: Address = address.parse().map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
+    let pubkey = self.state().address_pubkeys.get(&addr).cloned();
+    Ok(serde_json::json!({
+      "address": address,
+      "scriptPubKey": addr.script_pubkey().to_hex(),
+      "ismine": true,
+      "solvable": true,
+      "isscript": false,
+      "iswitness": false,
+      "pubkey": pubkey.map(|pk| pk.to_string()),
+    }))
+  }
+
+  fn import_private_key(
+    &self,
+    _privkey: String,
+    _label: Option<String>,
+    _rescan: Option<bool>,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    Ok(serde_json::Value::Null)
   }
 
   fn list_transactions(

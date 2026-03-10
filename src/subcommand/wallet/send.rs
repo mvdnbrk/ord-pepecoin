@@ -4,8 +4,10 @@ use {super::*, crate::wallet::Wallet};
 pub(crate) struct Send {
   address: Address,
   outgoing: Outgoing,
-  #[clap(long, help = "Use fee rate of <FEE_RATE> sats/vB")]
-  fee_rate: FeeRate,
+  #[clap(long, help = "Use fee rate of <FEE_RATE> sats/vB. [default: 1000.0]")]
+  fee_rate: Option<FeeRate>,
+  #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
+  postage: Option<Amount>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -71,18 +73,31 @@ impl Send {
 
     let change = [get_change_address(&client)?, get_change_address(&client)?];
 
+    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(options.chain().default_fee_rate()).unwrap());
+
+    let postage = self.postage.unwrap_or(options.chain().default_postage());
+
     let unsigned_transaction = TransactionBuilder::build_transaction_with_postage(
       satpoint,
       inscriptions,
       unspent_outputs,
       self.address,
       change,
-      self.fee_rate,
+      fee_rate,
+      postage,
     )?;
 
-    let signed_tx = client
-      .sign_raw_transaction_with_wallet(&unsigned_transaction, None, None)?
-      .hex;
+    let tx_hex = bitcoin::consensus::encode::serialize_hex(&unsigned_transaction);
+    let result: serde_json::Value = client
+      .call("signrawtransaction", &[tx_hex.into()])
+      .context("failed to sign transaction")?;
+    let signed_hex = result["hex"]
+      .as_str()
+      .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
+    if result["complete"].as_bool() != Some(true) {
+      bail!("Failed to sign transaction: {}", result["errors"]);
+    }
+    let signed_tx = hex::decode(signed_hex)?;
 
     let txid = client.send_raw_transaction(&signed_tx)?;
 

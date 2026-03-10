@@ -11,8 +11,9 @@ const PROTOCOL_ID: &[u8] = b"ord";
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Inscription {
-  body: Option<Vec<u8>>,
-  content_type: Option<Vec<u8>>,
+  pub(crate) body: Option<Vec<u8>>,
+  pub(crate) content_type: Option<Vec<u8>>,
+  pub(crate) parent: Option<Vec<u8>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -24,8 +25,8 @@ pub(crate) enum ParsedInscription {
 
 impl Inscription {
   #[cfg(test)]
-  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>) -> Self {
-    Self { content_type, body }
+  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>, parent: Option<Vec<u8>>) -> Self {
+    Self { content_type, body, parent }
   }
 
   pub(crate) fn from_transactions(txs: Vec<Transaction>) -> ParsedInscription {
@@ -56,31 +57,47 @@ impl Inscription {
     Ok(Self {
       body: Some(body),
       content_type: Some(content_type.into()),
+      parent: None,
     })
   }
 
-  fn append_reveal_script_to_builder(&self, mut builder: script::Builder) -> script::Builder {
-    builder = builder
-      .push_opcode(opcodes::OP_FALSE)
-      .push_opcode(opcodes::all::OP_IF)
-      .push_slice(PROTOCOL_ID);
-
-    if let Some(content_type) = &self.content_type {
-      builder = builder.push_slice(&[1]).push_slice(content_type);
+  fn push_number(mut builder: script::Builder, num: u64) -> script::Builder {
+    if num == 0 {
+      builder = builder.push_opcode(opcodes::all::OP_PUSHBYTES_0);
+    } else if num <= 16 {
+      let opcode_val = opcodes::all::OP_PUSHNUM_1.to_u8() + (num - 1) as u8;
+      builder = builder.push_opcode(opcodes::All::from(opcode_val));
+    } else {
+      builder = builder.push_int(num as i64);
     }
-
-    if let Some(body) = &self.body {
-      builder = builder.push_slice(&[]);
-      for chunk in body.chunks(520) {
-        builder = builder.push_slice(chunk);
-      }
-    }
-
-    builder.push_opcode(opcodes::all::OP_ENDIF)
+    builder
   }
 
-  pub(crate) fn append_reveal_script(&self, builder: script::Builder) -> Script {
-    self.append_reveal_script_to_builder(builder).into_script()
+  pub(crate) fn get_inscription_script(&self) -> Script {
+    let mut builder = script::Builder::new()
+      .push_slice(PROTOCOL_ID);
+
+    let empty = Vec::new();
+    let body = self.body.as_ref().unwrap_or(&empty);
+    let chunks: Vec<&[u8]> = body.chunks(240).collect();
+
+    builder = Self::push_number(builder, chunks.len() as u64);
+
+    if let Some(content_type) = &self.content_type {
+      builder = builder.push_slice(content_type);
+    }
+
+    if let Some(parent) = &self.parent {
+      builder = builder.push_opcode(opcodes::all::OP_PUSHNUM_3);
+      builder = builder.push_slice(parent);
+    }
+
+    for (i, chunk) in chunks.iter().enumerate() {
+      builder = Self::push_number(builder, (chunks.len() - i - 1) as u64);
+      builder = builder.push_slice(chunk);
+    }
+
+    builder.into_script()
   }
 
   pub(crate) fn media(&self) -> Media {
@@ -112,10 +129,29 @@ impl Inscription {
   }
 
   #[cfg(test)]
-  pub(crate) fn to_witness(&self) -> Witness {
-    let builder = script::Builder::new();
+  pub(crate) fn to_p2sh_unlock(&self) -> Script {
+    self.get_inscription_script()
+  }
 
-    let script = self.append_reveal_script(builder);
+  #[cfg(test)]
+  pub(crate) fn to_witness(&self) -> Witness {
+    let mut builder = script::Builder::new()
+      .push_opcode(opcodes::OP_FALSE)
+      .push_opcode(opcodes::all::OP_IF)
+      .push_slice(PROTOCOL_ID);
+
+    if let Some(content_type) = &self.content_type {
+      builder = builder.push_slice(&[1]).push_slice(content_type);
+    }
+
+    if let Some(body) = &self.body {
+      builder = builder.push_slice(&[]);
+      for chunk in body.chunks(520) {
+        builder = builder.push_slice(chunk);
+      }
+    }
+
+    let script = builder.push_opcode(opcodes::all::OP_ENDIF).into_script();
 
     let mut witness = Witness::new();
 
@@ -126,10 +162,10 @@ impl Inscription {
   }
 }
 
-struct InscriptionParser {}
+pub(crate) struct InscriptionParser {}
 
 impl InscriptionParser {
-  fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
+  pub(crate) fn parse(sig_scripts: Vec<Script>) -> ParsedInscription {
     let sig_script = &sig_scripts[0];
 
     let mut push_datas_vec = match Self::decode_push_datas(sig_script) {
@@ -168,6 +204,11 @@ impl InscriptionParser {
 
     push_datas = &push_datas[3..];
 
+    // TODO: Add tag parsing for parent/child (Tag 3) once we define a format
+    // that doesn't collide with body countdown numbers. Currently, an inscription
+    // with exactly 4 chunks has countdown starting at 3, which collides with Tag 3.
+    let parent: Option<Vec<u8>> = None;
+
     // read body
 
     let mut body = vec![];
@@ -182,6 +223,7 @@ impl InscriptionParser {
           let inscription = Inscription {
             content_type: Some(content_type),
             body: Some(body),
+            parent,
           };
 
           return ParsedInscription::Complete(inscription);
@@ -283,7 +325,7 @@ impl InscriptionParser {
         if bytes.len() < 3 {
           return None;
         }
-        let len = ((bytes[1] as usize) << 8) + ((bytes[0] as usize) << 0);
+        let len = (bytes[1] as usize) + ((bytes[2] as usize) << 8);
         if bytes.len() < 3 + len {
           return None;
         }
@@ -297,10 +339,10 @@ impl InscriptionParser {
         if bytes.len() < 5 {
           return None;
         }
-        let len = ((bytes[3] as usize) << 24)
-          + ((bytes[2] as usize) << 16)
-          + ((bytes[1] as usize) << 8)
-          + ((bytes[0] as usize) << 0);
+        let len = (bytes[1] as usize)
+          + ((bytes[2] as usize) << 8)
+          + ((bytes[3] as usize) << 16)
+          + ((bytes[4] as usize) << 24);
         if bytes.len() < 5 + len {
           return None;
         }
@@ -443,7 +485,7 @@ mod tests {
     script.push(vec![3]);
     script.push(b"ord".to_vec());
     const LEN: usize = 100000;
-    push_number(&mut script, LEN as u64);
+    push_number_to_vec(&mut script, LEN as u64);
     script.push(vec![24]);
     script.push(b"text/plain;charset=utf-8".to_vec());
 
@@ -451,14 +493,14 @@ mod tests {
     while i < LEN {
       let text = format!("{}", i % 10);
       expected += text.as_str();
-      push_number(&mut script, (LEN - i - 1) as u64);
+      push_number_to_vec(&mut script, (LEN - i - 1) as u64);
       script.push(vec![1]);
       script.push(text.as_bytes().to_vec());
       i += 1;
 
       let text = format!("{}", i % 10);
       expected += text.as_str();
-      push_number(&mut script, (LEN - i - 1) as u64);
+      push_number_to_vec(&mut script, (LEN - i - 1) as u64);
       script.push(vec![1]);
       script.push(text.as_bytes().to_vec());
       i += 1;
@@ -551,7 +593,7 @@ mod tests {
     );
   }
 
-  fn push_number(script: &mut Vec<Vec<u8>>, num: u64) {
+  fn push_number_to_vec(script: &mut Vec<Vec<u8>>, num: u64) {
     if num == 0 {
       script.push(vec![0]);
       return;
@@ -594,13 +636,13 @@ mod tests {
     script.push(vec![3]);
     script.push(b"ord".to_vec());
     const LEN: usize = 100000;
-    push_number(&mut script, LEN as u64);
+    push_number_to_vec(&mut script, LEN as u64);
     script.push(vec![24]);
     script.push(b"text/plain;charset=utf-8".to_vec());
     for i in 0..LEN {
       let text = format!("{}", i % 10);
       expected += text.as_str();
-      push_number(&mut script, (LEN - i - 1) as u64);
+      push_number_to_vec(&mut script, (LEN - i - 1) as u64);
       script.push(vec![1]);
       script.push(text.as_bytes().to_vec());
     }

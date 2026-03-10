@@ -6,6 +6,23 @@ pub struct InscriptionId {
   pub(crate) index: u32,
 }
 
+impl InscriptionId {
+  pub(crate) fn value(self) -> Vec<u8> {
+    let mut value = self.txid.to_vec();
+    value.reverse();
+
+    if self.index > 0 {
+      value.extend_from_slice(&self.index.to_le_bytes());
+
+      while value.last() == Some(&0) {
+        value.pop();
+      }
+    }
+
+    value
+  }
+}
+
 impl<'de> Deserialize<'de> for InscriptionId {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where

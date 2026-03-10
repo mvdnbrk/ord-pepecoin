@@ -54,8 +54,17 @@ pub trait Api {
   fn sign_raw_transaction_with_wallet(
     &self,
     tx: String,
-    utxos: Option<()>,
-    sighash_type: Option<()>,
+    utxos: Option<Vec<serde_json::Value>>,
+    sighash_type: Option<String>,
+  ) -> Result<Value, jsonrpc_core::Error>;
+
+  #[rpc(name = "signrawtransaction")]
+  fn sign_raw_transaction(
+    &self,
+    tx: String,
+    utxos: Option<Vec<serde_json::Value>>,
+    privkeys: Option<Vec<String>>,
+    sighash_type: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error>;
 
   #[rpc(name = "sendrawtransaction")]
@@ -126,6 +135,26 @@ pub trait Api {
     label: Option<String>,
     address_type: Option<bitcoincore_rpc::json::AddressType>,
   ) -> Result<bitcoin::Address, jsonrpc_core::Error>;
+
+  #[rpc(name = "getaddressinfo")]
+  fn get_address_info(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+
+  #[rpc(name = "validateaddress")]
+  fn validate_address(
+    &self,
+    address: String,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+
+  #[rpc(name = "importprivkey")]
+  fn import_private_key(
+    &self,
+    privkey: String,
+    label: Option<String>,
+    rescan: Option<bool>,
+  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
 
   #[rpc(name = "listtransactions")]
   fn list_transactions(

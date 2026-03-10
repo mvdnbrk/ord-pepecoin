@@ -194,7 +194,15 @@ impl Options {
     let client = Client::new(&rpc_url, auth)
       .with_context(|| format!("failed to connect to Pepecoin Core RPC at {rpc_url}"))?;
 
-    let rpc_chain = match client.get_blockchain_info()?.chain.as_str() {
+    let blockchain_info: serde_json::Value = client
+      .call("getblockchaininfo", &[])
+      .context("failed to get blockchain info")?;
+
+    let chain_str = blockchain_info["chain"]
+      .as_str()
+      .ok_or_else(|| anyhow!("missing chain field in getblockchaininfo"))?;
+
+    let rpc_chain = match chain_str {
       "main" => Chain::Mainnet,
       "test" => Chain::Testnet,
       "regtest" => Chain::Regtest,
@@ -216,7 +224,12 @@ impl Options {
 
     const MIN_VERSION: usize = 1010000;
 
-    let pepecoin_version = client.version()?;
+    let network_info: serde_json::Value = client
+      .call("getnetworkinfo", &[])
+      .context("failed to get network info")?;
+    let pepecoin_version = network_info["version"]
+      .as_u64()
+      .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))? as usize;
     if pepecoin_version < MIN_VERSION {
       bail!(
         "Pepecoin Core {} or newer required, current version is {}",
@@ -225,28 +238,7 @@ impl Options {
       );
     }
 
-    if !create {
-      if !client.list_wallets()?.contains(&self.wallet) {
-        client.load_wallet(&self.wallet)?;
-      }
-
-      let descriptors = client.list_descriptors(None)?.descriptors;
-
-      let tr = descriptors
-        .iter()
-        .filter(|descriptor| descriptor.desc.starts_with("tr("))
-        .count();
-
-      let rawtr = descriptors
-        .iter()
-        .filter(|descriptor| descriptor.desc.starts_with("rawtr("))
-        .count();
-
-      if tr != 2 || descriptors.len() != 2 + rawtr {
-        bail!("wallet \"{}\" contains unexpected output descriptors, and does not appear to be an `ord` wallet, create a new wallet with `ord wallet create`", self.wallet);
-      }
-    }
-
+    // Pepecoin Core uses a single default wallet (no multi-wallet support)
     Ok(client)
   }
 }
