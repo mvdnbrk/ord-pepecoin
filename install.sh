@@ -24,9 +24,9 @@ OPTIONS:
 EOF
 }
 
-git=apezord/ord-pepecoin
+git=mvdnbrk/ord-pepecoin
 crate=ord
-url=https://github.com/apezord/ord-pepecoin
+url=https://github.com/mvdnbrk/ord-pepecoin
 releases=$url/releases
 
 say() {
@@ -98,7 +98,7 @@ if [ -z ${dest-} ]; then
 fi
 
 if [ -z ${tag-} ]; then
-  tag=$(curl --proto =https --tlsv1.2 -sSf https://api.github.com/repos/apezord/ord-pepecoin/releases/latest |
+  tag=$(curl --proto =https --tlsv1.2 -sSf https://api.github.com/repos/mvdnbrk/ord-pepecoin/releases/latest |
     grep tag_name |
     cut -d'"' -f4
   )
@@ -113,7 +113,7 @@ if [ -z ${target-} ]; then
     x86_64-Linux) target=x86_64-unknown-linux-gnu;;
     *)
       err 'Could not determine target from output of `uname -m`-`uname -s`, please use `--target`:' $uname_target
-      err 'Please try building from source: https://github.com/apezord/ord-pepecoin#building'
+      err 'Please try building from source: https://github.com/mvdnbrk/ord-pepecoin#building'
     ;;
   esac
 fi
