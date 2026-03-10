@@ -10,7 +10,10 @@ use {
   std::collections::BTreeSet,
 };
 
-const MAX_PAYLOAD_LEN: usize = 8000;
+// Pepecoin Core enforces a 1650-byte scriptSig limit (IsStandard policy).
+// The scriptSig contains: inscription data + signature (~74 bytes) + redeem script.
+// We reserve 150 bytes for signature + redeem script overhead, leaving ~1500 for data.
+const MAX_PAYLOAD_LEN: usize = 1500;
 
 #[derive(Serialize)]
 struct Output {
@@ -267,37 +270,53 @@ impl Inscribe {
     }
 
     let inscription_script = inscription.get_inscription_script();
+
+    // Collect all instruction pairs (countdown + data) from the inscription script
+    let mut chunks: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
     let mut instructions = inscription_script.instructions();
+    while let Some(Ok(instr)) = instructions.next() {
+      let first = match instr {
+        script::Instruction::PushBytes(data) => data.to_vec(),
+        script::Instruction::Op(op) => vec![op.into_u8()],
+      };
+      if let Some(Ok(instr2)) = instructions.next() {
+        let second = match instr2 {
+          script::Instruction::PushBytes(data) => data.to_vec(),
+          script::Instruction::Op(op) => vec![op.into_u8()],
+        };
+        chunks.push((first, second));
+      } else {
+        // Odd instruction (e.g. content type) — push with empty second
+        chunks.push((first, Vec::new()));
+      }
+    }
+
+    // Split chunks into batches that fit within MAX_PAYLOAD_LEN
     let mut batches = Vec::new();
-    while let Some(instruction) = instructions.next() {
+    let mut chunk_idx = 0;
+    while chunk_idx < chunks.len() {
       let mut partial = script::Builder::new();
-      if let Ok(instr) = instruction {
-         match instr {
-             script::Instruction::PushBytes(data) => { partial = partial.push_slice(data); }
-             script::Instruction::Op(op) => { partial = partial.push_opcode(op); }
-         }
+
+      // Add at least one chunk pair per batch
+      let (ref a, ref b) = chunks[chunk_idx];
+      partial = partial.push_slice(a);
+      if !b.is_empty() { partial = partial.push_slice(b); }
+      chunk_idx += 1;
+
+      // Keep adding chunk pairs while within the limit
+      while chunk_idx < chunks.len() {
+        let mut candidate = partial.clone();
+        let (ref a, ref b) = chunks[chunk_idx];
+        candidate = candidate.push_slice(a);
+        if !b.is_empty() { candidate = candidate.push_slice(b); }
+
+        if candidate.clone().into_script().len() > MAX_PAYLOAD_LEN {
+          break; // Would exceed limit, stop here
+        }
+        partial = candidate;
+        chunk_idx += 1;
       }
 
-      while partial.clone().into_script().len() <= MAX_PAYLOAD_LEN {
-        let next = instructions.next();
-        if let Some(Ok(instr)) = next {
-           match instr {
-               script::Instruction::PushBytes(data) => { partial = partial.push_slice(data); }
-               script::Instruction::Op(op) => { partial = partial.push_opcode(op); }
-           }
-           let data_next = instructions.next();
-           if let Some(Ok(instr)) = data_next {
-               match instr {
-                   script::Instruction::PushBytes(data) => { partial = partial.push_slice(data); }
-                   script::Instruction::Op(op) => { partial = partial.push_opcode(op); }
-               }
-           } else {
-              break;
-           }
-        } else {
-          break;
-        }
-      }
       batches.push(partial.into_script());
     }
 
