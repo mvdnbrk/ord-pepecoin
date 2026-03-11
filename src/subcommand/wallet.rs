@@ -2,7 +2,7 @@ use {
   super::*,
   bitcoin::secp256k1::{
     rand::{self, RngCore},
-    All, Secp256k1,
+    Secp256k1,
   },
   bitcoin::{
     util::bip32::{ChildNumber, DerivationPath, ExtendedPrivKey},
