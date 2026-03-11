@@ -188,7 +188,8 @@ impl Server {
         .route("/feed.xml", get(Self::feed))
         .route("/input/{block}/{transaction}/{input}", get(Self::input))
         .route("/inscription/{inscription_id}", get(Self::inscription))
-        .route("/inscriptions", get(Self::inscriptions).post(Self::inscriptions_batch))
+        .route("/inscriptions", get(Self::inscriptions))
+        .route("/inscriptions", post(Self::inscriptions_batch))
         .route("/inscriptions/{from}", get(Self::inscriptions_from))
 
         .route("/install.sh", get(Self::install_script))
