@@ -3,8 +3,8 @@ use super::*;
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionHtml {
   pub(crate) chain: Chain,
-  pub(crate) genesis_fee: u64,
-  pub(crate) genesis_height: u64,
+  pub(crate) fee: u64,
+  pub(crate) height: u64,
   pub(crate) inscription: Inscription,
   pub(crate) inscription_id: InscriptionId,
   pub(crate) next: Option<InscriptionId>,
@@ -35,8 +35,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
-        genesis_fee: 1,
-        genesis_height: 0,
+        fee: 1,
+        height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         inscription_id: inscription_id(1),
         next: None,
@@ -71,11 +71,11 @@ mod tests {
           <dd>text/plain;charset=utf-8</dd>
           <dt>timestamp</dt>
           <dd><time>1970-01-01 00:00:00 UTC</time></dd>
-          <dt>genesis height</dt>
+          <dt>height</dt>
           <dd><a href=/block/0>0</a></dd>
-          <dt>genesis fee</dt>
+          <dt>fee</dt>
           <dd>1</dd>
-          <dt>genesis transaction</dt>
+          <dt>reveal transaction</dt>
           <dd><a class=monospace href=/tx/1{64}>1{64}</a></dd>
           <dt>location</dt>
           <dd class=monospace>1{64}:1:0</dd>
@@ -94,8 +94,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
-        genesis_fee: 1,
-        genesis_height: 0,
+        fee: 1,
+        height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         inscription_id: inscription_id(1),
         next: None,
@@ -126,8 +126,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
-        genesis_fee: 1,
-        genesis_height: 0,
+        fee: 1,
+        height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
         inscription_id: inscription_id(2),
         next: Some(inscription_id(3)),

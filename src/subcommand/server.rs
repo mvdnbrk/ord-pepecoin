@@ -39,6 +39,7 @@ use {
 };
 
 mod error;
+mod query;
 
 pub(crate) struct AcceptJson(pub(crate) bool);
 
@@ -1045,8 +1046,15 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
-    Path(inscription_id): Path<InscriptionId>,
+    Path(DeserializeFromStr(query)): Path<DeserializeFromStr<query::Inscription>>,
   ) -> ServerResult<Response> {
+    let inscription_id = match query {
+      query::Inscription::Id(id) => id,
+      query::Inscription::Number(number) => index
+        .get_inscription_id_by_inscription_number(number)?
+        .ok_or_not_found(|| format!("inscription {number}"))?,
+    };
+
     let entry = index
       .get_inscription_entry(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
@@ -1100,8 +1108,8 @@ impl Server {
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
-          genesis_fee: entry.fee,
-          genesis_height: entry.height,
+          fee: entry.fee,
+          height: entry.height,
           inscription,
           inscription_id,
           next,
@@ -1904,7 +1912,7 @@ mod tests {
     test_server.assert_response_regex(
     "/",
     StatusCode::OK,
-    ".*<title>Pepeinals</title>.*
+    ".*<title>ord-pepecoin</title>.*
 <h2>Latest Blocks</h2>
 <ol start=1 reversed class=blocks>
   <li><a href=/block/[[:xdigit:]]{64}>[[:xdigit:]]{64}</a></li>
@@ -1918,7 +1926,7 @@ mod tests {
     TestServer::new().assert_response_regex(
       "/",
       StatusCode::OK,
-      ".*<a href=/>Pepeinals<sup>regtest</sup></a>.*",
+      ".*<a href=/>ord-pepecoin<sup>regtest</sup></a>.*",
     );
   }
 
