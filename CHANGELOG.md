@@ -16,6 +16,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Page-based pagination for `/inscriptions` endpoint ([#6](https://github.com/mvdnbrk/ord-pepecoin/pull/6))
 - `POST /outputs` batch endpoint and updated `GET /output/:outpoint` JSON response ([#7](https://github.com/mvdnbrk/ord-pepecoin/pull/7))
 - `POST /inscriptions` batch endpoint with upstream-compatible response format ([#9](https://github.com/mvdnbrk/ord-pepecoin/pull/9))
+- Integration tests for all JSON API endpoints ([#11](https://github.com/mvdnbrk/ord-pepecoin/pull/11))
 - Address index with inscription-aware UTXO selection
 - YAML config file support
 - Index export command and `index update` subcommand (replaces deprecated `index run`)
@@ -39,6 +40,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - CI workflow simplified (test only, macOS + Ubuntu)
 - Extract API types into `src/api.rs` module matching upstream pattern ([#8](https://github.com/mvdnbrk/ord-pepecoin/pull/8))
 - Inscription API fields renamed to match upstream (`fee`, `height`, `id`, `satpoint`, `value`) ([#9](https://github.com/mvdnbrk/ord-pepecoin/pull/9))
+- Upgrade axum 0.6 → 0.8 with ecosystem deps to match upstream ([#12](https://github.com/mvdnbrk/ord-pepecoin/pull/12))
 
 ### Removed
 - Upstream docs, examples, benchmark, contrib, fuzz folders
