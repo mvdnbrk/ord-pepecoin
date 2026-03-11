@@ -63,7 +63,6 @@ define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 const SCHEMA_VERSION: u64 = 5;
 
 pub(crate) struct Index {
-
   auth: Auth,
   client: Client,
   database: Database,
@@ -73,6 +72,7 @@ pub(crate) struct Index {
   genesis_block_coinbase_txid: Txid,
   height_limit: Option<u64>,
   reorged: AtomicBool,
+  pub(crate) started: DateTime<Utc>,
   unrecoverably_reorged: AtomicBool,
   rpc_url: String,
   chain: Chain,
@@ -267,6 +267,7 @@ impl Index {
       genesis_block_coinbase_transaction,
       height_limit: options.height_limit,
       reorged: AtomicBool::new(false),
+      started: Utc::now(),
       unrecoverably_reorged: AtomicBool::new(false),
       rpc_url,
       chain: options.chain(),

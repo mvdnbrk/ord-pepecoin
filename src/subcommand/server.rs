@@ -762,7 +762,9 @@ impl Server {
           height,
           inscriptions,
           sat_index,
+          started: index.started,
           unrecoverably_reorged,
+          uptime: (Utc::now() - index.started).to_std().unwrap_or_default(),
         }
         .page(page_config, sat_index)
         .into_response(),
@@ -2043,12 +2045,12 @@ mod tests {
 
     test_server.mine_blocks(1);
 
-    test_server.assert_response("/status", StatusCode::OK, "OK");
+    test_server.assert_response_regex("/status", StatusCode::OK, ".*<h1>Status</h1>.*");
 
     test_server.pepecoin_rpc_server.invalidate_tip();
     test_server.pepecoin_rpc_server.mine_blocks(2);
 
-    test_server.assert_response_regex("/status", StatusCode::OK, "unrecoverable reorg detected.*");
+    test_server.assert_response_regex("/status", StatusCode::OK, ".*<dd>true</dd>.*");
   }
 
   #[test]

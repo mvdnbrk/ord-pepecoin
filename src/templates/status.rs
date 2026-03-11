@@ -7,7 +7,9 @@ pub(crate) struct StatusHtml {
   pub(crate) height: Option<u64>,
   pub(crate) inscriptions: u64,
   pub(crate) sat_index: bool,
+  pub(crate) started: DateTime<Utc>,
   pub(crate) unrecoverably_reorged: bool,
+  pub(crate) uptime: Duration,
 }
 
 impl PageContent for StatusHtml {
