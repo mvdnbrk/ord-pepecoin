@@ -1,20 +1,17 @@
 use super::*;
 
-pub(crate) struct Rtx<'a>(pub(crate) redb::ReadTransaction<'a>);
+pub(crate) struct Rtx(pub(crate) redb::ReadTransaction);
 
-impl Rtx<'_> {
+impl Rtx {
   pub(crate) fn height(&self) -> Result<Option<Height>> {
     Ok(
       self
         .0
         .open_table(HEIGHT_TO_BLOCK_HASH)?
         .range(0..)?
-        .rev()
-        .next()
-        .map(|result| {
-          let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
-          Height(height.value())
-        }),
+        .next_back()
+        .transpose()?
+        .map(|(height, _hash)| Height(height.value())),
     )
   }
 
@@ -24,12 +21,9 @@ impl Rtx<'_> {
         .0
         .open_table(HEIGHT_TO_BLOCK_HASH)?
         .range(0..)?
-        .rev()
-        .next()
-        .map(|result| {
-          let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
-          height.value() + 1
-        })
+        .next_back()
+        .transpose()?
+        .map(|(height, _hash)| height.value() + 1)
         .unwrap_or(0),
     )
   }

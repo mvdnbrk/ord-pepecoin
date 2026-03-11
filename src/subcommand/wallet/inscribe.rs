@@ -60,7 +60,7 @@ pub(crate) struct Inscribe {
 
 impl Inscribe {
   pub(crate) fn run(self, options: Options) -> Result {
-    let mut inscription = Inscription::from_file(options.chain(), &self.file)?;
+    let inscription = Inscription::from_file(options.chain(), &self.file)?;
 
 
 
