@@ -92,7 +92,6 @@ fn create_wallet(rpc_server: &test_bitcoincore_rpc::Handle) {
 }
 
 mod command_builder;
-mod core;
 mod epochs;
 mod expected;
 mod find;
