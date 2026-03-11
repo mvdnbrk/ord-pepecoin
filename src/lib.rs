@@ -93,6 +93,7 @@ macro_rules! tprintln {
     };
 }
 
+pub(crate) mod api;
 mod arguments;
 mod blocktime;
 mod chain;

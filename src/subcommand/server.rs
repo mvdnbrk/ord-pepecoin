@@ -4,6 +4,7 @@ use {
     error::{OptionExt, ServerError, ServerResult},
   },
   super::*,
+  crate::api,
   crate::page_config::PageConfig,
   crate::templates::{
     AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsHtml, OutputHtml,
@@ -60,76 +61,6 @@ where
         .unwrap_or_default(),
     ))
   }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct InscriptionJson {
-  pub address: Option<String>,
-  pub content_length: Option<usize>,
-  pub content_type: Option<String>,
-  pub genesis_fee: u64,
-  pub genesis_height: u64,
-  pub genesis_transaction: Txid,
-  pub inscription_id: InscriptionId,
-  pub location: SatPoint,
-  pub number: u64,
-  pub output_value: Option<u64>,
-  pub timestamp: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct InscriptionsJson {
-  pub ids: Vec<InscriptionId>,
-  pub more: bool,
-  pub page_index: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct OutputJson {
-  pub address: Option<String>,
-  pub confirmations: u32,
-  pub indexed: bool,
-  pub inscriptions: Vec<InscriptionId>,
-  pub outpoint: OutPoint,
-  pub sat_ranges: Option<Vec<(u64, u64)>>,
-  pub script_pubkey: String,
-  pub spent: bool,
-  pub transaction: Txid,
-  pub value: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AddressJson {
-  pub inscriptions: Vec<InscriptionId>,
-  pub outputs: Vec<OutPoint>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct StatusJson {
-  pub address_index: bool,
-  pub chain: String,
-  pub height: Option<u64>,
-  pub inscriptions: u64,
-  pub sat_index: bool,
-  pub unrecoverably_reorged: bool,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct BlockJson {
-  pub hash: BlockHash,
-  pub target: String,
-  pub best_block: bool,
-  pub height: u64,
-  pub chainweight: Option<usize>,
-  pub mediantime: i64,
-  pub nonce: u32,
-  pub bits: String,
-  pub difficulty: f64,
-  pub chainwork: String,
-  pub confirmations: i32,
-  pub previousblockhash: Option<BlockHash>,
-  pub nextblockhash: Option<BlockHash>,
-  pub inscriptions: Vec<InscriptionId>,
 }
 
 enum BlockQuery {
@@ -546,7 +477,7 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Json(outpoints): Json<Vec<OutPoint>>,
-  ) -> ServerResult<Json<Vec<OutputJson>>> {
+  ) -> ServerResult<Json<Vec<api::Output>>> {
     let mut outputs = Vec::new();
 
     for outpoint in outpoints {
@@ -564,9 +495,9 @@ impl Server {
     index: Arc<Index>,
     chain: Chain,
     outpoint: OutPoint,
-  ) -> Result<OutputJson> {
+  ) -> Result<api::Output> {
     let Some(info) = index.get_output_info(outpoint)? else {
-      return Ok(OutputJson {
+      return Ok(api::Output {
         address: None,
         confirmations: 0,
         indexed: false,
@@ -580,7 +511,7 @@ impl Server {
       });
     };
 
-    Ok(OutputJson {
+    Ok(api::Output {
       address: chain
         .address_from_script(&info.txout.script_pubkey)
         .map(|a| a.to_string())
@@ -646,7 +577,7 @@ impl Server {
 
     if accept_json.0 {
       Ok(
-        Json(AddressJson {
+        Json(api::Address {
           inscriptions,
           outputs,
         })
@@ -697,7 +628,7 @@ impl Server {
       let info = index.block_header_info(block.header.block_hash())?
         .ok_or_not_found(|| format!("block {}", block.header.block_hash()))?;
 
-      Ok(Json(BlockJson {
+      Ok(Json(api::Block {
         hash: block.header.block_hash(),
         target: block.header.target().to_string(),
         best_block: true,
@@ -751,7 +682,7 @@ impl Server {
   ) -> ServerResult<Response> {
     if accept_json.0 {
       Ok(
-        Json(StatusJson {
+        Json(api::Status {
           address_index: true,
           chain: page_config.chain.to_string(),
           height: index.block_count().ok(),
@@ -1068,7 +999,7 @@ impl Server {
       .ok_or_not_found(|| format!("inscription {inscription_id} current transaction output"))?;
 
     if accept_json.0 {
-      Ok(Json(InscriptionJson {
+      Ok(Json(api::Inscription {
         address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
@@ -1144,7 +1075,7 @@ impl Server {
     if page_index * 100 >= count {
       if accept_json.0 {
         return Ok(
-          Json(InscriptionsJson {
+          Json(api::Inscriptions {
             ids: Vec::new(),
             more: false,
             page_index,
@@ -1173,7 +1104,7 @@ impl Server {
 
     if accept_json.0 {
       Ok(
-        Json(InscriptionsJson {
+        Json(api::Inscriptions {
           ids: inscriptions,
           more,
           page_index,
@@ -2704,7 +2635,7 @@ mod tests {
     let response = server.post("/outputs", &vec![outpoint.to_string()]);
     assert_eq!(response.status(), StatusCode::OK);
 
-    let outputs: Vec<OutputJson> = serde_json::from_str(&response.text().unwrap()).unwrap();
+    let outputs: Vec<api::Output> = serde_json::from_str(&response.text().unwrap()).unwrap();
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].outpoint, outpoint);
     assert_eq!(outputs[0].value, 50 * 100_000_000);
@@ -2716,7 +2647,7 @@ mod tests {
     let response = server.post("/outputs", &vec![outpoint.to_string(), outpoint_missing.to_string()]);
     assert_eq!(response.status(), StatusCode::OK);
 
-    let outputs: Vec<OutputJson> = serde_json::from_str(&response.text().unwrap()).unwrap();
+    let outputs: Vec<api::Output> = serde_json::from_str(&response.text().unwrap()).unwrap();
     assert_eq!(outputs.len(), 2);
     assert_eq!(outputs[0].outpoint, outpoint);
     assert_eq!(outputs[1].outpoint, outpoint_missing.parse().unwrap());
