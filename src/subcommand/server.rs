@@ -1100,8 +1100,8 @@ impl Server {
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
-          genesis_fee: entry.fee,
-          genesis_height: entry.height,
+          fee: entry.fee,
+          height: entry.height,
           inscription,
           inscription_id,
           next,
