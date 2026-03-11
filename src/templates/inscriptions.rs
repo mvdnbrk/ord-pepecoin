@@ -3,8 +3,8 @@ use super::*;
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionsHtml {
   pub(crate) inscriptions: Vec<InscriptionId>,
-  pub(crate) prev: Option<u64>,
-  pub(crate) next: Option<u64>,
+  pub(crate) page_index: u64,
+  pub(crate) more: bool,
 }
 
 impl PageContent for InscriptionsHtml {
@@ -22,8 +22,8 @@ mod tests {
     assert_regex_match!(
       InscriptionsHtml {
         inscriptions: vec![inscription_id(1), inscription_id(2)],
-        prev: None,
-        next: None,
+        page_index: 0,
+        more: false,
       },
       "
         <h1>Inscription</h1>
@@ -45,8 +45,8 @@ mod tests {
     assert_regex_match!(
       InscriptionsHtml {
         inscriptions: vec![inscription_id(1), inscription_id(2)],
-        prev: Some(1),
-        next: Some(2),
+        page_index: 1,
+        more: true,
       },
       "
         <h1>Inscription</h1>
@@ -55,7 +55,7 @@ mod tests {
           <a href=/inscription/2{64}i2><iframe .* src=/preview/2{64}i2></iframe></a>
         </div>
         .*
-        <a class=prev href=/inscriptions/1>prev</a>
+        <a class=prev href=/inscriptions/0>prev</a>
         <a class=next href=/inscriptions/2>next</a>
         .*
       "
