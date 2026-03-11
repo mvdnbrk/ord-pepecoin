@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InscriptionJson {
+pub struct Inscription {
   pub address: Option<String>,
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
@@ -16,14 +16,14 @@ pub struct InscriptionJson {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct InscriptionsJson {
+pub struct Inscriptions {
   pub ids: Vec<InscriptionId>,
   pub more: bool,
   pub page_index: u64,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct OutputJson {
+pub struct Output {
   pub address: Option<String>,
   pub confirmations: u32,
   pub indexed: bool,
@@ -37,13 +37,13 @@ pub struct OutputJson {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct AddressJson {
+pub struct Address {
   pub inscriptions: Vec<InscriptionId>,
   pub outputs: Vec<OutPoint>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct StatusJson {
+pub struct Status {
   pub address_index: bool,
   pub chain: String,
   pub height: Option<u64>,
@@ -53,7 +53,7 @@ pub struct StatusJson {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct BlockJson {
+pub struct Block {
   pub hash: BlockHash,
   pub target: String,
   pub best_block: bool,
