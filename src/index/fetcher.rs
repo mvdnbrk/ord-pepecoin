@@ -2,7 +2,12 @@ use {
   anyhow::{anyhow, Result},
   bitcoin::{Transaction, Txid},
   bitcoincore_rpc::Auth,
-  hyper::{client::HttpConnector, Body, Client, Method, Request, Uri},
+  http_body_util::{BodyExt, Full},
+  hyper::{body::Bytes, Method, Request, Uri},
+  hyper_util::{
+    client::legacy::{connect::HttpConnector, Client},
+    rt::TokioExecutor,
+  },
   serde::Deserialize,
   serde_json::{json, Value},
   std::time::Duration,
@@ -12,7 +17,7 @@ use {
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub(crate) struct Fetcher {
-  client: Client<HttpConnector>,
+  client: Client<HttpConnector, Full<Bytes>>,
   url: Uri,
   auth: String,
 }
@@ -36,7 +41,7 @@ impl Fetcher {
       return Err(anyhow!("No rpc authentication provided"));
     }
 
-    let client = Client::new();
+    let client = Client::builder(TokioExecutor::new()).build_http();
 
     let url = if url.starts_with("http://") {
       url.to_string()
@@ -49,7 +54,11 @@ impl Fetcher {
     let (user, password) = auth.get_user_pass()?;
     let auth = format!("{}:{}", user.unwrap(), password.unwrap());
     let auth = format!("Basic {}", &base64::encode(auth));
-    Ok(Fetcher { client, url, auth })
+    Ok(Fetcher {
+      client,
+      url,
+      auth,
+    })
   }
 
   pub(crate) async fn get_transactions(&self, txids: Vec<Txid>) -> Result<Vec<Transaction>> {
@@ -123,11 +132,11 @@ impl Fetcher {
       .uri(&self.url)
       .header(hyper::header::AUTHORIZATION, &self.auth)
       .header(hyper::header::CONTENT_TYPE, "application/json")
-      .body(Body::from(body))?;
+      .body(Full::new(Bytes::from(body)))?;
 
     let result = timeout(REQUEST_TIMEOUT, async {
       let response = self.client.request(req).await?;
-      hyper::body::to_bytes(response).await.map_err(|e| anyhow!(e))
+      Ok::<_, anyhow::Error>(response.into_body().collect().await?.to_bytes())
     })
     .await;
 
