@@ -13,6 +13,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Wallet rewrite for Pepecoin P2PKH (BIP-44, coin type 3434)
 - 240-byte chunk size for inscription data
 - JSON API support
+- Page-based pagination for `/inscriptions` endpoint ([#6](https://github.com/mvdnbrk/ord-pepecoin/pull/6))
+- `POST /outputs` batch endpoint and updated `GET /output/:outpoint` JSON response ([#7](https://github.com/mvdnbrk/ord-pepecoin/pull/7))
 - Address index with inscription-aware UTXO selection
 - YAML config file support
 - Index export command and `index update` subcommand (replaces deprecated `index run`)
@@ -33,6 +35,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Fee rate and postage defaults tuned for Pepecoin
 - Use `Durability::Immediate` for redb writes
 - CI workflow simplified (test only, macOS + Ubuntu)
+- Extract API types into `src/api.rs` module matching upstream pattern ([#8](https://github.com/mvdnbrk/ord-pepecoin/pull/8))
 
 ### Removed
 - Upstream docs, examples, benchmark, contrib, fuzz folders
