@@ -18,6 +18,7 @@ use {
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
+    extract::DefaultBodyLimit,
     Json, Router,
   },
   axum_server::Handle,
@@ -175,12 +176,13 @@ impl Server {
         domain: self.acme_domain.first().cloned(),
       });
 
+      let body_limit = DefaultBodyLimit::max(32 * 1024 * 1024);
+
       let router = Router::new()
         .route("/", get(Self::home))
         .route("/blockcount", get(Self::block_count))
         .route("/address/{address}", get(Self::address))
         .route("/block/{query}", get(Self::block))
-
         .route("/bounties", get(Self::bounties))
         .route("/content/{inscription_id}", get(Self::content))
         .route("/faq", get(Self::faq))
@@ -189,13 +191,12 @@ impl Server {
         .route("/input/{block}/{transaction}/{input}", get(Self::input))
         .route("/inscription/{inscription_id}", get(Self::inscription))
         .route("/inscriptions", get(Self::inscriptions))
-        .route("/inscriptions", post(Self::inscriptions_json))
+        .route("/inscriptions", post(Self::inscriptions_json).layer(body_limit))
         .route("/inscriptions/{from}", get(Self::inscriptions_from))
-
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
-        .route("/outputs", post(Self::outputs_batch))
+        .route("/outputs", post(Self::outputs_batch).layer(body_limit))
         .route("/preview/{inscription_id}", get(Self::preview))
         .route("/range/{start}/{end}", get(Self::range))
         .route("/rare.txt", get(Self::rare_txt))
