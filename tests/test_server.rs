@@ -24,7 +24,8 @@ impl TestServer {
       .port();
 
     let child = Command::new(executable_path("ord-pepecoin")).args(format!(
-      "--rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port {port} --address 127.0.0.1",
+      "--chain {} --rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port {port} --address 127.0.0.1",
+      rpc_server.network(),
       rpc_server.url(),
       tempdir.path().display(),
       tempdir.path().display(),
@@ -68,7 +69,7 @@ impl TestServer {
       assert_eq!(response.status(), StatusCode::OK);
       if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
         break;
-      } else if i == 20 {
+      } else if i == 200 {
         panic!("index failed to synchronize with chain");
       }
       thread::sleep(Duration::from_millis(25));
@@ -88,13 +89,57 @@ impl TestServer {
       assert_eq!(response.status(), StatusCode::OK);
       if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
         break;
-      } else if i == 20 {
+      } else if i == 200 {
         panic!("index failed to synchronize with chain");
       }
       thread::sleep(Duration::from_millis(25));
     }
 
     reqwest::blocking::get(self.url().join(path.as_ref()).unwrap()).unwrap()
+  }
+
+  pub(crate) fn json_request(&self, path: impl AsRef<str>) -> Response {
+    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
+    let chain_block_count = client.get_block_count().unwrap() + 1;
+
+    for i in 0.. {
+      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
+      assert_eq!(response.status(), StatusCode::OK);
+      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
+        break;
+      } else if i == 200 {
+        panic!("index failed to synchronize with chain");
+      }
+      thread::sleep(Duration::from_millis(25));
+    }
+
+    reqwest::blocking::Client::new()
+      .get(self.url().join(path.as_ref()).unwrap())
+      .header(reqwest::header::ACCEPT, "application/json")
+      .send()
+      .unwrap()
+  }
+
+  pub(crate) fn post_json(&self, path: impl AsRef<str>, body: &impl serde::Serialize) -> Response {
+    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
+    let chain_block_count = client.get_block_count().unwrap() + 1;
+
+    for i in 0.. {
+      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
+      assert_eq!(response.status(), StatusCode::OK);
+      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
+        break;
+      } else if i == 200 {
+        panic!("index failed to synchronize with chain");
+      }
+      thread::sleep(Duration::from_millis(25));
+    }
+
+    reqwest::blocking::Client::new()
+      .post(self.url().join(path.as_ref()).unwrap())
+      .json(body)
+      .send()
+      .unwrap()
   }
 }
 

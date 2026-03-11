@@ -97,6 +97,7 @@ mod expected;
 mod find;
 mod index;
 mod info;
+mod json_api;
 mod list;
 mod parse;
 mod server;
