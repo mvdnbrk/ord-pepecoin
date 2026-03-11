@@ -762,7 +762,9 @@ impl Server {
           height,
           inscriptions,
           sat_index,
+          started: index.started,
           unrecoverably_reorged,
+          uptime: (Utc::now() - index.started).to_std().unwrap_or_default(),
         }
         .page(page_config, sat_index)
         .into_response(),

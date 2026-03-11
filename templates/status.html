@@ -8,6 +8,10 @@
 %% }
   <dt>inscriptions</dt>
   <dd><a href=/inscriptions>{{ self.inscriptions }}</a></dd>
+  <dt>started</dt>
+  <dd>{{ self.started }}</dd>
+  <dt>uptime</dt>
+  <dd>{{ self.uptime.as_secs() / 3600 }}h {{ (self.uptime.as_secs() % 3600) / 60 }}m {{ self.uptime.as_secs() % 60 }}s</dd>
   <dt>version</dt>
   <dd>{{ env!("CARGO_PKG_VERSION") }}</dd>
   <dt>unrecoverably reorged</dt>
