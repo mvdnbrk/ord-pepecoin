@@ -1912,7 +1912,7 @@ mod tests {
     test_server.assert_response_regex(
     "/",
     StatusCode::OK,
-    ".*<title>Pepeinals</title>.*
+    ".*<title>ord-pepecoin</title>.*
 <h2>Latest Blocks</h2>
 <ol start=1 reversed class=blocks>
   <li><a href=/block/[[:xdigit:]]{64}>[[:xdigit:]]{64}</a></li>
@@ -1926,7 +1926,7 @@ mod tests {
     TestServer::new().assert_response_regex(
       "/",
       StatusCode::OK,
-      ".*<a href=/>Pepeinals<sup>regtest</sup></a>.*",
+      ".*<a href=/>ord-pepecoin<sup>regtest</sup></a>.*",
     );
   }
 

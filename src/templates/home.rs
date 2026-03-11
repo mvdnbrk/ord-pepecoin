@@ -23,7 +23,7 @@ impl HomeHtml {
 
 impl PageContent for HomeHtml {
   fn title(&self) -> String {
-    "Pepeinals".to_string()
+    "ord-pepecoin".to_string()
   }
 }
 
