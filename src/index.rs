@@ -1,14 +1,6 @@
+use crate::api::OutputInfo;
 use crate::inscription::ParsedInscription;
 use std::io::Cursor;
-
-pub(crate) struct OutputInfo {
-  pub(crate) txout: TxOut,
-  pub(crate) indexed: bool,
-  pub(crate) spent: bool,
-  pub(crate) confirmations: u32,
-  pub(crate) sat_ranges: Option<Vec<(u64, u64)>>,
-  pub(crate) inscriptions: Vec<InscriptionId>,
-}
 
 use {
   self::{
