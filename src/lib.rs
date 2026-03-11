@@ -43,7 +43,6 @@ use {
   chrono::{DateTime, TimeZone, Utc},
   clap::{ArgGroup, Parser},
   derive_more::{Display, FromStr},
-  html_escaper::{Escape, Trusted},
   lazy_static::lazy_static,
   regex::Regex,
   serde::{Deserialize, Deserializer, Serialize, Serializer},
@@ -123,7 +122,7 @@ mod wallet;
 type Result<T = (), E = Error> = std::result::Result<T, E>;
 
 static INTERRUPTS: AtomicU64 = AtomicU64::new(0);
-static LISTENERS: Mutex<Vec<axum_server::Handle>> = Mutex::new(Vec::new());
+static LISTENERS: Mutex<Vec<axum_server::Handle<std::net::SocketAddr>>> = Mutex::new(Vec::new());
 
 fn integration_test() -> bool {
   env::var_os("ORD_INTEGRATION_TEST")

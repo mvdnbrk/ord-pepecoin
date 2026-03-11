@@ -13,13 +13,12 @@ use {
     PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, TransactionHtml,
   },
   axum::{
-    body,
+    body::Body,
     extract::{Extension, Path, Query},
-    headers::UserAgent,
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
-    Json, Router, TypedHeader,
+    Json, Router,
   },
   axum_server::Handle,
   rust_embed::RustEmbed,
@@ -29,7 +28,7 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
-  std::{cmp::Ordering, str},
+  std::{cmp::Ordering, net::SocketAddr, str},
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,
@@ -42,7 +41,6 @@ mod error;
 
 pub(crate) struct AcceptJson(pub(crate) bool);
 
-#[axum::async_trait]
 impl<S> axum::extract::FromRequestParts<S> for AcceptJson
 where
   S: Send + Sync,
@@ -150,7 +148,7 @@ pub(crate) struct Server {
 }
 
 impl Server {
-  pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle) -> Result {
+  pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle<SocketAddr>) -> Result {
     Runtime::new()?.block_on(async {
       let clone = index.clone();
       let index_thread = thread::spawn(move || loop {
@@ -180,32 +178,32 @@ impl Server {
       let router = Router::new()
         .route("/", get(Self::home))
         .route("/blockcount", get(Self::block_count))
-        .route("/address/:address", get(Self::address))
-        .route("/block/:query", get(Self::block))
+        .route("/address/{address}", get(Self::address))
+        .route("/block/{query}", get(Self::block))
 
         .route("/bounties", get(Self::bounties))
-        .route("/content/:inscription_id", get(Self::content))
+        .route("/content/{inscription_id}", get(Self::content))
         .route("/faq", get(Self::faq))
         .route("/favicon.ico", get(Self::favicon))
         .route("/feed.xml", get(Self::feed))
-        .route("/input/:block/:transaction/:input", get(Self::input))
-        .route("/inscription/:inscription_id", get(Self::inscription))
+        .route("/input/{block}/{transaction}/{input}", get(Self::input))
+        .route("/inscription/{inscription_id}", get(Self::inscription))
         .route("/inscriptions", get(Self::inscriptions).post(Self::inscriptions_batch))
-        .route("/inscriptions/:from", get(Self::inscriptions_from))
+        .route("/inscriptions/{from}", get(Self::inscriptions_from))
 
         .route("/install.sh", get(Self::install_script))
-        .route("/ordinal/:sat", get(Self::ordinal))
-        .route("/output/:output", get(Self::output))
+        .route("/ordinal/{sat}", get(Self::ordinal))
+        .route("/output/{output}", get(Self::output))
         .route("/outputs", post(Self::outputs_batch))
-        .route("/preview/:inscription_id", get(Self::preview))
-        .route("/range/:start/:end", get(Self::range))
+        .route("/preview/{inscription_id}", get(Self::preview))
+        .route("/range/{start}/{end}", get(Self::range))
         .route("/rare.txt", get(Self::rare_txt))
-        .route("/sat/:sat", get(Self::sat))
+        .route("/sat/{sat}", get(Self::sat))
         .route("/search", get(Self::search_by_query))
-        .route("/search/:query", get(Self::search_by_path))
-        .route("/static/*path", get(Self::static_asset))
+        .route("/search/{query}", get(Self::search_by_path))
+        .route("/static/{*path}", get(Self::static_asset))
         .route("/status", get(Self::status))
-        .route("/tx/:txid", get(Self::transaction))
+        .route("/tx/{txid}", get(Self::transaction))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -276,7 +274,7 @@ impl Server {
   fn spawn(
     &self,
     router: Router,
-    handle: Handle,
+    handle: Handle<SocketAddr>,
     port: u16,
     config: SpawnConfig,
   ) -> Result<task::JoinHandle<io::Result<()>>> {
@@ -374,12 +372,13 @@ impl Server {
 
     let mut state = config.state();
 
-    let acceptor = state.axum_acceptor(Arc::new(
-      rustls::ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth()
-        .with_cert_resolver(state.resolver()),
-    ));
+    let mut server_config = rustls::ServerConfig::builder()
+      .with_no_client_auth()
+      .with_cert_resolver(state.resolver());
+
+    server_config.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
+
+    let acceptor = state.axum_acceptor(Arc::new(server_config));
 
     tokio::spawn(async move {
       while let Some(result) = state.next().await {
@@ -803,12 +802,14 @@ impl Server {
     }
   }
 
-  async fn favicon(user_agent: Option<TypedHeader<UserAgent>>) -> ServerResult<Response> {
-    if user_agent
+  async fn favicon(headers: HeaderMap) -> ServerResult<Response> {
+    if headers
+      .get(header::USER_AGENT)
+      .and_then(|user_agent| user_agent.to_str().ok())
       .map(|user_agent| {
-        user_agent.as_str().contains("Safari/")
-          && !user_agent.as_str().contains("Chrome/")
-          && !user_agent.as_str().contains("Chromium/")
+        user_agent.contains("Safari/")
+          && !user_agent.contains("Chrome/")
+          && !user_agent.contains("Chromium/")
       })
       .unwrap_or_default()
     {
@@ -880,7 +881,7 @@ impl Server {
       &path
     })
     .ok_or_not_found(|| format!("asset {path}"))?;
-    let body = body::boxed(body::Full::from(content.data));
+    let body = Body::from(content.data);
     let mime = mime_guess::from_path(path).first_or_octet_stream();
     Ok(
       Response::builder()
@@ -1202,7 +1203,7 @@ mod tests {
   struct TestServer {
     pepecoin_rpc_server: test_bitcoincore_rpc::Handle,
     index: Arc<Index>,
-    ord_server_handle: Handle,
+    ord_server_handle: Handle<SocketAddr>,
     url: Url,
     #[allow(unused)]
     tempdir: TempDir,
@@ -1268,7 +1269,7 @@ mod tests {
       ));
 
       let index = Arc::new(Index::open(&options).unwrap());
-      let ord_server_handle = Handle::new();
+      let ord_server_handle = Handle::<SocketAddr>::new();
 
       {
         let index = index.clone();
@@ -1773,7 +1774,7 @@ mod tests {
     TestServer::new().assert_response(
       "/output/foo:0",
       StatusCode::BAD_REQUEST,
-      "Invalid URL: error parsing TXID",
+      "Invalid URL: Cannot parse `output` with value `foo:0`: error parsing TXID",
     );
   }
 
@@ -1877,7 +1878,7 @@ mod tests {
     TestServer::new().assert_response(
       "/output/foo:0",
       StatusCode::BAD_REQUEST,
-      "Invalid URL: error parsing TXID",
+      "Invalid URL: Cannot parse `output` with value `foo:0`: error parsing TXID",
     );
   }
 

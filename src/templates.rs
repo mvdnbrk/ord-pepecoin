@@ -1,4 +1,4 @@
-use {super::*, boilerplate::Boilerplate};
+use {super::*, boilerplate::{Boilerplate, Trusted}};
 
 pub(crate) use {
   address::AddressHtml,
