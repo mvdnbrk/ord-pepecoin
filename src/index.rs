@@ -140,6 +140,9 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
       Ok(ok) => Ok(Some(ok)),
       Err(bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(
         bitcoincore_rpc::jsonrpc::error::RpcError { code: -8, .. },
+      )))
+      | Err(bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(
+        bitcoincore_rpc::jsonrpc::error::RpcError { code: -5, .. },
       ))) => Ok(None),
       Err(bitcoincore_rpc::Error::JsonRpc(bitcoincore_rpc::jsonrpc::error::Error::Rpc(
         bitcoincore_rpc::jsonrpc::error::RpcError { message, .. },
