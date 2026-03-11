@@ -10,7 +10,7 @@ use {
     AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsHtml, OutputHtml,
  PageContent,
     PageHtml, PreviewAudioHtml, PreviewImageHtml, PreviewPdfHtml, PreviewTextHtml,
-    PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, TransactionHtml,
+    PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml, TransactionHtml,
   },
   axum::{
     body::Body,
@@ -737,28 +737,36 @@ impl Server {
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
   ) -> ServerResult<Response> {
+    let height = index.block_count().ok();
+    let inscriptions = index.inscription_count().unwrap_or(0);
+    let sat_index = index.has_sat_index().unwrap_or(false);
+    let unrecoverably_reorged = index.is_unrecoverably_reorged();
+
     if accept_json.0 {
       Ok(
         Json(api::Status {
           address_index: true,
           chain: page_config.chain.to_string(),
-          height: index.block_count().ok(),
-          inscriptions: index.inscription_count().unwrap_or(0),
-          sat_index: index.has_sat_index().unwrap_or(false),
-          unrecoverably_reorged: index.is_unrecoverably_reorged(),
+          height,
+          inscriptions,
+          sat_index,
+          unrecoverably_reorged,
         })
         .into_response(),
       )
-    } else if index.is_unrecoverably_reorged() {
-      Ok(
-        (
-          StatusCode::OK,
-          "unrecoverable reorg detected, please rebuild the database.",
-        )
-          .into_response(),
-      )
     } else {
-      Ok((StatusCode::OK, "OK").into_response())
+      Ok(
+        StatusHtml {
+          address_index: true,
+          chain: page_config.chain,
+          height,
+          inscriptions,
+          sat_index,
+          unrecoverably_reorged,
+        }
+        .page(page_config, sat_index)
+        .into_response(),
+      )
     }
   }
 
@@ -1669,7 +1677,7 @@ mod tests {
 
   #[test]
   fn status() {
-    TestServer::new().assert_response("/status", StatusCode::OK, "OK");
+    TestServer::new().assert_response_regex("/status", StatusCode::OK, ".*<h1>Status</h1>.*");
   }
 
   #[test]

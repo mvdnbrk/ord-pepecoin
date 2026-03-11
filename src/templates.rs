@@ -17,6 +17,7 @@ pub(crate) use {
   range::RangeHtml,
   rare::RareTxt,
   sat::SatHtml,
+  status::StatusHtml,
   transaction::TransactionHtml,
 };
 
@@ -32,6 +33,7 @@ mod preview;
 mod range;
 mod rare;
 mod sat;
+mod status;
 mod transaction;
 
 #[derive(Boilerplate)]
