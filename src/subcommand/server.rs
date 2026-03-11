@@ -79,9 +79,9 @@ pub struct InscriptionJson {
 
 #[derive(Serialize, Deserialize)]
 pub struct InscriptionsJson {
-  pub inscriptions: Vec<InscriptionId>,
-  pub prev: Option<u64>,
-  pub next: Option<u64>,
+  pub ids: Vec<InscriptionId>,
+  pub more: bool,
+  pub page_index: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1083,19 +1083,54 @@ impl Server {
     accept_json: AcceptJson,
     from: Option<u64>,
   ) -> ServerResult<Response> {
-    let (inscriptions, prev, next) = index.get_latest_inscriptions_with_prev_and_next(100, from)?;
+    let page_index = from.unwrap_or(0);
+    let count = index.inscription_count()?;
+
+    if page_index * 100 >= count {
+      if accept_json.0 {
+        return Ok(
+          Json(InscriptionsJson {
+            ids: Vec::new(),
+            more: false,
+            page_index,
+          })
+          .into_response(),
+        );
+      } else {
+        return Ok(
+          InscriptionsHtml {
+            inscriptions: Vec::new(),
+            page_index,
+            more: false,
+          }
+          .page(page_config, index.has_sat_index()?)
+          .into_response(),
+        );
+      }
+    }
+
+    let from = (count - 1) - page_index * 100;
+
+    let (inscriptions, prev, _next) =
+      index.get_latest_inscriptions_with_prev_and_next(100, Some(from))?;
+
+    let more = prev.is_some();
+
     if accept_json.0 {
-      Ok(Json(InscriptionsJson {
-        inscriptions,
-        prev,
-        next,
-      }).into_response())
+      Ok(
+        Json(InscriptionsJson {
+          ids: inscriptions,
+          more,
+          page_index,
+        })
+        .into_response(),
+      )
     } else {
       Ok(
         InscriptionsHtml {
           inscriptions,
-          next,
-          prev,
+          page_index,
+          more,
         }
         .page(page_config, index.has_sat_index()?)
         .into_response(),
@@ -2596,7 +2631,7 @@ mod tests {
   }
 
   #[test]
-  fn inscriptions_page_with_no_next() {
+  fn inscriptions_page_with_no_prev() {
     let server = TestServer::new_with_sat_index();
 
     for i in 0..101 {
@@ -2615,12 +2650,12 @@ mod tests {
     server.assert_response_regex(
       "/inscriptions",
       StatusCode::OK,
-      ".*<a class=prev href=/inscriptions/0>prev</a>\nnext.*",
+      ".*prev\n<a class=next href=/inscriptions/1>next</a>.*",
     );
   }
 
   #[test]
-  fn inscriptions_page_with_no_prev() {
+  fn inscriptions_page_with_no_next() {
     let server = TestServer::new_with_sat_index();
 
     for i in 0..101 {
@@ -2637,9 +2672,9 @@ mod tests {
     server.mine_blocks(1);
 
     server.assert_response_regex(
-      "/inscriptions/0",
+      "/inscriptions/1",
       StatusCode::OK,
-      ".*prev\n<a class=next href=/inscriptions/100>next</a>.*",
+      ".*<a class=prev href=/inscriptions/0>prev</a>\nnext.*",
     );
   }
 
