@@ -39,6 +39,7 @@ use {
 };
 
 mod error;
+mod query;
 
 pub(crate) struct AcceptJson(pub(crate) bool);
 
@@ -1045,8 +1046,15 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
-    Path(inscription_id): Path<InscriptionId>,
+    Path(DeserializeFromStr(query)): Path<DeserializeFromStr<query::Inscription>>,
   ) -> ServerResult<Response> {
+    let inscription_id = match query {
+      query::Inscription::Id(id) => id,
+      query::Inscription::Number(number) => index
+        .get_inscription_id_by_inscription_number(number)?
+        .ok_or_not_found(|| format!("inscription {number}"))?,
+    };
+
     let entry = index
       .get_inscription_entry(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
