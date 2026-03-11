@@ -20,7 +20,7 @@ fn run() {
   for attempt in 0.. {
     if let Ok(response) = reqwest::blocking::get(format!("http://localhost:{port}/status")) {
       if response.status() == 200 {
-        assert_eq!(response.text().unwrap(), "OK");
+        assert!(response.text().unwrap().contains("<h1>Status</h1>"));
         break;
       }
     }
