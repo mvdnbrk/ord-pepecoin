@@ -1,0 +1,19 @@
+<h1>Status</h1>
+<dl>
+  <dt>chain</dt>
+  <dd>{{ self.chain }}</dd>
+%% if let Some(height) = self.height {
+  <dt>height</dt>
+  <dd><a href=/block/{{ height }}>{{ height }}</a></dd>
+%% }
+  <dt>inscriptions</dt>
+  <dd><a href=/inscriptions>{{ self.inscriptions }}</a></dd>
+  <dt>version</dt>
+  <dd>{{ env!("CARGO_PKG_VERSION") }}</dd>
+  <dt>unrecoverably reorged</dt>
+  <dd>{{ self.unrecoverably_reorged }}</dd>
+  <dt>address index</dt>
+  <dd>{{ self.address_index }}</dd>
+  <dt>sat index</dt>
+  <dd>{{ self.sat_index }}</dd>
+</dl>
