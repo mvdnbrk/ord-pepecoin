@@ -190,7 +190,7 @@ impl Server {
         .route("/feed.xml", get(Self::feed))
         .route("/input/:block/:transaction/:input", get(Self::input))
         .route("/inscription/:inscription_id", get(Self::inscription))
-        .route("/inscriptions", get(Self::inscriptions))
+        .route("/inscriptions", get(Self::inscriptions).post(Self::inscriptions_batch))
         .route("/inscriptions/:from", get(Self::inscriptions_from))
 
         .route("/install.sh", get(Self::install_script))
@@ -471,6 +471,52 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn inscriptions_batch(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Json(inscription_ids): Json<Vec<InscriptionId>>,
+  ) -> ServerResult<Json<Vec<api::Inscription>>> {
+    let mut inscriptions = Vec::new();
+
+    for id in inscription_ids {
+      let entry = index
+        .get_inscription_entry(id)?
+        .ok_or_not_found(|| format!("inscription {id}"))?;
+
+      let inscription = index
+        .get_inscription_by_id(id)?
+        .ok_or_not_found(|| format!("inscription {id}"))?;
+
+      let satpoint = index
+        .get_inscription_satpoint_by_id(id)?
+        .ok_or_not_found(|| format!("inscription {id}"))?;
+
+      let output = index
+        .get_transaction(satpoint.outpoint.txid)?
+        .ok_or_not_found(|| format!("inscription {id} current transaction"))?
+        .output
+        .into_iter()
+        .nth(satpoint.outpoint.vout.try_into().unwrap())
+        .ok_or_not_found(|| format!("inscription {id} current transaction output"))?;
+
+      inscriptions.push(api::Inscription {
+        address: page_config.chain.address_from_script(&output.script_pubkey).map(|a| a.to_string()).ok(),
+        content_length: inscription.body().map(|body: &[u8]| body.len()),
+        content_type: inscription.content_type().map(|s: &str| s.to_string()),
+        genesis_fee: entry.fee,
+        genesis_height: entry.height,
+        genesis_transaction: id.txid,
+        inscription_id: id,
+        location: satpoint,
+        number: entry.number,
+        output_value: Some(output.value),
+        timestamp: entry.timestamp as i64,
+      });
+    }
+
+    Ok(Json(inscriptions))
   }
 
   async fn outputs_batch(
