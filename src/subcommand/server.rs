@@ -565,56 +565,8 @@ impl Server {
     chain: Chain,
     outpoint: OutPoint,
   ) -> Result<OutputJson> {
-    let indexed = index.is_output_indexed(outpoint)?;
-
-    let mut sat_ranges: Option<Vec<(u64, u64)>> = None;
-    if index.has_sat_index()? {
-      if let Some(List::Unspent(ranges)) = index.list(outpoint)? {
-        sat_ranges = Some(
-          ranges
-            .into_iter()
-            .map(|(start, end)| (u64::try_from(start).unwrap(), u64::try_from(end).unwrap()))
-            .collect(),
-        );
-      }
-    }
-
-    let output = if outpoint == OutPoint::null() {
-      let mut value = 0;
-
-      if let Some(ranges) = &sat_ranges {
-        for (start, end) in ranges.iter().cloned() {
-          value += end - start;
-        }
-      }
-
-      Some(TxOut {
-        value,
-        script_pubkey: Script::new(),
-      })
-    } else {
-      index
-        .get_transaction(outpoint.txid)?
-        .and_then(|tx| tx.output.into_iter().nth(outpoint.vout as usize))
-    };
-
-    let inscriptions = index.get_inscriptions_on_output(outpoint)?;
-
-    Ok(if let Some(output) = output {
-      OutputJson {
-        address: chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
-        confirmations: index.get_confirmations(outpoint.txid)?,
-        indexed,
-        inscriptions,
-        outpoint,
-        sat_ranges,
-        script_pubkey: output.script_pubkey.to_string(),
-        spent: !indexed,
-        transaction: outpoint.txid,
-        value: output.value,
-      }
-    } else {
-      OutputJson {
+    let Some(info) = index.get_output_info(outpoint)? else {
+      return Ok(OutputJson {
         address: None,
         confirmations: 0,
         indexed: false,
@@ -625,7 +577,23 @@ impl Server {
         spent: true,
         transaction: outpoint.txid,
         value: 0,
-      }
+      });
+    };
+
+    Ok(OutputJson {
+      address: chain
+        .address_from_script(&info.txout.script_pubkey)
+        .map(|a| a.to_string())
+        .ok(),
+      confirmations: info.confirmations,
+      indexed: info.indexed,
+      inscriptions: info.inscriptions,
+      outpoint,
+      sat_ranges: info.sat_ranges,
+      script_pubkey: info.txout.script_pubkey.to_string(),
+      spent: info.spent,
+      transaction: outpoint.txid,
+      value: info.txout.value,
     })
   }
 

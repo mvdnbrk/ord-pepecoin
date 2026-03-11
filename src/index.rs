@@ -1,6 +1,15 @@
 use crate::inscription::ParsedInscription;
 use std::io::Cursor;
 
+pub(crate) struct OutputInfo {
+  pub(crate) txout: TxOut,
+  pub(crate) indexed: bool,
+  pub(crate) spent: bool,
+  pub(crate) confirmations: u32,
+  pub(crate) sat_ranges: Option<Vec<(u64, u64)>>,
+  pub(crate) inscriptions: Vec<InscriptionId>,
+}
+
 use {
   self::{
     entry::{
@@ -987,26 +996,79 @@ impl Index {
     )
   }
 
-  pub(crate) fn is_output_indexed(&self, outpoint: OutPoint) -> Result<bool> {
-    Ok(
-      self
-        .database
-        .begin_read()?
-        .open_table(OUTPOINT_TO_VALUE)?
-        .get(&outpoint.store())?
-        .is_some(),
-    )
-  }
+  /// Returns (txout, indexed, spent, confirmations, sat_ranges, inscriptions) for an outpoint.
+  /// Returns None if the transaction is not found.
+  pub(crate) fn get_output_info(
+    &self,
+    outpoint: OutPoint,
+  ) -> Result<Option<OutputInfo>> {
+    let sat_ranges = if self.has_sat_index()? {
+      if let Some(List::Unspent(ranges)) = self.list(outpoint)? {
+        Some(
+          ranges
+            .into_iter()
+            .map(|(start, end)| (u64::try_from(start).unwrap(), u64::try_from(end).unwrap()))
+            .collect(),
+        )
+      } else {
+        None
+      }
+    } else {
+      None
+    };
 
-  pub(crate) fn get_confirmations(&self, txid: Txid) -> Result<u32> {
-    Ok(
-      self
+    let indexed = self
+      .database
+      .begin_read()?
+      .open_table(OUTPOINT_TO_VALUE)?
+      .get(&outpoint.store())?
+      .is_some();
+
+    let confirmations;
+    let spent;
+    let txout;
+
+    if outpoint == OutPoint::null() {
+      let mut value = 0;
+      if let Some(ref ranges) = sat_ranges {
+        for &(start, end) in ranges {
+          value += end - start;
+        }
+      }
+      confirmations = 0;
+      spent = false;
+      txout = TxOut {
+        value,
+        script_pubkey: Script::new(),
+      };
+    } else {
+      let Some(info) = self
         .client
-        .get_raw_transaction_info(&txid)
+        .get_raw_transaction_info(&outpoint.txid)
         .into_option()?
-        .and_then(|info| info.confirmations)
-        .unwrap_or(0),
-    )
+      else {
+        return Ok(None);
+      };
+
+      let Some(output) = info.transaction()?.output.into_iter().nth(outpoint.vout as usize) else {
+        return Ok(None);
+      };
+
+      confirmations = info.confirmations.unwrap_or(0);
+      spent = !indexed;
+      txout = output;
+    }
+
+    let inscriptions = self.get_inscriptions_on_output(outpoint)?;
+
+    Ok(Some(OutputInfo {
+      txout,
+      indexed,
+      spent,
+      confirmations,
+      sat_ranges,
+      inscriptions,
+    }))
   }
 
   pub(crate) fn get_homepage_inscriptions(&self) -> Result<Vec<InscriptionId>> {
