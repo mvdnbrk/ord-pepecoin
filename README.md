@@ -135,10 +135,6 @@ Raw inscription content is always available at `/content/<inscription_id>`.
 
 The indexer automatically creates database savepoints near the chain tip. If a blockchain reorganization is detected, it restores the most recent savepoint and re-indexes from there. This is important for Pepecoin due to its 1-minute block times which make reorgs more frequent than Bitcoin.
 
-## Graceful Shutdown
-
-The server handles SIGTERM signals from systemd, ensuring the index database is committed cleanly before the process exits. This prevents database corruption on service restarts.
-
 ## Wallet
 
 `ord-pepecoin` relies on Pepecoin Core for private key management and transaction signing.
@@ -159,7 +155,6 @@ Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large 
 
 - [ordinals/ord](https://github.com/ordinals/ord) — Original Bitcoin ordinals indexer
 - [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin) — Dogecoin adaptation with `script_sig` support
-- [mvdnbrk/rust-pepecoin](https://github.com/mvdnbrk/rust-pepecoin) — Pepecoin Rust library
 
 ## License
 
