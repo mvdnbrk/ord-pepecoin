@@ -987,6 +987,28 @@ impl Index {
     )
   }
 
+  pub(crate) fn is_output_indexed(&self, outpoint: OutPoint) -> Result<bool> {
+    Ok(
+      self
+        .database
+        .begin_read()?
+        .open_table(OUTPOINT_TO_VALUE)?
+        .get(&outpoint.store())?
+        .is_some(),
+    )
+  }
+
+  pub(crate) fn get_confirmations(&self, txid: Txid) -> Result<u32> {
+    Ok(
+      self
+        .client
+        .get_raw_transaction_info(&txid)
+        .into_option()?
+        .and_then(|info| info.confirmations)
+        .unwrap_or(0),
+    )
+  }
+
   pub(crate) fn get_homepage_inscriptions(&self) -> Result<Vec<InscriptionId>> {
     Ok(
       self

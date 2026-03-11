@@ -17,7 +17,7 @@ use {
     headers::UserAgent,
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
-    routing::get,
+    routing::{get, post},
     Json, Router, TypedHeader,
   },
   axum_server::Handle,
@@ -86,11 +86,16 @@ pub struct InscriptionsJson {
 
 #[derive(Serialize, Deserialize)]
 pub struct OutputJson {
-  pub value: u64,
-  pub script_pubkey: String,
   pub address: Option<String>,
-  pub transaction: Txid,
+  pub confirmations: u32,
+  pub indexed: bool,
   pub inscriptions: Vec<InscriptionId>,
+  pub outpoint: OutPoint,
+  pub sat_ranges: Option<Vec<(u64, u64)>>,
+  pub script_pubkey: String,
+  pub spent: bool,
+  pub transaction: Txid,
+  pub value: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -260,6 +265,7 @@ impl Server {
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/:sat", get(Self::ordinal))
         .route("/output/:output", get(Self::output))
+        .route("/outputs", post(Self::outputs_batch))
         .route("/preview/:inscription_id", get(Self::preview))
         .route("/range/:start/:end", get(Self::range))
         .route("/rare.txt", get(Self::rare_txt))
@@ -488,46 +494,40 @@ impl Server {
     accept_json: AcceptJson,
     Path(outpoint): Path<OutPoint>,
   ) -> ServerResult<Response> {
-    let list = if index.has_sat_index()? {
-      index.list(outpoint)?
-    } else {
-      None
-    };
-
-    let output = if outpoint == OutPoint::null() {
-      let mut value = 0;
-
-      if let Some(List::Unspent(ranges)) = &list {
-        for (start, end) in ranges {
-          value += u64::try_from(end - start).unwrap();
-        }
-      }
-
-      TxOut {
-        value,
-        script_pubkey: Script::new(),
-      }
-    } else {
-      index
-        .get_transaction(outpoint.txid)?
-        .ok_or_not_found(|| format!("output {outpoint}"))?
-        .output
-        .into_iter()
-        .nth(outpoint.vout as usize)
-        .ok_or_not_found(|| format!("output {outpoint}"))?
-    };
-
-    let inscriptions = index.get_inscriptions_on_output(outpoint)?;
-
     if accept_json.0 {
-      Ok(Json(OutputJson {
-        value: output.value,
-        script_pubkey: output.script_pubkey.to_string(),
-        address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
-        transaction: outpoint.txid,
-        inscriptions,
-      }).into_response())
+      Ok(Json(Self::get_output_json(index, page_config.chain, outpoint)?).into_response())
     } else {
+      let list = if index.has_sat_index()? {
+        index.list(outpoint)?
+      } else {
+        None
+      };
+
+      let output = if outpoint == OutPoint::null() {
+        let mut value = 0;
+
+        if let Some(List::Unspent(ranges)) = &list {
+          for (start, end) in ranges {
+            value += u64::try_from(end - start).unwrap();
+          }
+        }
+
+        TxOut {
+          value,
+          script_pubkey: Script::new(),
+        }
+      } else {
+        index
+          .get_transaction(outpoint.txid)?
+          .ok_or_not_found(|| format!("output {outpoint}"))?
+          .output
+          .into_iter()
+          .nth(outpoint.vout as usize)
+          .ok_or_not_found(|| format!("output {outpoint}"))?
+      };
+
+      let inscriptions = index.get_inscriptions_on_output(outpoint)?;
+
       Ok(
         OutputHtml {
           outpoint,
@@ -540,6 +540,93 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn outputs_batch(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Json(outpoints): Json<Vec<OutPoint>>,
+  ) -> ServerResult<Json<Vec<OutputJson>>> {
+    let mut outputs = Vec::new();
+
+    for outpoint in outpoints {
+      outputs.push(Self::get_output_json(
+        index.clone(),
+        page_config.chain,
+        outpoint,
+      )?);
+    }
+
+    Ok(Json(outputs))
+  }
+
+  fn get_output_json(
+    index: Arc<Index>,
+    chain: Chain,
+    outpoint: OutPoint,
+  ) -> Result<OutputJson> {
+    let indexed = index.is_output_indexed(outpoint)?;
+
+    let mut sat_ranges: Option<Vec<(u64, u64)>> = None;
+    if index.has_sat_index()? {
+      if let Some(List::Unspent(ranges)) = index.list(outpoint)? {
+        sat_ranges = Some(
+          ranges
+            .into_iter()
+            .map(|(start, end)| (u64::try_from(start).unwrap(), u64::try_from(end).unwrap()))
+            .collect(),
+        );
+      }
+    }
+
+    let output = if outpoint == OutPoint::null() {
+      let mut value = 0;
+
+      if let Some(ranges) = &sat_ranges {
+        for (start, end) in ranges.iter().cloned() {
+          value += end - start;
+        }
+      }
+
+      Some(TxOut {
+        value,
+        script_pubkey: Script::new(),
+      })
+    } else {
+      index
+        .get_transaction(outpoint.txid)?
+        .and_then(|tx| tx.output.into_iter().nth(outpoint.vout as usize))
+    };
+
+    let inscriptions = index.get_inscriptions_on_output(outpoint)?;
+
+    Ok(if let Some(output) = output {
+      OutputJson {
+        address: chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
+        confirmations: index.get_confirmations(outpoint.txid)?,
+        indexed,
+        inscriptions,
+        outpoint,
+        sat_ranges,
+        script_pubkey: output.script_pubkey.to_string(),
+        spent: !indexed,
+        transaction: outpoint.txid,
+        value: output.value,
+      }
+    } else {
+      OutputJson {
+        address: None,
+        confirmations: 0,
+        indexed: false,
+        inscriptions: Vec::new(),
+        outpoint,
+        sat_ranges: None,
+        script_pubkey: String::new(),
+        spent: true,
+        transaction: outpoint.txid,
+        value: 0,
+      }
+    })
   }
 
   async fn range(
@@ -1232,6 +1319,17 @@ mod tests {
         log::error!("{error}");
       }
       reqwest::blocking::get(self.join_url(path.as_ref())).unwrap()
+    }
+
+    fn post(&self, path: impl AsRef<str>, body: &impl serde::Serialize) -> reqwest::blocking::Response {
+      if let Err(error) = self.index.update() {
+        log::error!("{error}");
+      }
+      reqwest::blocking::Client::new()
+        .post(self.join_url(path.as_ref()))
+        .json(body)
+        .send()
+        .unwrap()
     }
 
     fn join_url(&self, url: &str) -> Url {
@@ -2584,6 +2682,44 @@ mod tests {
       response.headers().get(header::CACHE_CONTROL).unwrap(),
       "max-age=31536000, immutable"
     );
+  }
+
+  #[test]
+  fn outputs() {
+    let server = TestServer::new_with_sat_index();
+    server.mine_blocks(1);
+    let txid = server
+      .pepecoin_rpc_server
+      .broadcast_tx(TransactionTemplate {
+        inputs: &[(1, 0, 0)],
+        ..Default::default()
+      });
+    server.mine_blocks(1);
+
+    let outpoint = OutPoint::new(txid, 0);
+
+    let response = server.post("/outputs", &vec![outpoint.to_string()]);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let outputs: Vec<OutputJson> = serde_json::from_str(&response.text().unwrap()).unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].outpoint, outpoint);
+    assert_eq!(outputs[0].value, 50 * 100_000_000);
+    assert_eq!(outputs[0].confirmations, 1);
+    assert!(outputs[0].indexed);
+    assert!(!outputs[0].spent);
+
+    let outpoint_missing = "0000000000000000000000000000000000000000000000000000000000000000:0";
+    let response = server.post("/outputs", &vec![outpoint.to_string(), outpoint_missing.to_string()]);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let outputs: Vec<OutputJson> = serde_json::from_str(&response.text().unwrap()).unwrap();
+    assert_eq!(outputs.len(), 2);
+    assert_eq!(outputs[0].outpoint, outpoint);
+    assert_eq!(outputs[1].outpoint, outpoint_missing.parse().unwrap());
+    assert!(!outputs[1].indexed);
+    assert!(outputs[1].spent);
+    assert_eq!(outputs[1].value, 0);
   }
 
   #[test]
