@@ -1,67 +1,64 @@
 use {super::*, crate::inscription::ParsedInscription, redb::MultimapTable};
 
 pub(super) struct Flotsam {
-  inscription_id: InscriptionId,
-  offset: u64,
-  origin: Origin,
+  pub(crate) inscription_id: InscriptionId,
+  pub(crate) offset: u64,
+  pub(crate) origin: Origin,
 }
 
-enum Origin {
+pub(crate) enum Origin {
   New(u64),
   Old(SatPoint),
 }
 
-pub(super) struct InscriptionUpdater<'a, 'db, 'tx> {
+pub(super) struct InscriptionUpdater<'a, 'tx> {
   flotsam: Vec<Flotsam>,
   height: u64,
-  id_to_satpoint: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static SatPointValue>,
-  id_to_txids: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static [u8]>,
-  txid_to_tx: &'a mut Table<'db, 'tx, &'static [u8], &'static [u8]>,
-  partial_txid_to_txids: &'a mut Table<'db, 'tx, &'static [u8], &'static [u8]>,
+  id_to_satpoint: &'a mut Table<'tx, &'static InscriptionIdValue, &'static SatPointValue>,
+  id_to_txids: &'a mut Table<'tx, &'static InscriptionIdValue, &'static [u8]>,
+  txid_to_tx: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
+  partial_txid_to_txids: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
   value_receiver: &'a mut Receiver<u64>,
-  id_to_entry: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
+  id_to_entry: &'a mut Table<'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
   lost_sats: u64,
   next_number: u64,
-  number_to_id: &'a mut Table<'db, 'tx, u64, &'static InscriptionIdValue>,
-  outpoint_to_value: &'a mut Table<'db, 'tx, &'static OutPointValue, u64>,
+  number_to_id: &'a mut Table<'tx, u64, &'static InscriptionIdValue>,
+  outpoint_to_value: &'a mut Table<'tx, &'static OutPointValue, u64>,
   reward: u64,
-  sat_to_inscription_id: &'a mut Table<'db, 'tx, u128, &'static InscriptionIdValue>,
-  satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
+  sat_to_inscription_id: &'a mut Table<'tx, u128, &'static InscriptionIdValue>,
+  satpoint_to_id: &'a mut Table<'tx, &'static SatPointValue, &'static InscriptionIdValue>,
   timestamp: u32,
   value_cache: &'a mut HashMap<OutPoint, u64>,
-  address_to_inscription_ids: &'a mut MultimapTable<'db, 'tx, &'static str, &'static InscriptionIdValue>,
-  id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
+  address_to_inscription_ids: &'a mut MultimapTable<'tx, &'static str, &'static InscriptionIdValue>,
+  id_to_address: &'a mut Table<'tx, &'static InscriptionIdValue, &'static str>,
   network: Network,
 }
 
-impl<'a, 'db, 'tx> InscriptionUpdater<'a, 'db, 'tx> {
+impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
   pub(super) fn new(
     height: u64,
-    id_to_satpoint: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static SatPointValue>,
-    id_to_txids: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static [u8]>,
-    txid_to_tx: &'a mut Table<'db, 'tx, &'static [u8], &'static [u8]>,
-    partial_txid_to_txids: &'a mut Table<'db, 'tx, &'static [u8], &'static [u8]>,
+    id_to_satpoint: &'a mut Table<'tx, &'static InscriptionIdValue, &'static SatPointValue>,
+    id_to_txids: &'a mut Table<'tx, &'static InscriptionIdValue, &'static [u8]>,
+    txid_to_tx: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
+    partial_txid_to_txids: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
     value_receiver: &'a mut Receiver<u64>,
-    id_to_entry: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
+    id_to_entry: &'a mut Table<'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
     lost_sats: u64,
-    number_to_id: &'a mut Table<'db, 'tx, u64, &'static InscriptionIdValue>,
-    outpoint_to_value: &'a mut Table<'db, 'tx, &'static OutPointValue, u64>,
-    sat_to_inscription_id: &'a mut Table<'db, 'tx, u128, &'static InscriptionIdValue>,
-    satpoint_to_id: &'a mut Table<'db, 'tx, &'static SatPointValue, &'static InscriptionIdValue>,
+    number_to_id: &'a mut Table<'tx, u64, &'static InscriptionIdValue>,
+    outpoint_to_value: &'a mut Table<'tx, &'static OutPointValue, u64>,
+    sat_to_inscription_id: &'a mut Table<'tx, u128, &'static InscriptionIdValue>,
+    satpoint_to_id: &'a mut Table<'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
     value_cache: &'a mut HashMap<OutPoint, u64>,
-    address_to_inscription_ids: &'a mut MultimapTable<'db, 'tx, &'static str, &'static InscriptionIdValue>,
-    id_to_address: &'a mut Table<'db, 'tx, &'static InscriptionIdValue, &'static str>,
+    address_to_inscription_ids: &'a mut MultimapTable<'tx, &'static str, &'static InscriptionIdValue>,
+    id_to_address: &'a mut Table<'tx, &'static InscriptionIdValue, &'static str>,
     network: Network,
   ) -> Result<Self> {
     let next_number = number_to_id
       .iter()?
-      .rev()
-      .map(|result| {
-        let (number, _id) = result.expect("Error reading from inscription number table");
-        number.value() + 1
-      })
-      .next()
+      .next_back()
+      .transpose()?
+      .map(|(number, _id)| number.value() + 1)
       .unwrap_or(0);
 
     Ok(Self {

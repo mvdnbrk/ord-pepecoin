@@ -219,7 +219,7 @@ impl Options {
     Ok(client)
   }
 
-  pub(crate) fn pepecoin_rpc_client_for_wallet_command(&self, create: bool) -> Result<Client> {
+  pub(crate) fn pepecoin_rpc_client_for_wallet_command(&self, _create: bool) -> Result<Client> {
     let client = self.pepecoin_rpc_client()?;
 
     const MIN_VERSION: usize = 1010000;

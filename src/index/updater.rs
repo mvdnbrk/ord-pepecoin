@@ -216,7 +216,7 @@ impl Updater {
         let blocks_behind = starting_height.saturating_sub(self.height);
         if blocks_behind < SAVEPOINT_INTERVAL * (MAX_SAVEPOINTS as u64 + 1) {
           if self.height % SAVEPOINT_INTERVAL == 0 {
-            wtx.set_durability(redb::Durability::Immediate);
+            wtx.set_durability(redb::Durability::Immediate)?;
             let savepoint_id = wtx.persistent_savepoint()?;
             log::info!("Created savepoint {} at height {}", savepoint_id, self.height);
 

@@ -18,8 +18,8 @@ use {
   indicatif::{ProgressBar, ProgressStyle},
   log::log_enabled,
   redb::{
-    Database, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table,
-    TableDefinition, TableError, WriteTransaction,
+    Database, MultimapTableDefinition, ReadableTable, Table,
+    TableDefinition, WriteTransaction, ReadableDatabase, ReadableTableMetadata, TableError,
   },
   std::collections::HashMap,
   std::io::{self, BufWriter, Write},
@@ -223,7 +223,8 @@ impl Index {
       let database = Database::builder()
         .set_cache_size(1024 * 1024 * 1024)
         .create(&path)?;
-        let tx = database.begin_write()?;
+        let mut tx = database.begin_write()?;
+        tx.set_quick_repair(true);
 
         tx.open_table(HEIGHT_TO_BLOCK_HASH)?;
         tx.open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?;
@@ -534,21 +535,24 @@ impl Index {
     Ok(hash)
   }
 
-  fn begin_read(&self) -> Result<rtx::Rtx<'_>> {
+  fn begin_read(&self) -> Result<rtx::Rtx> {
     Ok(rtx::Rtx(self.database.begin_read()?))
   }
 
-  fn begin_write(&self) -> Result<WriteTransaction<'_>> {
-    if cfg!(test) {
+  fn begin_write(&self) -> Result<WriteTransaction> {
+    if integration_test() {
       let mut tx = self.database.begin_write()?;
-      tx.set_durability(redb::Durability::None);
+      tx.set_durability(redb::Durability::None)?;
+      tx.set_quick_repair(true);
       Ok(tx)
     } else {
       let mut tx = self.database.begin_write()?;
-      tx.set_durability(redb::Durability::Immediate);
+      tx.set_durability(redb::Durability::Immediate)?;
+      tx.set_quick_repair(true);
       Ok(tx)
     }
   }
+
 
   fn increment_statistic(wtx: &WriteTransaction, statistic: Statistic, n: u64) -> Result {
     let mut statistic_to_count = wtx.open_table(STATISTIC_TO_COUNT)?;
