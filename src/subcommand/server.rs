@@ -501,18 +501,28 @@ impl Server {
         .nth(satpoint.outpoint.vout.try_into().unwrap())
         .ok_or_not_found(|| format!("inscription {id} current transaction output"))?;
 
+      let previous = if let Some(previous) = entry.number.checked_sub(1) {
+        index.get_inscription_id_by_inscription_number(previous)?
+      } else {
+        None
+      };
+
+      let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
+
       inscriptions.push(api::Inscription {
         address: page_config.chain.address_from_script(&output.script_pubkey).map(|a| a.to_string()).ok(),
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
-        genesis_fee: entry.fee,
-        genesis_height: entry.height,
-        genesis_transaction: id.txid,
-        inscription_id: id,
-        location: satpoint,
+        fee: entry.fee,
+        height: entry.height,
+        id,
+        next,
         number: entry.number,
-        output_value: Some(output.value),
+        previous,
+        sat: entry.sat,
+        satpoint,
         timestamp: entry.timestamp as i64,
+        value: Some(output.value),
       });
     }
 
@@ -1044,32 +1054,35 @@ impl Server {
       .nth(satpoint.outpoint.vout.try_into().unwrap())
       .ok_or_not_found(|| format!("inscription {inscription_id} current transaction output"))?;
 
+    let previous = if let Some(previous) = entry.number.checked_sub(1) {
+      Some(
+        index
+          .get_inscription_id_by_inscription_number(previous)?
+          .ok_or_not_found(|| format!("inscription {previous}"))?,
+      )
+    } else {
+      None
+    };
+
+    let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
+
     if accept_json.0 {
       Ok(Json(api::Inscription {
         address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
-        genesis_fee: entry.fee,
-        genesis_height: entry.height,
-        genesis_transaction: inscription_id.txid,
-        inscription_id,
-        location: satpoint,
+        fee: entry.fee,
+        height: entry.height,
+        id: inscription_id,
+        next,
         number: entry.number,
-        output_value: Some(output.value),
+        previous,
+        sat: entry.sat,
+        satpoint,
         timestamp: entry.timestamp as i64,
+        value: Some(output.value),
       }).into_response())
     } else {
-      let previous = if let Some(previous) = entry.number.checked_sub(1) {
-        Some(
-          index
-            .get_inscription_id_by_inscription_number(previous)?
-            .ok_or_not_found(|| format!("inscription {previous}"))?,
-        )
-      } else {
-        None
-      };
-
-      let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
       Ok(
         InscriptionHtml {
