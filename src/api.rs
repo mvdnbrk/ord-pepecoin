@@ -5,14 +5,16 @@ pub struct Inscription {
   pub address: Option<String>,
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
-  pub genesis_fee: u64,
-  pub genesis_height: u64,
-  pub genesis_transaction: Txid,
-  pub inscription_id: InscriptionId,
-  pub location: SatPoint,
+  pub fee: u64,
+  pub height: u64,
+  pub id: InscriptionId,
+  pub next: Option<InscriptionId>,
   pub number: u64,
-  pub output_value: Option<u64>,
+  pub previous: Option<InscriptionId>,
+  pub sat: Option<Sat>,
+  pub satpoint: SatPoint,
   pub timestamp: i64,
+  pub value: Option<u64>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
