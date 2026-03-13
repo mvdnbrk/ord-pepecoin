@@ -3,10 +3,11 @@ use {super::*, ord::subcommand::wallet::transactions::Output};
 #[test]
 fn transactions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server);
+  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server, &ord_server);
 
   rpc_server.mine_blocks(1);
 
@@ -21,10 +22,11 @@ fn transactions() {
 #[test]
 fn transactions_with_limit() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server);
+  let Inscribe { commit, reveal, .. } = inscribe(&rpc_server, &ord_server);
 
   rpc_server.mine_blocks(1);
 

@@ -1,24 +1,21 @@
-use {super::*, crate::wallet::Wallet, std::collections::BTreeSet};
+use {super::*, crate::wallet::Wallet};
 
 #[derive(Serialize, Deserialize)]
 pub struct Output {
   pub cardinal: u64,
 }
 
-pub(crate) fn run(options: Options) -> Result {
-  let index = Index::open(&options)?;
-  index.update()?;
-
-  let inscription_outputs = index
-    .get_inscriptions(None)?
+pub(crate) fn run(wallet: Wallet) -> Result {
+  let inscribed_outputs = wallet
+    .inscriptions()
     .keys()
     .map(|satpoint| satpoint.outpoint)
-    .collect::<BTreeSet<OutPoint>>();
+    .collect::<HashSet<OutPoint>>();
 
   let mut balance = 0;
-  for (outpoint, amount) in index.get_unspent_outputs(Wallet::load(&options)?)? {
-    if !inscription_outputs.contains(&outpoint) {
-      balance += amount.to_sat()
+  for (outpoint, txout) in wallet.utxos() {
+    if !inscribed_outputs.contains(outpoint) {
+      balance += txout.value;
     }
   }
 

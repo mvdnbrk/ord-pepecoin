@@ -24,11 +24,8 @@ pub struct OutputRare {
 }
 
 impl Sats {
-  pub(crate) fn run(&self, options: Options) -> Result {
-    let index = Index::open(&options)?;
-    index.update()?;
-
-    let utxos = index.get_unspent_output_ranges(Wallet::load(&options)?)?;
+  pub(crate) fn run(&self, wallet: Wallet) -> Result {
+    let utxos = wallet.get_unspent_output_ranges()?;
 
     if let Some(path) = &self.tsv {
       let mut output = Vec::new();

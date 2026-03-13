@@ -34,6 +34,7 @@ pub(crate) struct CommandBuilder {
   expected_stderr: Expected,
   expected_stdout: Expected,
   rpc_server_url: Option<String>,
+  server_url: Option<String>,
   tempdir: TempDir,
 }
 
@@ -45,6 +46,7 @@ impl CommandBuilder {
       expected_stderr: Expected::String(String::new()),
       expected_stdout: Expected::String(String::new()),
       rpc_server_url: None,
+      server_url: None,
       tempdir: TempDir::new().unwrap(),
     }
   }
@@ -57,6 +59,13 @@ impl CommandBuilder {
   pub(crate) fn rpc_server(self, rpc_server: &test_bitcoincore_rpc::Handle) -> Self {
     Self {
       rpc_server_url: Some(rpc_server.url()),
+      ..self
+    }
+  }
+
+  pub(crate) fn ord_server(self, ord_server: &TestServer) -> Self {
+    Self {
+      server_url: Some(ord_server.url().to_string()),
       ..self
     }
   }
@@ -101,6 +110,10 @@ impl CommandBuilder {
         "--cookie-file",
         cookiefile.to_str().unwrap(),
       ]);
+    }
+
+    if let Some(server_url) = &self.server_url {
+      command.args(["--server-url", server_url]);
     }
 
     command

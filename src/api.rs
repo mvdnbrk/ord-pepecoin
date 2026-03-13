@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscription {
   pub address: Option<String>,
   pub content_length: Option<usize>,
@@ -17,14 +17,14 @@ pub struct Inscription {
   pub value: Option<u64>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscriptions {
   pub ids: Vec<InscriptionId>,
   pub more: bool,
   pub page_index: u64,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Output {
   pub address: Option<String>,
   pub confirmations: u32,
@@ -38,13 +38,13 @@ pub struct Output {
   pub value: u64,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Address {
   pub inscriptions: Vec<InscriptionId>,
   pub outputs: Vec<OutPoint>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Status {
   pub address_index: bool,
   pub chain: String,
@@ -54,7 +54,7 @@ pub struct Status {
   pub unrecoverably_reorged: bool,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Block {
   pub hash: BlockHash,
   pub target: String,
@@ -72,7 +72,7 @@ pub struct Block {
   pub inscriptions: Vec<InscriptionId>,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct OutputInfo {
   pub txout: TxOut,
   pub indexed: bool,

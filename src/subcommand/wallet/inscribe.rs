@@ -50,63 +50,43 @@ pub(crate) struct Inscribe {
   pub(crate) no_backup: bool,
   #[clap(long, help = "Send inscription to <DESTINATION>.")]
   pub(crate) destination: Option<Address>,
-  // TODO: Parent/child disabled until tag format collision with countdown is resolved.
-  // See memory/parent-child-inscriptions.md for details.
-  // #[clap(long, help = "Parent inscription <PARENT>.")]
-  // pub(crate) parent: Option<InscriptionId>,
   #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
   pub(crate) postage: Option<Amount>,
 }
 
 impl Inscribe {
-  pub(crate) fn run(self, options: Options) -> Result {
-    let inscription = Inscription::from_file(options.chain(), &self.file)?;
+  pub(crate) fn run(self, wallet: Wallet) -> Result {
+    let inscription = Inscription::from_file(wallet.chain(), &self.file)?;
 
+    let client = wallet.bitcoin_client();
 
+    let utxos = wallet
+      .utxos()
+      .iter()
+      .map(|(outpoint, txout)| (*outpoint, Amount::from_sat(txout.value)))
+      .collect::<BTreeMap<OutPoint, Amount>>();
 
-    let index = Index::open(&options)?;
-    index.update()?;
+    let inscriptions = wallet.inscriptions().iter().map(|(sp, ids)| (*sp, ids[0])).collect::<BTreeMap<SatPoint, InscriptionId>>();
 
-    let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
-
-    let network_info: serde_json::Value = client
-      .call("getnetworkinfo", &[])
-      .context("failed to get network info")?;
-    let version = network_info["version"]
-      .as_u64()
-      .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))? as usize;
-    if version < 1010000 {
-      let major = version / 1000000;
-      let minor = (version % 1000000) / 10000;
-      let patch = (version % 10000) / 100;
-      bail!("Pepecoin Core 1.1.0.0 or newer required, current version is {}.{}.{}",
-        major, minor, patch
-      );
-    }
-
-    let utxos = index.get_unspent_outputs(Wallet::load(&options)?)?;
-
-    let inscriptions = index.get_inscriptions(None)?;
-
-    let commit_tx_change = [get_change_address(&client)?, get_change_address(&client)?];
+    let commit_tx_change = [get_change_address(client)?, get_change_address(client)?];
 
     let reveal_tx_destination = self
       .destination
       .clone()
       .map(Ok)
-      .unwrap_or_else(|| get_change_address(&client))?;
+      .unwrap_or_else(|| get_change_address(client))?;
 
-    let (pubkey, privkey) = self.get_key_pair(&client)?;
+    let (pubkey, privkey) = self.get_key_pair(client)?;
 
-    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(options.chain().default_fee_rate()).unwrap());
+    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
-    let postage = self.postage.unwrap_or(options.chain().default_postage());
+    let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
     let (txs, scripts, fees) = Inscribe::create_inscription_transactions(
       self.satpoint,
       inscription,
       inscriptions,
-      options.chain().network(),
+      wallet.chain().network(),
       utxos.clone(),
       commit_tx_change,
       reveal_tx_destination,

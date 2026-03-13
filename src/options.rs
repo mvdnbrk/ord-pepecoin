@@ -1,6 +1,6 @@
 use {super::*, bitcoincore_rpc::Auth};
 
-#[derive(Clone, Default, Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 #[clap(group(
   ArgGroup::new("chains")
     .required(false)
@@ -45,6 +45,35 @@ pub(crate) struct Options {
   pub(crate) testnet: bool,
   #[clap(long, default_value = "ord", help = "Use wallet named <WALLET>.")]
   pub(crate) wallet: String,
+  #[clap(
+    long,
+    default_value = "http://localhost:8383",
+    help = "Use ord running at <SERVER_URL>."
+  )]
+  pub(crate) server_url: Url,
+}
+
+impl Default for Options {
+  fn default() -> Self {
+    Self {
+      pepecoin_data_dir: None,
+      chain_argument: Chain::Mainnet,
+      config: None,
+      config_dir: None,
+      cookie_file: None,
+      data_dir: None,
+      first_inscription_height: None,
+      height_limit: None,
+      index: None,
+      index_sats: false,
+      regtest: false,
+      rpc_url: None,
+      signet: false,
+      testnet: false,
+      wallet: "ord".to_string(),
+      server_url: Url::parse("http://localhost:8383").unwrap(),
+    }
+  }
 }
 
 impl Options {

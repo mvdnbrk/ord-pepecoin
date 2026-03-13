@@ -68,6 +68,7 @@ use {
   },
   tempfile::TempDir,
   tokio::{runtime::Runtime, task},
+  url::Url,
 };
 
 pub use crate::{

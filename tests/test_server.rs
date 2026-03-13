@@ -14,6 +14,10 @@ pub(crate) struct TestServer {
 }
 
 impl TestServer {
+  pub(crate) fn spawn(rpc_server: &test_bitcoincore_rpc::Handle) -> Self {
+    Self::spawn_with_args(rpc_server, &[])
+  }
+
   pub(crate) fn spawn_with_args(rpc_server: &test_bitcoincore_rpc::Handle, args: &[&str]) -> Self {
     let tempdir = TempDir::new().unwrap();
     fs::write(tempdir.path().join(".cookie"), "foo:bar").unwrap();

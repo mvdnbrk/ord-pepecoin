@@ -5,16 +5,11 @@ pub struct Output {
   pub inscription: InscriptionId,
   pub location: SatPoint,
   pub explorer: String,
+  pub postage: u64,
 }
 
-pub(crate) fn run(options: Options) -> Result {
-  let index = Index::open(&options)?;
-  index.update()?;
-
-  let inscriptions = index.get_inscriptions(None)?;
-  let unspent_outputs = index.get_unspent_outputs(Wallet::load(&options)?)?;
-
-  let explorer = match options.chain() {
+pub(crate) fn run(wallet: Wallet) -> Result {
+  let explorer = match wallet.chain() {
     Chain::Mainnet => "https://peppool.space/inscription/",
     Chain::Regtest => "http://localhost/inscription/",
     Chain::Signet => "https://signet.peppool.space/inscription/",
@@ -23,13 +18,16 @@ pub(crate) fn run(options: Options) -> Result {
 
   let mut output = Vec::new();
 
-  for (location, inscription) in inscriptions {
-    if unspent_outputs.contains_key(&location.outpoint) {
-      output.push(Output {
-        location,
-        inscription,
-        explorer: format!("{explorer}{inscription}"),
-      });
+  for (location, inscriptions) in wallet.inscriptions() {
+    if let Some(txout) = wallet.utxos().get(&location.outpoint) {
+      for inscription in inscriptions {
+        output.push(Output {
+          location: *location,
+          inscription: *inscription,
+          explorer: format!("{explorer}{inscription}"),
+          postage: txout.value,
+        });
+      }
     }
   }
 
