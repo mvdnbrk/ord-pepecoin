@@ -910,26 +910,6 @@ impl Index {
     }
   }
 
-  pub(crate) fn get_inscriptions(
-    &self,
-    n: Option<usize>,
-  ) -> Result<BTreeMap<SatPoint, InscriptionId>> {
-    Ok(
-      self
-        .database
-        .begin_read()?
-        .open_table(SATPOINT_TO_INSCRIPTION_ID)?
-        .range::<&[u8; 44]>(&[0; 44]..)?
-        .map(|result| {
-          let (satpoint, id) =
-            result.expect("Error reading from satpoint to inscription id table");
-          (Entry::load(*satpoint.value()), Entry::load(*id.value()))
-        })
-        .take(n.unwrap_or(usize::MAX))
-        .collect(),
-    )
-  }
-
   /// Returns (txout, indexed, spent, confirmations, sat_ranges, inscriptions) for an outpoint.
   /// Returns None if the transaction is not found.
   pub(crate) fn get_output_info(
