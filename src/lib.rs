@@ -147,7 +147,7 @@ pub fn main() {
       .iter()
       .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_secs(5))));
 
-    println!("Detected Ctrl-C, attempting to shut down ord gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
+    println!("Detected Ctrl-C, attempting to shut down ord-pepecoin gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
 
     let interrupts = INTERRUPTS.fetch_add(1, atomic::Ordering::Relaxed);
 
@@ -159,10 +159,13 @@ pub fn main() {
 
   if let Err(err) = Arguments::parse().run() {
     eprintln!("error: {err}");
-    err
-      .chain()
-      .skip(1)
-      .for_each(|cause| eprintln!("because: {cause}"));
+    for (i, cause) in err.chain().skip(1).enumerate() {
+      if i == 0 {
+        eprintln!();
+        eprintln!("because:");
+      }
+      eprintln!("- {cause}");
+    }
     if env::var_os("RUST_BACKTRACE")
       .map(|val| val == "1")
       .unwrap_or_default()

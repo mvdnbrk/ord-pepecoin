@@ -48,7 +48,7 @@ pub(crate) struct Options {
   #[clap(
     long,
     default_value = "http://localhost:8383",
-    help = "Use ord running at <SERVER_URL>."
+    help = "Use ord-pepecoin server running at <SERVER_URL>."
   )]
   pub(crate) server_url: Url,
 }
@@ -242,9 +242,8 @@ impl Options {
     let ord_chain = self.chain();
 
     if rpc_chain != ord_chain {
-      bail!("Pepecoin RPC server is on {rpc_chain} but ord is on {ord_chain}");
+      bail!("Pepecoin RPC server is on {rpc_chain} but ord-pepecoin is on {ord_chain}");
     }
-
     Ok(client)
   }
 

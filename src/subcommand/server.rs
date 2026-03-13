@@ -123,9 +123,9 @@ pub(crate) struct Server {
   address: String,
   #[clap(
     long,
-    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
-  )]
-  acme_domain: Vec<String>,
+    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord-pepecoin instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
+    )]
+    pub(crate) acme_domain: Vec<String>,
   #[clap(
     long,
     help = "Listen on <HTTP_PORT> for incoming HTTP requests. [default: 80]."
@@ -1433,24 +1433,24 @@ mod tests {
   #[test]
   fn http_and_https_port_dont_conflict() {
     parse_server_args(
-      "ord server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
+      "ord-pepecoin server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
     );
   }
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ord server").1.http_port(), Some(80));
+    assert_eq!(parse_server_args("ord-pepecoin server").1.http_port(), Some(80));
   }
 
   #[test]
   fn https_port_defaults_to_none() {
-    assert_eq!(parse_server_args("ord server").1.https_port(), None);
+    assert_eq!(parse_server_args("ord-pepecoin server").1.https_port(), None);
   }
 
   #[test]
   fn https_sets_https_port_to_443() {
     assert_eq!(
-      parse_server_args("ord server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
         .https_port(),
       Some(443)
@@ -1460,7 +1460,7 @@ mod tests {
   #[test]
   fn https_disables_http() {
     assert_eq!(
-      parse_server_args("ord server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
         .http_port(),
       None
@@ -1471,7 +1471,7 @@ mod tests {
   fn https_port_disables_http() {
     assert_eq!(
       parse_server_args(
-        "ord server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .http_port(),
@@ -1483,7 +1483,7 @@ mod tests {
   fn https_port_sets_https_port() {
     assert_eq!(
       parse_server_args(
-        "ord server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1495,7 +1495,7 @@ mod tests {
   fn http_with_https_leaves_http_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .http_port(),
@@ -1507,7 +1507,7 @@ mod tests {
   fn http_with_https_leaves_https_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1580,7 +1580,7 @@ mod tests {
 
   #[test]
   fn acme_domain_defaults_to_hostname() {
-    let (_, server) = parse_server_args("ord server");
+    let (_, server) = parse_server_args("ord-pepecoin server");
     assert_eq!(
       server.acme_domains().unwrap(),
       &[sys_info::hostname().unwrap()]
@@ -1589,7 +1589,7 @@ mod tests {
 
   #[test]
   fn acme_domain_flag_is_respected() {
-    let (_, server) = parse_server_args("ord server --acme-domain example.com");
+    let (_, server) = parse_server_args("ord-pepecoin server --acme-domain example.com");
     assert_eq!(server.acme_domains().unwrap(), &["example.com"]);
   }
 
