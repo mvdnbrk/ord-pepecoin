@@ -60,7 +60,8 @@ impl Wallet {
       txid: Txid,
       vout: u32,
       amount: f64,
-      scriptPubKey: String,
+      #[serde(rename = "scriptPubKey")]
+      script_pub_key: String,
     }
 
     let unspent: Vec<UnspentEntry> = bitcoin_client
@@ -71,7 +72,7 @@ impl Wallet {
       let outpoint = OutPoint::new(entry.txid, entry.vout);
       let amount = Amount::from_btc(entry.amount)
         .map_err(|e| anyhow!("invalid amount: {e}"))?;
-      let script_pubkey = Script::from_str(&entry.scriptPubKey)
+      let script_pubkey = Script::from_str(&entry.script_pub_key)
         .context("failed to parse scriptPubKey")?;
 
       utxos.insert(outpoint, TxOut {
