@@ -18,7 +18,7 @@ use {
     fs,
     net::TcpListener,
     path::Path,
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     str::{self, FromStr},
     thread,
     time::Duration,

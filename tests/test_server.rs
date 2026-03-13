@@ -25,6 +25,8 @@ impl TestServer {
     let cookiefile = tempdir.path().join("cookie");
     fs::write(&cookiefile, "username:password").unwrap();
 
+    std::env::set_var("ORD_INTEGRATION_TEST", "1");
+
     let (options, server) = parse_ord_server_args(&format!(
       "ord-pepecoin --chain {} --rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port 0 --address 127.0.0.1",
       rpc_server.network(),
@@ -42,7 +44,6 @@ impl TestServer {
       let index = index.clone();
       let ord_server_handle = ord_server_handle.clone();
       thread::spawn(move || {
-        let options: Options = options;
         server.run(options, index, ord_server_handle, Some(tx)).unwrap()
       });
     }

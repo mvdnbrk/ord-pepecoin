@@ -115,7 +115,7 @@ impl Display for StaticHtml {
 }
 
 #[derive(Debug, Parser)]
-pub(crate) struct Server {
+pub struct Server {
   #[clap(
     long,
     help = "Listen on <ADDRESS> for incoming requests. [default: 0.0.0.0]"
@@ -150,7 +150,7 @@ pub(crate) struct Server {
 }
 
 impl Server {
-  pub(crate) fn run(
+  pub fn run(
     self,
     options: Options,
     index: Arc<Index>,
@@ -312,21 +312,24 @@ impl Server {
     }
 
     Ok(tokio::spawn(async move {
-      let server = axum_server::Server::bind(addr).handle(handle.clone());
+      let listener = tokio::net::TcpListener::bind(addr).await?.into_std()?;
+      let addr = listener.local_addr()?;
 
       if let Some(tx) = http_port_tx {
-        tx.send(handle.listening().await.unwrap().port()).unwrap();
+        tx.send(addr.port()).unwrap();
       }
 
       match config {
         SpawnConfig::Https(acceptor) => {
-          server
+          axum_server::from_tcp(listener)?
+            .handle(handle)
             .acceptor(acceptor)
             .serve(router.into_make_service())
             .await
         }
         SpawnConfig::Redirect(destination) => {
-          server
+          axum_server::from_tcp(listener)?
+            .handle(handle)
             .serve(
               Router::new()
                 .fallback(Self::redirect_http_to_https)
@@ -336,7 +339,8 @@ impl Server {
             .await
         }
         SpawnConfig::Http => {
-          server
+          axum_server::from_tcp(listener)?
+            .handle(handle)
             .serve(router.into_make_service())
             .await
         }
