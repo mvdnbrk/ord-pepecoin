@@ -38,15 +38,16 @@ fn run() {
 #[test]
 fn inscription_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let Inscribe {
     inscription,
     reveal,
     ..
-  } = inscribe(&rpc_server);
+  } = inscribe(&rpc_server, &test_server);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     format!("/inscription/{inscription}"),
     format!(
       r"(?s).*<meta property=og:title content='Inscription 0'>.*
@@ -91,13 +92,14 @@ fn inscription_page() {
 #[test]
 fn inscription_appears_on_reveal_transaction_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
-  let Inscribe { reveal, .. } = inscribe(&rpc_server);
+  let Inscribe { reveal, .. } = inscribe(&rpc_server, &test_server);
 
   rpc_server.mine_blocks(1);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     format!("/tx/{reveal}"),
     format!(r"(?s).*<h1>Transaction .*</h1>.*<a href=/inscription/{}i0>.*", reveal),
   );
@@ -106,17 +108,18 @@ fn inscription_appears_on_reveal_transaction_page() {
 #[test]
 fn inscription_appears_on_output_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let Inscribe {
     reveal,
     inscription,
     ..
-  } = inscribe(&rpc_server);
+  } = inscribe(&rpc_server, &test_server);
 
   rpc_server.mine_blocks(1);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     format!("/output/{reveal}:0"),
     format!(".*<h1>Output <span class=monospace>{reveal}:0</span></h1>.*<a href=/inscription/{inscription}.*"),
   );
@@ -125,18 +128,18 @@ fn inscription_appears_on_output_page() {
 #[test]
 fn inscription_page_after_send() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let Inscribe {
     reveal,
     inscription,
     ..
-  } = inscribe(&rpc_server);
+  } = inscribe(&rpc_server, &test_server);
 
   rpc_server.mine_blocks(1);
 
-  let ord_server = TestServer::spawn_with_args(&rpc_server, &[]);
-  ord_server.assert_response_regex(
+  test_server.assert_response_regex(
     format!("/inscription/{inscription}"),
     format!(
       r".*<h1>Inscription 0</h1>.*<dt>location</dt>\s*<dd class=monospace>{reveal}:0:0</dd>.*",
@@ -147,6 +150,7 @@ fn inscription_page_after_send() {
     "wallet send --fee-rate 1 bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv {inscription}"
   ))
   .rpc_server(&rpc_server)
+  .ord_server(&test_server)
   .stdout_regex(".*")
   .run();
 
@@ -154,8 +158,7 @@ fn inscription_page_after_send() {
 
   let send = txid.trim();
 
-  let ord_server = TestServer::spawn_with_args(&rpc_server, &[]);
-  ord_server.assert_response_regex(
+  test_server.assert_response_regex(
     format!("/inscription/{inscription}"),
     format!(
       r".*<h1>Inscription 0</h1>.*<dt>address</dt>\s*<dd class=monospace>bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv</dd>.*<dt>location</dt>\s*<dd class=monospace>{send}:0:0</dd>.*",
@@ -166,16 +169,16 @@ fn inscription_page_after_send() {
 #[test]
 fn inscription_content() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   rpc_server.mine_blocks(1);
 
-  let Inscribe { inscription, .. } = inscribe(&rpc_server);
+  let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
 
   rpc_server.mine_blocks(1);
 
-  let response =
-    TestServer::spawn_with_args(&rpc_server, &[]).request(format!("/content/{inscription}"));
+  let response = test_server.request(format!("/content/{inscription}"));
 
   assert_eq!(response.status(), StatusCode::OK);
   assert_eq!(
@@ -192,11 +195,12 @@ fn inscription_content() {
 #[test]
 fn home_page_includes_latest_inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
-  let Inscribe { inscription, .. } = inscribe(&rpc_server);
+  let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     "/",
     format!(
       ".*<h2>Latest Inscriptions</h2>
@@ -210,19 +214,20 @@ fn home_page_includes_latest_inscriptions() {
 #[test]
 fn home_page_inscriptions_are_sorted() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let mut inscriptions = String::new();
 
   for _ in 0..8 {
-    let Inscribe { inscription, .. } = inscribe(&rpc_server);
+    let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
     inscriptions.insert_str(
       0,
       &format!("\n  <a href=/inscription/{inscription}><iframe .*></a>"),
     );
   }
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     "/",
     format!(
       ".*<h2>Latest Inscriptions</h2>
@@ -235,11 +240,12 @@ fn home_page_inscriptions_are_sorted() {
 #[test]
 fn inscriptions_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
-  let Inscribe { inscription, .. } = inscribe(&rpc_server);
+  let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     "/inscriptions",
     format!(
       ".*<h1>Inscription</h1>
@@ -254,29 +260,30 @@ fn inscriptions_page() {
 #[test]
 fn inscriptions_page_is_sorted() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let mut inscriptions = String::new();
 
   for _ in 0..8 {
-    let Inscribe { inscription, .. } = inscribe(&rpc_server);
+    let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
     inscriptions.insert_str(0, &format!(".*<a href=/inscription/{inscription}>.*"));
   }
 
-  TestServer::spawn_with_args(&rpc_server, &[])
-    .assert_response_regex("/inscriptions", &inscriptions);
+  test_server.assert_response_regex("/inscriptions", &inscriptions);
 }
 
 #[test]
 fn inscriptions_page_has_next_and_previous() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
-  let Inscribe { inscription: a, .. } = inscribe(&rpc_server);
-  let Inscribe { inscription: b, .. } = inscribe(&rpc_server);
-  let Inscribe { inscription: c, .. } = inscribe(&rpc_server);
+  let Inscribe { inscription: a, .. } = inscribe(&rpc_server, &test_server);
+  let Inscribe { inscription: b, .. } = inscribe(&rpc_server, &test_server);
+  let Inscribe { inscription: c, .. } = inscribe(&rpc_server, &test_server);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     format!("/inscription/{b}"),
     format!(
       ".*<h1>Inscription 1</h1>.*
@@ -292,8 +299,9 @@ fn inscriptions_page_has_next_and_previous() {
 #[test]
 fn expected_sat_time_is_rounded() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
 
-  TestServer::spawn_with_args(&rpc_server, &[]).assert_response_regex(
+  test_server.assert_response_regex(
     "/sat/2099999997689999",
     r".*<dt>timestamp</dt><dd><time>.* \d+:\d+:\d+ UTC</time> \(expected\)</dd>.*",
   );

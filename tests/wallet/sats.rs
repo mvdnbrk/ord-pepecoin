@@ -7,11 +7,13 @@ use {
 #[ignore]
 fn sats() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
   create_wallet(&rpc_server);
   let second_coinbase = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
   let output = CommandBuilder::new("--index-sats wallet sats")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<OutputRare>>();
 
   assert_eq!(output[0].sat, 50 * COIN_VALUE as u128);
@@ -22,12 +24,14 @@ fn sats() {
 #[ignore]
 fn sats_from_tsv_success() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
   create_wallet(&rpc_server);
   let second_coinbase = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
   let output = CommandBuilder::new("--index-sats wallet sats --tsv foo.tsv")
     .write("foo.tsv", "nvtcsezkbtg")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<OutputTsv>>();
 
   assert_eq!(output[0].sat, "nvtcsezkbtg");
@@ -37,11 +41,13 @@ fn sats_from_tsv_success() {
 #[test]
 fn sats_from_tsv_parse_error() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
   create_wallet(&rpc_server);
 
   CommandBuilder::new("wallet sats --tsv foo.tsv")
     .write("foo.tsv", "===")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .expected_exit_code(1)
     .expected_stderr(
       "error: failed to parse sat from string \"===\" on line 1: invalid digit found in string\n",
@@ -52,10 +58,12 @@ fn sats_from_tsv_parse_error() {
 #[test]
 fn sats_from_tsv_file_not_found() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
   create_wallet(&rpc_server);
   CommandBuilder::new("wallet sats --tsv foo.tsv")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .expected_exit_code(1)
-    .stderr_regex("error: I/O error reading `.*`\nbecause: .*\n")
+    .stderr_regex("error: I/O error reading `.*`\n\nbecause:\n- .*\n")
     .run();
 }

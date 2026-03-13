@@ -44,6 +44,7 @@ mp4 = "0.13.0"
 bitcoincore-rpc = "0.16.0"
 redb = "3.1.0"
 regex = "1.6.0"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 rss = "2.0.1"
 rust-embed = "6.4.0"
 rustls = "0.23.20"
@@ -57,6 +58,7 @@ tokio = { version = "1.43.0", features = ["rt-multi-thread", "time"] }
 tokio-stream = "0.1.9"
 tokio-util = {version = "0.7.3", features = ["compat"] }
 tower-http = { version = "0.6.2", features = ["auth", "compression-br", "compression-gzip", "cors", "set-header"] }
+url = { version = "2.2.2", features = ["serde"] }
 
 [dev-dependencies]
 executable-path = "1.0.0"

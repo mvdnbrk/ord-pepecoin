@@ -6,15 +6,12 @@ pub struct Output {
   pub amount: u64,
 }
 
-pub(crate) fn run(options: Options) -> Result {
-  let index = Index::open(&options)?;
-  index.update()?;
-
+pub(crate) fn run(wallet: Wallet) -> Result {
   let mut outputs = Vec::new();
-  for (output, amount) in index.get_unspent_outputs(Wallet::load(&options)?)? {
+  for (output, txout) in wallet.utxos() {
     outputs.push(Output {
-      output,
-      amount: amount.to_sat(),
+      output: *output,
+      amount: txout.value,
     });
   }
 

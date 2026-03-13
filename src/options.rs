@@ -1,12 +1,12 @@
 use {super::*, bitcoincore_rpc::Auth};
 
-#[derive(Clone, Default, Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 #[clap(group(
   ArgGroup::new("chains")
     .required(false)
     .args(&["chain-argument", "signet", "regtest", "testnet"]),
 ))]
-pub(crate) struct Options {
+pub struct Options {
   #[clap(long, help = "Load Pepecoin Core data dir from <PEPECOIN_DATA_DIR>.")]
   pub(crate) pepecoin_data_dir: Option<PathBuf>,
   #[clap(
@@ -45,6 +45,31 @@ pub(crate) struct Options {
   pub(crate) testnet: bool,
   #[clap(long, default_value = "ord", help = "Use wallet named <WALLET>.")]
   pub(crate) wallet: String,
+  #[clap(long, help = "Use ord-pepecoin server running at <SERVER_URL>.")]
+  pub(crate) server_url: Option<Url>,
+}
+
+impl Default for Options {
+  fn default() -> Self {
+    Self {
+      pepecoin_data_dir: None,
+      chain_argument: Chain::Mainnet,
+      config: None,
+      config_dir: None,
+      cookie_file: None,
+      data_dir: None,
+      first_inscription_height: None,
+      height_limit: None,
+      index: None,
+      index_sats: false,
+      regtest: false,
+      rpc_url: None,
+      signet: false,
+      testnet: false,
+      wallet: "ord".to_string(),
+      server_url: None,
+    }
+  }
 }
 
 impl Options {
@@ -108,6 +133,16 @@ impl Options {
           self.wallet
         )
       })
+  }
+
+  pub(crate) fn server_url(&self) -> Result<Url> {
+    let config = self.load_config().unwrap_or_default();
+
+    self
+      .server_url
+      .clone()
+      .or(config.server_url)
+      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url or server_url in ord.yaml"))
   }
 
   pub(crate) fn auth(&self) -> Result<Auth> {
@@ -213,9 +248,8 @@ impl Options {
     let ord_chain = self.chain();
 
     if rpc_chain != ord_chain {
-      bail!("Pepecoin RPC server is on {rpc_chain} but ord is on {ord_chain}");
+      bail!("Pepecoin RPC server is on {rpc_chain} but ord-pepecoin is on {ord_chain}");
     }
-
     Ok(client)
   }
 
@@ -487,7 +521,7 @@ mod tests {
 
     assert_eq!(
       options.pepecoin_rpc_client().unwrap_err().to_string(),
-      "Pepecoin RPC server is on testnet but ord is on mainnet"
+      "Pepecoin RPC server is on testnet but ord-pepecoin is on mainnet"
     );
   }
 

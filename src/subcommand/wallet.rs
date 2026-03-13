@@ -51,16 +51,27 @@ pub(crate) enum Wallet {
 impl Wallet {
   pub(crate) fn run(self, options: Options) -> Result {
     match self {
-      Self::Balance => balance::run(options),
+      Self::Balance
+      | Self::Inscriptions
+      | Self::Outputs
+      | Self::Sats(_)
+      | Self::Send(_)
+      | Self::Inscribe(_) => {
+        let wallet = crate::wallet::Wallet::load(&options)?;
+        match self {
+          Self::Balance => balance::run(wallet),
+          Self::Inscriptions => inscriptions::run(wallet),
+          Self::Outputs => outputs::run(wallet),
+          Self::Sats(sats) => sats.run(wallet),
+          Self::Send(send) => send.run(wallet),
+          Self::Inscribe(inscribe) => inscribe.run(wallet),
+          _ => unreachable!(),
+        }
+      }
       Self::Create(create) => create.run(options),
-      Self::Inscribe(inscribe) => inscribe.run(options),
-      Self::Inscriptions => inscriptions::run(options),
       Self::Receive => receive::run(options),
       Self::Restore(restore) => restore.run(options),
-      Self::Sats(sats) => sats.run(options),
-      Self::Send(send) => send.run(options),
       Self::Transactions(transactions) => transactions.run(options),
-      Self::Outputs => outputs::run(options),
     }
   }
 }

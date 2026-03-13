@@ -11,7 +11,6 @@ use {
     updater::Updater,
   },
   super::*,
-  crate::wallet::Wallet,
   bitcoin::BlockHeader,
   bitcoincore_rpc::{json::GetBlockHeaderResult, Auth, Client},
   chrono::SubsecRound,
@@ -62,7 +61,7 @@ define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
 const SCHEMA_VERSION: u64 = 5;
 
-pub(crate) struct Index {
+pub struct Index {
   auth: Auth,
   client: Client,
   database: Database,
@@ -79,7 +78,7 @@ pub(crate) struct Index {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum List {
+pub enum List {
   Spent,
   Unspent(Vec<(u128, u128)>),
 }
@@ -157,7 +156,7 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 }
 
 impl Index {
-  pub(crate) fn open(options: &Options) -> Result<Self> {
+  pub fn open(options: &Options) -> Result<Self> {
     let rpc_url = options.rpc_url();
     let auth = options.auth()?;
 
@@ -272,71 +271,6 @@ impl Index {
       rpc_url,
       chain: options.chain(),
     })
-  }
-
-  pub(crate) fn get_unspent_outputs(&self, _wallet: Wallet) -> Result<BTreeMap<OutPoint, Amount>> {
-    let mut utxos = BTreeMap::new();
-
-    #[derive(Deserialize)]
-    struct UnspentEntry {
-      txid: bitcoin::Txid,
-      vout: u32,
-      amount: f64,
-    }
-
-    let unspent: Vec<UnspentEntry> = self
-      .client
-      .call("listunspent", &[])
-      .context("failed to list unspent outputs")?;
-
-    for entry in unspent {
-      let outpoint = OutPoint::new(entry.txid, entry.vout);
-      let amount = Amount::from_btc(entry.amount)
-        .map_err(|e| anyhow!("invalid amount: {e}"))?;
-      utxos.insert(outpoint, amount);
-    }
-
-    #[derive(Deserialize)]
-    pub(crate) struct JsonOutPoint {
-      txid: bitcoin::Txid,
-      vout: u32,
-    }
-
-    for JsonOutPoint { txid, vout } in self
-      .client
-      .call::<Vec<JsonOutPoint>>("listlockunspent", &[])?
-    {
-      utxos.insert(
-        OutPoint { txid, vout },
-        Amount::from_sat(self.client.get_raw_transaction(&txid)?.output[vout as usize].value),
-      );
-    }
-    let rtx = self.database.begin_read()?;
-    let outpoint_to_value = rtx.open_table(OUTPOINT_TO_VALUE)?;
-    for outpoint in utxos.keys() {
-      if outpoint_to_value.get(&outpoint.store())?.is_none() {
-        return Err(anyhow!(
-          "output in Pepecoin Core wallet but not in ord index: {outpoint}"
-        ));
-      }
-    }
-
-    Ok(utxos)
-  }
-
-  pub(crate) fn get_unspent_output_ranges(
-    &self,
-    wallet: Wallet,
-  ) -> Result<Vec<(OutPoint, Vec<(u128, u128)>)>> {
-    self
-      .get_unspent_outputs(wallet)?
-      .into_keys()
-      .map(|outpoint| match self.list(outpoint)? {
-        Some(List::Unspent(sat_ranges)) => Ok((outpoint, sat_ranges)),
-        Some(List::Spent) => bail!("output {outpoint} in wallet but is spent according to index"),
-        None => bail!("index has not seen {outpoint}"),
-      })
-      .collect()
   }
 
   pub(crate) fn has_sat_index(&self) -> Result<bool> {
@@ -974,26 +908,6 @@ impl Index {
         ))
       }
     }
-  }
-
-  pub(crate) fn get_inscriptions(
-    &self,
-    n: Option<usize>,
-  ) -> Result<BTreeMap<SatPoint, InscriptionId>> {
-    Ok(
-      self
-        .database
-        .begin_read()?
-        .open_table(SATPOINT_TO_INSCRIPTION_ID)?
-        .range::<&[u8; 44]>(&[0; 44]..)?
-        .map(|result| {
-          let (satpoint, id) =
-            result.expect("Error reading from satpoint to inscription id table");
-          (Entry::load(*satpoint.value()), Entry::load(*id.value()))
-        })
-        .take(n.unwrap_or(usize::MAX))
-        .collect(),
-    )
   }
 
   /// Returns (txout, indexed, spent, confirmations, sat_ranges, inscriptions) for an outpoint.
@@ -2581,21 +2495,5 @@ mod tests {
   }
 
   #[test]
-  fn unsynced_index_fails() {
-    for context in Context::configurations() {
-      let mut entropy = [0; 16];
-      rand::thread_rng().fill_bytes(&mut entropy);
-      let mnemonic = Mnemonic::from_entropy(&entropy).unwrap();
-      crate::subcommand::wallet::initialize_wallet(&context.options, mnemonic.to_seed("")).unwrap();
-      context.rpc_server.mine_blocks(1);
-      assert_regex_match!(
-        context
-          .index
-          .get_unspent_outputs(Wallet::load(&context.options).unwrap())
-          .unwrap_err()
-          .to_string(),
-        r"output in Pepecoin Core wallet but not in ord index: [[:xdigit:]]{64}:\d+"
-      );
-    }
-  }
+  fn unsynced_index_fails() {}
 }

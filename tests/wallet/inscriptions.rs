@@ -6,6 +6,7 @@ use {
 #[test]
 fn inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
@@ -13,10 +14,11 @@ fn inscriptions() {
     reveal,
     inscription,
     ..
-  } = inscribe(&rpc_server);
+  } = inscribe(&rpc_server, &ord_server);
 
   let output = CommandBuilder::new("wallet inscriptions")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<Output>>();
 
   assert_eq!(output.len(), 1);
@@ -34,6 +36,7 @@ fn inscriptions() {
 
   let stdout = CommandBuilder::new(format!("wallet send --fee-rate 1 {address} {inscription}"))
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .expected_exit_code(0)
     .stdout_regex(".*")
     .run();
@@ -44,6 +47,7 @@ fn inscriptions() {
 
   let output = CommandBuilder::new("wallet inscriptions")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<Output>>();
 
   assert_eq!(output.len(), 1);
@@ -54,6 +58,7 @@ fn inscriptions() {
 #[test]
 fn inscriptions_includes_locked_utxos() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   rpc_server.mine_blocks(1);
@@ -62,7 +67,7 @@ fn inscriptions_includes_locked_utxos() {
     inscription,
     reveal,
     ..
-  } = inscribe(&rpc_server);
+  } = inscribe(&rpc_server, &ord_server);
 
   rpc_server.mine_blocks(1);
 
@@ -73,6 +78,7 @@ fn inscriptions_includes_locked_utxos() {
 
   let output = CommandBuilder::new("wallet inscriptions")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<Output>>();
 
   assert_eq!(output.len(), 1);

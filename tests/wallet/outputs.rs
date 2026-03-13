@@ -3,6 +3,7 @@ use {super::*, ord::subcommand::wallet::outputs::Output};
 #[test]
 fn outputs() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let coinbase_tx = &rpc_server.mine_blocks_with_subsidy(1, 1_000_000)[0].txdata[0];
@@ -11,6 +12,7 @@ fn outputs() {
 
   let output = CommandBuilder::new("wallet outputs")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<Output>>();
 
   assert_eq!(output[0].output, outpoint);
@@ -20,6 +22,7 @@ fn outputs() {
 #[test]
 fn outputs_includes_locked_outputs() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
 
   let coinbase_tx = &rpc_server.mine_blocks_with_subsidy(1, 1_000_000)[0].txdata[0];
@@ -30,6 +33,7 @@ fn outputs_includes_locked_outputs() {
 
   let output = CommandBuilder::new("wallet outputs")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<Vec<Output>>();
 
   assert_eq!(output[0].output, outpoint);

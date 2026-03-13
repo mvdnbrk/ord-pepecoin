@@ -17,9 +17,9 @@ fn status() {
 #[test]
 fn inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
-  let inscribe = inscribe(&rpc_server);
-  let test_server = TestServer::spawn_with_args(&rpc_server, &[]);
+  let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.json_request("/inscriptions");
   assert_eq!(response.status(), StatusCode::OK);
@@ -33,9 +33,9 @@ fn inscriptions() {
 #[test]
 fn inscription() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
-  let inscribe = inscribe(&rpc_server);
-  let test_server = TestServer::spawn_with_args(&rpc_server, &[]);
+  let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.json_request(format!("/inscription/{}", inscribe.inscription));
   assert_eq!(response.status(), StatusCode::OK);
@@ -49,9 +49,9 @@ fn inscription() {
 #[test]
 fn inscriptions_batch() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
-  let inscribe = inscribe(&rpc_server);
-  let test_server = TestServer::spawn_with_args(&rpc_server, &[]);
+  let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.post_json("/inscriptions", &vec![inscribe.inscription.clone()]);
   assert_eq!(response.status(), StatusCode::OK);
@@ -64,9 +64,9 @@ fn inscriptions_batch() {
 #[test]
 fn output() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
-  let inscribe = inscribe(&rpc_server);
-  let test_server = TestServer::spawn_with_args(&rpc_server, &[]);
+  let inscribe = inscribe(&rpc_server, &test_server);
 
   let outpoint = OutPoint::new(inscribe.reveal, 0);
 
@@ -81,9 +81,9 @@ fn output() {
 #[test]
 fn outputs_batch() {
   let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
   create_wallet(&rpc_server);
-  let inscribe = inscribe(&rpc_server);
-  let test_server = TestServer::spawn_with_args(&rpc_server, &[]);
+  let inscribe = inscribe(&rpc_server, &test_server);
 
   let outpoint = OutPoint::new(inscribe.reveal, 0);
 

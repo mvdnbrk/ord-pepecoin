@@ -29,7 +29,8 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
-  std::{cmp::Ordering, net::SocketAddr, str},
+  std::{cmp::Ordering, net::SocketAddr, str, sync::mpsc::Sender},
+  tokio::task,
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,
@@ -114,18 +115,17 @@ impl Display for StaticHtml {
 }
 
 #[derive(Debug, Parser)]
-pub(crate) struct Server {
+pub struct Server {
   #[clap(
     long,
-    default_value = "0.0.0.0",
-    help = "Listen on <ADDRESS> for incoming requests."
+    help = "Listen on <ADDRESS> for incoming requests. [default: 0.0.0.0]"
   )]
-  address: String,
+  address: Option<String>,
   #[clap(
     long,
-    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
-  )]
-  acme_domain: Vec<String>,
+    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord-pepecoin instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
+    )]
+    pub(crate) acme_domain: Vec<String>,
   #[clap(
     long,
     help = "Listen on <HTTP_PORT> for incoming HTTP requests. [default: 80]."
@@ -150,7 +150,13 @@ pub(crate) struct Server {
 }
 
 impl Server {
-  pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle<SocketAddr>) -> Result {
+  pub fn run(
+    self,
+    options: Options,
+    index: Arc<Index>,
+    handle: Handle<SocketAddr>,
+    http_port_tx: Option<Sender<u16>>,
+  ) -> Result {
     Runtime::new()?.block_on(async {
       let clone = index.clone();
       let index_thread = thread::spawn(move || loop {
@@ -170,6 +176,8 @@ impl Server {
       });
 
       let config = options.load_config()?;
+      let address = self.listen_address(&config);
+      let http_port = self.http_port(&config);
       let acme_domains = self.acme_domains()?;
 
       let page_config = Arc::new(PageConfig {
@@ -207,6 +215,7 @@ impl Server {
         .route("/static/{*path}", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/{txid}", get(Self::transaction))
+        .route("/update", get(Self::update))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -225,10 +234,10 @@ impl Server {
         )
         .layer(CompressionLayer::new());
 
-      match (self.http_port(), self.https_port()) {
+      match (http_port, self.https_port()) {
         (Some(http_port), None) => {
           self
-            .spawn(router, handle, http_port, SpawnConfig::Http)?
+            .spawn(router, handle, http_port, SpawnConfig::Http, &address, http_port_tx)?
             .await??
         }
         (None, Some(https_port)) => {
@@ -238,6 +247,8 @@ impl Server {
               handle,
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
+              &address,
+              None,
             )?
             .await??
         }
@@ -253,12 +264,14 @@ impl Server {
           };
 
           let (http_result, https_result) = tokio::join!(
-            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config)?,
+            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config, &address, http_port_tx)?,
             self.spawn(
               router,
               handle,
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
+              &address,
+              None,
             )?
           );
           http_result.and(https_result)??;
@@ -280,8 +293,10 @@ impl Server {
     handle: Handle<SocketAddr>,
     port: u16,
     config: SpawnConfig,
+    address: &str,
+    http_port_tx: Option<Sender<u16>>,
   ) -> Result<task::JoinHandle<io::Result<()>>> {
-    let addr = (self.address.as_str(), port)
+    let addr = (address, port)
       .to_socket_addrs()?
       .next()
       .ok_or_else(|| anyhow!("failed to get socket addrs"))?;
@@ -297,16 +312,23 @@ impl Server {
     }
 
     Ok(tokio::spawn(async move {
+      let listener = tokio::net::TcpListener::bind(addr).await?.into_std()?;
+      let addr = listener.local_addr()?;
+
+      if let Some(tx) = http_port_tx {
+        tx.send(addr.port()).unwrap();
+      }
+
       match config {
         SpawnConfig::Https(acceptor) => {
-          axum_server::Server::bind(addr)
+          axum_server::from_tcp(listener)?
             .handle(handle)
             .acceptor(acceptor)
             .serve(router.into_make_service())
             .await
         }
         SpawnConfig::Redirect(destination) => {
-          axum_server::Server::bind(addr)
+          axum_server::from_tcp(listener)?
             .handle(handle)
             .serve(
               Router::new()
@@ -317,7 +339,7 @@ impl Server {
             .await
         }
         SpawnConfig::Http => {
-          axum_server::Server::bind(addr)
+          axum_server::from_tcp(listener)?
             .handle(handle)
             .serve(router.into_make_service())
             .await
@@ -344,12 +366,20 @@ impl Server {
     }
   }
 
-  fn http_port(&self) -> Option<u16> {
+  fn http_port(&self, config: &Config) -> Option<u16> {
     if self.http || self.http_port.is_some() || (self.https_port.is_none() && !self.https) {
-      Some(self.http_port.unwrap_or(80))
+      Some(self.http_port.unwrap_or_else(|| {
+        config.http_port.unwrap_or(80)
+      }))
     } else {
       None
     }
+  }
+
+  fn listen_address(&self, config: &Config) -> String {
+    self.address.clone().unwrap_or_else(|| {
+      config.address.clone().unwrap_or_else(|| "0.0.0.0".to_string())
+    })
   }
 
   fn https_port(&self) -> Option<u16> {
@@ -771,6 +801,17 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn update(Extension(index): Extension<Arc<Index>>) -> ServerResult<Response> {
+    task::block_in_place(|| {
+      if integration_test() {
+        index.update()?;
+        Ok(index.block_count()?.to_string().into_response())
+      } else {
+        Ok(StatusCode::NOT_FOUND.into_response())
+      }
+    })
   }
 
   async fn search_by_query(
@@ -1294,7 +1335,7 @@ mod tests {
       {
         let index = index.clone();
         let ord_server_handle = ord_server_handle.clone();
-        thread::spawn(|| server.run(options, index, ord_server_handle).unwrap());
+        thread::spawn(|| server.run(options, index, ord_server_handle, None).unwrap());
       }
 
       while index.statistic(crate::index::Statistic::Commits) == 0 {
@@ -1433,24 +1474,24 @@ mod tests {
   #[test]
   fn http_and_https_port_dont_conflict() {
     parse_server_args(
-      "ord server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
+      "ord-pepecoin server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
     );
   }
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ord server").1.http_port(), Some(80));
+    assert_eq!(parse_server_args("ord-pepecoin server").1.http_port(&Config::default()), Some(80));
   }
 
   #[test]
   fn https_port_defaults_to_none() {
-    assert_eq!(parse_server_args("ord server").1.https_port(), None);
+    assert_eq!(parse_server_args("ord-pepecoin server").1.https_port(), None);
   }
 
   #[test]
   fn https_sets_https_port_to_443() {
     assert_eq!(
-      parse_server_args("ord server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
         .https_port(),
       Some(443)
@@ -1460,9 +1501,9 @@ mod tests {
   #[test]
   fn https_disables_http() {
     assert_eq!(
-      parse_server_args("ord server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
-        .http_port(),
+        .http_port(&Config::default()),
       None
     );
   }
@@ -1471,10 +1512,10 @@ mod tests {
   fn https_port_disables_http() {
     assert_eq!(
       parse_server_args(
-        "ord server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(),
+      .http_port(&Config::default()),
       None
     );
   }
@@ -1483,7 +1524,7 @@ mod tests {
   fn https_port_sets_https_port() {
     assert_eq!(
       parse_server_args(
-        "ord server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1495,10 +1536,10 @@ mod tests {
   fn http_with_https_leaves_http_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(),
+      .http_port(&Config::default()),
       Some(80)
     );
   }
@@ -1507,7 +1548,7 @@ mod tests {
   fn http_with_https_leaves_https_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1580,7 +1621,7 @@ mod tests {
 
   #[test]
   fn acme_domain_defaults_to_hostname() {
-    let (_, server) = parse_server_args("ord server");
+    let (_, server) = parse_server_args("ord-pepecoin server");
     assert_eq!(
       server.acme_domains().unwrap(),
       &[sys_info::hostname().unwrap()]
@@ -1589,7 +1630,7 @@ mod tests {
 
   #[test]
   fn acme_domain_flag_is_respected() {
-    let (_, server) = parse_server_args("ord server --acme-domain example.com");
+    let (_, server) = parse_server_args("ord-pepecoin server --acme-domain example.com");
     assert_eq!(server.acme_domains().unwrap(), &["example.com"]);
   }
 

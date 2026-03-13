@@ -16,45 +16,42 @@ pub struct Output {
 }
 
 impl Send {
-  pub(crate) fn run(self, options: Options) -> Result {
-    if !self.address.is_valid_for_network(options.chain().network()) {
+  pub(crate) fn run(self, wallet: Wallet) -> Result {
+    if !self.address.is_valid_for_network(wallet.chain().network()) {
       bail!(
         "Address `{}` is not valid for {}",
         self.address,
-        options.chain()
+        wallet.chain()
       );
     }
 
-    let index = Index::open(&options)?;
-    index.update()?;
-
-    let client = options.pepecoin_rpc_client_for_wallet_command(false)?;
-
-    let unspent_outputs = index.get_unspent_outputs(Wallet::load(&options)?)?;
-
-    let inscriptions = index.get_inscriptions(None)?;
+    let client = wallet.bitcoin_client();
 
     let satpoint = match self.outgoing {
       Outgoing::SatPoint(satpoint) => {
-        for inscription_satpoint in inscriptions.keys() {
+        for inscription_satpoint in wallet.inscriptions().keys() {
           if satpoint == *inscription_satpoint {
             bail!("inscriptions must be sent by inscription ID");
           }
         }
         satpoint
       }
-      Outgoing::InscriptionId(id) => index
-        .get_inscription_satpoint_by_id(id)?
+      Outgoing::InscriptionId(id) => wallet
+        .inscription_info()
+        .get(&id)
+        .map(|info| info.satpoint)
         .ok_or_else(|| anyhow!("Inscription {id} not found"))?,
       Outgoing::Amount(amount) => {
-        let all_inscription_outputs = inscriptions
+        let inscribed_outputs = wallet
+          .inscriptions()
           .keys()
           .map(|satpoint| satpoint.outpoint)
           .collect::<HashSet<OutPoint>>();
 
-        let wallet_inscription_outputs = unspent_outputs
+        let wallet_inscription_outputs = wallet
+          .utxos()
           .keys()
-          .filter(|utxo| all_inscription_outputs.contains(utxo))
+          .filter(|utxo| inscribed_outputs.contains(utxo))
           .cloned()
           .collect::<Vec<OutPoint>>();
 
@@ -71,16 +68,16 @@ impl Send {
       }
     };
 
-    let change = [get_change_address(&client)?, get_change_address(&client)?];
+    let change = [get_change_address(client)?, get_change_address(client)?];
 
-    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(options.chain().default_fee_rate()).unwrap());
+    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
-    let postage = self.postage.unwrap_or(options.chain().default_postage());
+    let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
     let unsigned_transaction = TransactionBuilder::build_transaction_with_postage(
       satpoint,
-      inscriptions,
-      unspent_outputs,
+      wallet.inscriptions().iter().map(|(sp, ids)| (*sp, ids[0])).collect(),
+      wallet.utxos().iter().map(|(op, txo)| (*op, Amount::from_sat(txo.value))).collect(),
       self.address,
       change,
       fee_rate,

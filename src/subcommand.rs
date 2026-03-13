@@ -7,7 +7,7 @@ pub mod info;
 pub mod list;
 pub mod parse;
 mod preview;
-mod server;
+pub mod server;
 pub mod subsidy;
 pub mod traits;
 pub mod wallet;
@@ -59,7 +59,7 @@ impl Subcommand {
         let index = Arc::new(Index::open(&options)?);
         let handle = axum_server::Handle::new();
         LISTENERS.lock().unwrap().push(handle.clone());
-        server.run(options, index, handle)
+        server.run(options, index, handle, None)
       }
       Self::Traits(traits) => traits.run(),
       Self::Wallet(wallet) => wallet.run(options),

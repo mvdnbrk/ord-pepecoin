@@ -19,7 +19,6 @@ use {
     deserialize_from_str::DeserializeFromStr,
     epoch::Epoch,
     height::Height,
-    index::{Index, List},
     inscription::Inscription,
     inscription_id::InscriptionId,
     media::Media,
@@ -68,10 +67,11 @@ use {
   },
   tempfile::TempDir,
   tokio::{runtime::Runtime, task},
+  url::Url,
 };
 
 pub use crate::{
-  fee_rate::FeeRate, object::Object, rarity::Rarity, sat::Sat, sat_point::SatPoint,
+  fee_rate::FeeRate, index::{Index, List}, object::Object, rarity::Rarity, sat::Sat, sat_point::SatPoint,
   subcommand::wallet::transaction_builder::TransactionBuilder,
 };
 
@@ -102,12 +102,12 @@ mod deserialize_from_str;
 mod epoch;
 mod fee_rate;
 mod height;
-mod index;
+pub mod index;
 mod inscription;
 mod inscription_id;
 mod media;
 mod object;
-mod options;
+pub mod options;
 mod outgoing;
 mod page_config;
 mod rarity;
@@ -134,6 +134,16 @@ fn timestamp(seconds: u32) -> DateTime<Utc> {
   Utc.timestamp_opt(seconds.into(), 0).unwrap()
 }
 
+pub fn parse_ord_server_args(args: &str) -> (Options, subcommand::server::Server) {
+  match Arguments::try_parse_from(args.split_whitespace()) {
+    Ok(arguments) => match arguments.subcommand {
+      subcommand::Subcommand::Server(server) => (arguments.options, server),
+      subcommand => panic!("unexpected subcommand: {subcommand:?}"),
+    },
+    Err(err) => panic!("error parsing arguments: {err}"),
+  }
+}
+
 const INTERRUPT_LIMIT: u64 = 2;
 
 pub fn main() {
@@ -146,7 +156,7 @@ pub fn main() {
       .iter()
       .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_secs(5))));
 
-    println!("Detected Ctrl-C, attempting to shut down ord gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
+    println!("Detected Ctrl-C, attempting to shut down ord-pepecoin gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
 
     let interrupts = INTERRUPTS.fetch_add(1, atomic::Ordering::Relaxed);
 
@@ -158,10 +168,13 @@ pub fn main() {
 
   if let Err(err) = Arguments::parse().run() {
     eprintln!("error: {err}");
-    err
-      .chain()
-      .skip(1)
-      .for_each(|cause| eprintln!("because: {cause}"));
+    for (i, cause) in err.chain().skip(1).enumerate() {
+      if i == 0 {
+        eprintln!();
+        eprintln!("because:");
+      }
+      eprintln!("- {cause}");
+    }
     if env::var_os("RUST_BACKTRACE")
       .map(|val| val == "1")
       .unwrap_or_default()

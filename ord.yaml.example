@@ -1,0 +1,29 @@
+# ord-pepecoin configuration
+# Copy this file to your data directory as ord.yaml
+# Default locations:
+#   Linux: ~/.local/share/ord-pepecoin/ord.yaml
+#   macOS: ~/Library/Application Support/ord-pepecoin/ord.yaml
+# Or specify with: --config <path> or --config-dir <dir>
+
+# Pepecoin Core RPC connection
+#pepecoin_rpc_username: user
+#pepecoin_rpc_password: pass
+#rpc_url: "127.0.0.1:33873/wallet/ord"
+#pepecoin_data_dir: /path/to/pepecoin
+#cookie_file: /path/to/.cookie
+
+# Index settings
+#data_dir: /path/to/ord-pepecoin/data
+#index: /path/to/index.redb
+#index_sats: false
+
+# Server: where `ord-pepecoin server` listens
+#http_port: 8383
+#address: "127.0.0.1"
+
+# Wallet: where wallet commands connect (must match server above)
+#server_url: "http://127.0.0.1:8383"
+
+# Hide specific inscriptions from the explorer
+#hidden:
+#  - "inscription_id_here"
