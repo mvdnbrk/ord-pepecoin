@@ -1,5 +1,5 @@
 [package]
-name = "ord-pepecoin"
+name = "ordpep"
 description = "◉ Ordinal wallet and block explorer for pepecoin"
 version = "0.5.1"
 license = "CC0-1.0"
@@ -68,7 +68,7 @@ test-bitcoincore-rpc = { path = "test-bitcoincore-rpc" }
 unindent = "0.2.1"
 
 [[bin]]
-name = "ord-pepecoin"
+name = "ordpep"
 path = "src/bin/main.rs"
 
 [lib]

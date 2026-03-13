@@ -25,7 +25,7 @@ EOF
 }
 
 git=mvdnbrk/ord-pepecoin
-crate=ord-pepecoin
+crate=ordpep
 url=https://github.com/mvdnbrk/ord-pepecoin
 releases=$url/releases
 

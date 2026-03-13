@@ -43,9 +43,9 @@ impl Wallet {
     let bitcoin_block_count = bitcoin_client.get_block_count()? + 1;
     loop {
       let response = ord_client.get(rpc_url.join("/blockcount")?).send()
-        .context("wallet failed to retrieve block count from server. Make sure `ord-pepecoin server` is running.")?;
+        .context("wallet failed to retrieve block count from server. Make sure `ordpep server` is running.")?;
       if !response.status().is_success() {
-        bail!("failed to get blockcount from ord-pepecoin server: {}", response.status());
+        bail!("failed to get blockcount from ordpep server: {}", response.status());
       }
       let ord_block_count: u64 = response.text()?.parse()?;
       if ord_block_count >= bitcoin_block_count {
@@ -111,14 +111,14 @@ impl Wallet {
     let outpoints: Vec<OutPoint> = utxos.keys().cloned().collect();
     let response = ord_client.post(rpc_url.join("/outputs")?).json(&outpoints).send()?;
     if !response.status().is_success() {
-      bail!("failed to get outputs from ord-pepecoin server: {}", response.status());
+      bail!("failed to get outputs from ordpep server: {}", response.status());
     }
     let response_outputs: Vec<api::Output> = response.json()?;
     let output_info: BTreeMap<OutPoint, api::Output> = outpoints.into_iter().zip(response_outputs).collect();
 
     for (outpoint, info) in &output_info {
       if !info.indexed {
-        bail!("output in Pepecoin Core wallet but not in ord-pepecoin index: {outpoint}");
+        bail!("output in Pepecoin Core wallet but not in ordpep index: {outpoint}");
       }
     }
 
@@ -127,7 +127,7 @@ impl Wallet {
     let (inscriptions, inscription_info) = if !inscription_ids.is_empty() {
       let response = ord_client.post(rpc_url.join("/inscriptions")?).json(&inscription_ids).send()?;
       if !response.status().is_success() {
-        bail!("failed to get inscriptions from ord-pepecoin server: {}", response.status());
+        bail!("failed to get inscriptions from ordpep server: {}", response.status());
       }
       let response_inscriptions: Vec<api::Inscription> = response.json()?;
       let mut inscriptions = BTreeMap::new();
@@ -144,7 +144,7 @@ impl Wallet {
     // Fetch status
     let response = ord_client.get(rpc_url.join("/status")?).send()?;
     if !response.status().is_success() {
-      bail!("failed to get status from ord-pepecoin server: {}", response.status());
+      bail!("failed to get status from ordpep server: {}", response.status());
     }
     let status: api::Status = response.json()?;
 
@@ -192,7 +192,7 @@ impl Wallet {
 
   pub(crate) fn get_unspent_output_ranges(&self) -> Result<Vec<(OutPoint, Vec<(u128, u128)>)>> {
     if !self.has_sat_index {
-      bail!("ord-pepecoin server does not have a sat index");
+      bail!("ordpep server does not have a sat index");
     }
     Ok(self.output_info
       .iter()

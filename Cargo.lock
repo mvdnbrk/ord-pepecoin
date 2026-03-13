@@ -2141,7 +2141,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ord-pepecoin"
+name = "ordpep"
 version = "0.5.1"
 dependencies = [
  "anyhow",

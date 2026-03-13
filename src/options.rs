@@ -45,7 +45,7 @@ pub struct Options {
   pub(crate) testnet: bool,
   #[clap(long, default_value = "ord", help = "Use wallet named <WALLET>.")]
   pub(crate) wallet: String,
-  #[clap(long, help = "Use ord-pepecoin server running at <SERVER_URL>.")]
+  #[clap(long, help = "Use ordpep server running at <SERVER_URL>.")]
   pub(crate) server_url: Option<Url>,
 }
 
@@ -103,9 +103,9 @@ impl Options {
       None => {
         // Check --config-dir, then --data-dir CLI flag, then default data dir
         let candidates = [
-          self.config_dir.as_ref().map(|d| d.join("ord.yaml")),
-          self.data_dir.as_ref().map(|d| d.join("ord.yaml")),
-          dirs::data_dir().map(|d| d.join("ord-pepecoin").join("ord.yaml")),
+          self.config_dir.as_ref().map(|d| d.join("ordpep.yaml")),
+          self.data_dir.as_ref().map(|d| d.join("ordpep.yaml")),
+          dirs::data_dir().map(|d| d.join("ordpep").join("ordpep.yaml")),
         ];
 
         for candidate in candidates.iter().flatten() {
@@ -142,7 +142,7 @@ impl Options {
       .server_url
       .clone()
       .or(config.server_url)
-      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url or server_url in ord.yaml"))
+      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url or server_url in ordpep.yaml"))
   }
 
   pub(crate) fn auth(&self) -> Result<Auth> {
@@ -193,7 +193,7 @@ impl Options {
       Some(base) => base,
       None => dirs::data_dir()
         .ok_or_else(|| anyhow!("failed to retrieve data dir"))?
-        .join("ord-pepecoin"),
+        .join("ordpep"),
     };
 
     Ok(self.chain().join_with_data_dir(&base))
@@ -248,7 +248,7 @@ impl Options {
     let ord_chain = self.chain();
 
     if rpc_chain != ord_chain {
-      bail!("Pepecoin RPC server is on {rpc_chain} but ord-pepecoin is on {ord_chain}");
+      bail!("Pepecoin RPC server is on {rpc_chain} but ordpep is on {ord_chain}");
     }
     Ok(client)
   }
@@ -405,7 +405,7 @@ mod tests {
       .display()
       .to_string();
     assert!(
-      data_dir.ends_with(if cfg!(windows) { r"\ord-pepecoin" } else { "/ord-pepecoin" }),
+      data_dir.ends_with(if cfg!(windows) { r"\ordpep" } else { "/ordpep" }),
       "{data_dir}"
     );
   }
@@ -421,9 +421,9 @@ mod tests {
       .to_string();
     assert!(
       data_dir.ends_with(if cfg!(windows) {
-        r"\ord-pepecoin\signet"
+        r"\ordpep\signet"
       } else {
-        "/ord-pepecoin/signet"
+        "/ordpep/signet"
       }),
       "{data_dir}"
     );
@@ -463,38 +463,38 @@ mod tests {
       assert!(data_dir.ends_with(suffix), "{data_dir}");
     }
 
-    check_network_alias("main", "ord-pepecoin");
-    check_network_alias("mainnet", "ord-pepecoin");
+    check_network_alias("main", "ordpep");
+    check_network_alias("mainnet", "ordpep");
     check_network_alias(
       "regtest",
       if cfg!(windows) {
-        r"ord-pepecoin\regtest"
+        r"ordpep\regtest"
       } else {
-        "ord-pepecoin/regtest"
+        "ordpep/regtest"
       },
     );
     check_network_alias(
       "signet",
       if cfg!(windows) {
-        r"ord-pepecoin\signet"
+        r"ordpep\signet"
       } else {
-        "ord-pepecoin/signet"
+        "ordpep/signet"
       },
     );
     check_network_alias(
       "test",
       if cfg!(windows) {
-        r"ord-pepecoin\testnet3"
+        r"ordpep\testnet3"
       } else {
-        "ord-pepecoin/testnet3"
+        "ordpep/testnet3"
       },
     );
     check_network_alias(
       "testnet",
       if cfg!(windows) {
-        r"ord-pepecoin\testnet3"
+        r"ordpep\testnet3"
       } else {
-        "ord-pepecoin/testnet3"
+        "ordpep/testnet3"
       },
     );
   }
@@ -521,7 +521,7 @@ mod tests {
 
     assert_eq!(
       options.pepecoin_rpc_client().unwrap_err().to_string(),
-      "Pepecoin RPC server is on testnet but ord-pepecoin is on mainnet"
+      "Pepecoin RPC server is on testnet but ordpep is on mainnet"
     );
   }
 
@@ -614,7 +614,7 @@ mod tests {
       .unwrap();
 
     let tempdir = TempDir::new().unwrap();
-    let path = tempdir.path().join("ord.yaml");
+    let path = tempdir.path().join("ordpep.yaml");
     fs::write(&path, format!("hidden:\n- \"{id}\"")).unwrap();
 
     assert_eq!(
@@ -639,7 +639,7 @@ mod tests {
     let tempdir = TempDir::new().unwrap();
 
     fs::write(
-      tempdir.path().join("ord.yaml"),
+      tempdir.path().join("ordpep.yaml"),
       format!("hidden:\n- \"{id}\""),
     )
     .unwrap();

@@ -134,7 +134,7 @@ mod tests {
   <body>
   <header>
     <nav>
-      <a href=/>ord-pepecoin<sup>beta</sup></a>
+      <a href=/>ordpep<sup>beta</sup></a>
       .*
       <a href=/rare.txt>rare.txt</a>
       <form action=/search method=get>
@@ -162,7 +162,7 @@ mod tests {
         }),
         true
       ),
-      r".*<nav>\s*<a href=/>ord-pepecoin<sup>beta</sup></a>.*"
+      r".*<nav>\s*<a href=/>ordpep<sup>beta</sup></a>.*"
     );
   }
 
@@ -176,7 +176,7 @@ mod tests {
         }),
         false
       ),
-      r".*<nav>\s*<a href=/>ord-pepecoin<sup>beta</sup></a>.*\s*<form action=/search.*",
+      r".*<nav>\s*<a href=/>ordpep<sup>beta</sup></a>.*\s*<form action=/search.*",
     );
   }
 
@@ -190,7 +190,7 @@ mod tests {
         }),
         true
       ),
-      r".*<nav>\s*<a href=/>ord-pepecoin<sup>signet</sup></a>.*"
+      r".*<nav>\s*<a href=/>ordpep<sup>signet</sup></a>.*"
     );
   }
 }
