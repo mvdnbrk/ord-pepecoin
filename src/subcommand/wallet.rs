@@ -13,6 +13,7 @@ use {
 };
 
 pub mod balance;
+pub(crate) mod batch;
 pub mod create;
 pub(crate) mod inscribe;
 pub mod inscriptions;
