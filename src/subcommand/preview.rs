@@ -80,14 +80,14 @@ impl Preview {
           super::wallet::inscribe::Inscribe {
             fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
             commit_fee_rate: None,
-            file,
+            file: Some(file),
             no_backup: true,
             satpoint: None,
             dry_run: false,
             no_limit: false,
             destination: None,
-
             postage: None,
+            batch: None,
           },
         )),
       }
