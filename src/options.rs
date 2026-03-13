@@ -105,7 +105,11 @@ impl Options {
         let candidates = [
           self.config_dir.as_ref().map(|d| d.join("ordpep.yaml")),
           self.data_dir.as_ref().map(|d| d.join("ordpep.yaml")),
-          dirs::data_dir().map(|d| d.join("ordpep").join("ordpep.yaml")),
+          if integration_test() || cfg!(test) {
+            None
+          } else {
+            dirs::data_dir().map(|d| d.join("ordpep").join("ordpep.yaml"))
+          },
         ];
 
         for candidate in candidates.iter().flatten() {
@@ -306,7 +310,8 @@ mod tests {
 
   #[test]
   fn use_default_network() {
-    let arguments = Arguments::try_parse_from(["ord", "index", "update"]).unwrap();
+    let tempdir = TempDir::new().unwrap();
+    let arguments = Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"]).unwrap();
 
     assert_eq!(arguments.options.rpc_url(), "127.0.0.1:33873/wallet/ord");
 
@@ -319,7 +324,8 @@ mod tests {
 
   #[test]
   fn uses_network_defaults() {
-    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"]).unwrap();
+    let tempdir = TempDir::new().unwrap();
+    let arguments = Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "--chain=signet", "index", "update"]).unwrap();
 
     assert_eq!(arguments.options.rpc_url(), "127.0.0.1:38332/wallet/ord");
 
@@ -597,8 +603,9 @@ mod tests {
 
   #[test]
   fn default_config_is_returned_if_config_option_is_not_passed() {
+    let tempdir = TempDir::new().unwrap();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "index", "update"])
+      Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"])
         .unwrap()
         .options
         .load_config()
