@@ -123,7 +123,7 @@ pub struct Server {
   address: Option<String>,
   #[clap(
     long,
-    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord-pepecoin instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
+    help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ordpep instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
     )]
     pub(crate) acme_domain: Vec<String>,
   #[clap(
@@ -1312,7 +1312,7 @@ mod tests {
 
       let config_args = match config {
         Some(config) => {
-          let config_path = tempdir.path().join("ord.yaml");
+          let config_path = tempdir.path().join("ordpep.yaml");
           fs::write(&config_path, config).unwrap();
           format!("--config {}", config_path.display())
         }
@@ -1474,24 +1474,24 @@ mod tests {
   #[test]
   fn http_and_https_port_dont_conflict() {
     parse_server_args(
-      "ord-pepecoin server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
+      "ordpep server --http-port 0 --https-port 0 --acme-cache foo --acme-contact bar --acme-domain baz",
     );
   }
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ord-pepecoin server").1.http_port(&Config::default()), Some(80));
+    assert_eq!(parse_server_args("ordpep server").1.http_port(&Config::default()), Some(80));
   }
 
   #[test]
   fn https_port_defaults_to_none() {
-    assert_eq!(parse_server_args("ord-pepecoin server").1.https_port(), None);
+    assert_eq!(parse_server_args("ordpep server").1.https_port(), None);
   }
 
   #[test]
   fn https_sets_https_port_to_443() {
     assert_eq!(
-      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
         .https_port(),
       Some(443)
@@ -1501,7 +1501,7 @@ mod tests {
   #[test]
   fn https_disables_http() {
     assert_eq!(
-      parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
+      parse_server_args("ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
         .http_port(&Config::default()),
       None
@@ -1512,7 +1512,7 @@ mod tests {
   fn https_port_disables_http() {
     assert_eq!(
       parse_server_args(
-        "ord-pepecoin server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ordpep server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .http_port(&Config::default()),
@@ -1524,7 +1524,7 @@ mod tests {
   fn https_port_sets_https_port() {
     assert_eq!(
       parse_server_args(
-        "ord-pepecoin server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ordpep server --https-port 1000 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1536,7 +1536,7 @@ mod tests {
   fn http_with_https_leaves_http_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ordpep server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .http_port(&Config::default()),
@@ -1548,7 +1548,7 @@ mod tests {
   fn http_with_https_leaves_https_enabled() {
     assert_eq!(
       parse_server_args(
-        "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
+        "ordpep server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
       .https_port(),
@@ -1621,7 +1621,7 @@ mod tests {
 
   #[test]
   fn acme_domain_defaults_to_hostname() {
-    let (_, server) = parse_server_args("ord-pepecoin server");
+    let (_, server) = parse_server_args("ordpep server");
     assert_eq!(
       server.acme_domains().unwrap(),
       &[sys_info::hostname().unwrap()]
@@ -1630,7 +1630,7 @@ mod tests {
 
   #[test]
   fn acme_domain_flag_is_respected() {
-    let (_, server) = parse_server_args("ord-pepecoin server --acme-domain example.com");
+    let (_, server) = parse_server_args("ordpep server --acme-domain example.com");
     assert_eq!(server.acme_domains().unwrap(), &["example.com"]);
   }
 
@@ -1953,7 +1953,7 @@ mod tests {
     test_server.assert_response_regex(
     "/",
     StatusCode::OK,
-    ".*<title>ord-pepecoin</title>.*
+    ".*<title>ordpep</title>.*
 <h2>Latest Blocks</h2>
 <ol start=1 reversed class=blocks>
   <li><a href=/block/[[:xdigit:]]{64}>[[:xdigit:]]{64}</a></li>
@@ -1967,7 +1967,7 @@ mod tests {
     TestServer::new().assert_response_regex(
       "/",
       StatusCode::OK,
-      ".*<a href=/>ord-pepecoin<sup>regtest</sup></a>.*",
+      ".*<a href=/>ordpep<sup>regtest</sup></a>.*",
     );
   }
 

@@ -1,8 +1,8 @@
-# ord-pepecoin configuration
-# Copy this file to your data directory as ord.yaml
+# ordpep configuration
+# Copy this file to your data directory as ordpep.yaml
 # Default locations:
-#   Linux: ~/.local/share/ord-pepecoin/ord.yaml
-#   macOS: ~/Library/Application Support/ord-pepecoin/ord.yaml
+#   Linux: ~/.local/share/ordpep/ordpep.yaml
+#   macOS: ~/Library/Application Support/ordpep/ordpep.yaml
 # Or specify with: --config <path> or --config-dir <dir>
 
 # Pepecoin Core RPC connection
@@ -13,11 +13,11 @@
 #cookie_file: /path/to/.cookie
 
 # Index settings
-#data_dir: /path/to/ord-pepecoin/data
+#data_dir: /path/to/ordpep/data
 #index: /path/to/index.redb
 #index_sats: false
 
-# Server: where `ord-pepecoin server` listens
+# Server: where `ordpep server` listens
 #http_port: 8383
 #address: "127.0.0.1"
 

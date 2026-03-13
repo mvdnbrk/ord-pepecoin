@@ -1,4 +1,4 @@
-# ord-pepecoin
+# ordpep
 
 Ordinal indexer and block explorer for **Pepecoin**, forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin) (based on [ordinals/ord](https://github.com/ordinals/ord) v0.5.1).
 
@@ -17,30 +17,30 @@ cd ord-pepecoin
 cargo build --release
 ```
 
-The binary is at `./target/release/ord-pepecoin`.
+The binary is at `./target/release/ordpep`.
 
 ## Configuration
 
-`ord-pepecoin` can be configured with command-line flags, a YAML configuration file, or both. Command-line flags take precedence over the configuration file.
+`ordpep` can be configured with command-line flags, a YAML configuration file, or both. Command-line flags take precedence over the configuration file.
 
 ### Configuration file
 
-Create an `ord.yaml` file:
+Create an `ordpep.yaml` file:
 
 ```yaml
 pepecoin_rpc_username: "your_rpc_user"
 pepecoin_rpc_password: "your_rpc_password"
 rpc_url: "127.0.0.1:33873"
-data_dir: "/data/ord-pepecoin"
-index: "/data/ord-pepecoin/index.redb"
+data_dir: "/data/ordpep"
+index: "/data/ordpep/index.redb"
 ```
 
 The configuration file is loaded from the first location found:
 
 1. `--config <path>` — explicit path (errors if not found)
-2. `--config-dir <dir>/ord.yaml`
-3. `--data-dir <dir>/ord.yaml`
-4. Default data directory (`ord.yaml`)
+2. `--config-dir <dir>/ordpep.yaml`
+3. `--data-dir <dir>/ordpep.yaml`
+4. Default data directory (`ordpep.yaml`)
 
 All configuration file fields are optional:
 
@@ -50,7 +50,7 @@ All configuration file fields are optional:
 | `pepecoin_rpc_password` | RPC password (alternative to cookie auth) |
 | `rpc_url` | Pepecoin Core RPC URL |
 | `pepecoin_data_dir` | Pepecoin Core data directory |
-| `data_dir` | ord-pepecoin data directory |
+| `data_dir` | ordpep data directory |
 | `index` | Path to the index database |
 | `index_sats` | Track location of all satoshis (`true`/`false`) |
 | `cookie_file` | Path to RPC cookie file |
@@ -69,27 +69,27 @@ RPC authentication is resolved in this order:
 ### With a configuration file
 
 ```bash
-ord-pepecoin --config /path/to/ord.yaml server --http-port 3080
-ord-pepecoin --config /path/to/ord.yaml index update
+ordpep --config /path/to/ordpep.yaml server --http-port 3080
+ordpep --config /path/to/ordpep.yaml index update
 ```
 
 ### With command-line flags
 
 ```bash
-ord-pepecoin --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie server --http-port 3080
-ord-pepecoin --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie index update
+ordpep --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie server --http-port 3080
+ordpep --rpc-url 127.0.0.1:33873 --cookie-file ~/.pepecoin/.cookie index update
 ```
 
 ### Export inscriptions to TSV
 
 ```bash
-ord-pepecoin index export --include-addresses > inscriptions.tsv
+ordpep index export --include-addresses > inscriptions.tsv
 ```
 
 ### Compact the database
 
 ```bash
-ord-pepecoin index compact
+ordpep index compact
 ```
 
 ### JSON API
@@ -137,16 +137,16 @@ The indexer automatically creates database savepoints near the chain tip. If a b
 
 ## Wallet
 
-`ord-pepecoin` relies on Pepecoin Core for private key management and transaction signing.
+`ordpep` relies on Pepecoin Core for private key management and transaction signing.
 
-- Pepecoin Core is not aware of inscriptions and does not perform sat control. Using `pepecoin-cli` commands with `ord-pepecoin` wallets may lead to loss of inscriptions.
+- Pepecoin Core is not aware of inscriptions and does not perform sat control. Using `pepecoin-cli` commands with `ordpep` wallets may lead to loss of inscriptions.
 - Keep ordinal and cardinal wallets segregated.
 
 ### Inscribing
 
 ```bash
-ord-pepecoin --config /path/to/ord.yaml wallet inscribe /path/to/file.png
-ord-pepecoin --config /path/to/ord.yaml wallet inscribe --dry-run /path/to/file.png
+ordpep --config /path/to/ordpep.yaml wallet inscribe /path/to/file.png
+ordpep --config /path/to/ordpep.yaml wallet inscribe --dry-run /path/to/file.png
 ```
 
 Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large files are split across multiple chained transactions using 240-byte data chunks. Reveal transactions are signed locally.

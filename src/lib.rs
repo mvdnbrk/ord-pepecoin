@@ -156,7 +156,7 @@ pub fn main() {
       .iter()
       .for_each(|handle| handle.graceful_shutdown(Some(Duration::from_secs(5))));
 
-    println!("Detected Ctrl-C, attempting to shut down ord-pepecoin gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
+    println!("Detected Ctrl-C, attempting to shut down ordpep gracefully. Press Ctrl-C {INTERRUPT_LIMIT} times to force shutdown.");
 
     let interrupts = INTERRUPTS.fetch_add(1, atomic::Ordering::Relaxed);
 
