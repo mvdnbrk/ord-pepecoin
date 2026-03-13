@@ -61,7 +61,7 @@ define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
 const SCHEMA_VERSION: u64 = 5;
 
-pub(crate) struct Index {
+pub struct Index {
   auth: Auth,
   client: Client,
   database: Database,
@@ -78,7 +78,7 @@ pub(crate) struct Index {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum List {
+pub enum List {
   Spent,
   Unspent(Vec<(u128, u128)>),
 }

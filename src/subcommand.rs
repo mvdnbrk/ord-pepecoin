@@ -7,7 +7,7 @@ pub mod info;
 pub mod list;
 pub mod parse;
 mod preview;
-mod server;
+pub mod server;
 pub mod subsidy;
 pub mod traits;
 pub mod wallet;

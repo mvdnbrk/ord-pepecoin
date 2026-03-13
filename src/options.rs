@@ -6,7 +6,7 @@ use {super::*, bitcoincore_rpc::Auth};
     .required(false)
     .args(&["chain-argument", "signet", "regtest", "testnet"]),
 ))]
-pub(crate) struct Options {
+pub struct Options {
   #[clap(long, help = "Load Pepecoin Core data dir from <PEPECOIN_DATA_DIR>.")]
   pub(crate) pepecoin_data_dir: Option<PathBuf>,
   #[clap(

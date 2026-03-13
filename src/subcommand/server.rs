@@ -30,6 +30,7 @@ use {
     AcmeConfig,
   },
   std::{cmp::Ordering, net::SocketAddr, str, sync::mpsc::Sender},
+  tokio::task,
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,
@@ -214,6 +215,7 @@ impl Server {
         .route("/static/{*path}", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/{txid}", get(Self::transaction))
+        .route("/update", get(Self::update))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -795,6 +797,17 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn update(Extension(index): Extension<Arc<Index>>) -> ServerResult<Response> {
+    task::block_in_place(|| {
+      if integration_test() {
+        index.update()?;
+        Ok(index.block_count()?.to_string().into_response())
+      } else {
+        Ok(StatusCode::NOT_FOUND.into_response())
+      }
+    })
   }
 
   async fn search_by_query(

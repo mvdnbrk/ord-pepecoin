@@ -1,16 +1,18 @@
 use {
   super::*,
-  crate::command_builder::ToArgs,
+  axum_server::Handle,
   bitcoincore_rpc::{Auth, Client, RpcApi},
+  ord::{Index, parse_ord_server_args},
   reqwest::blocking::Response,
+  std::{net::SocketAddr, sync::Arc},
 };
 
 pub(crate) struct TestServer {
-  child: Child,
+  client: Client,
+  ord_server_handle: Handle<SocketAddr>,
   port: u16,
   #[allow(unused)]
   tempdir: TempDir,
-  rpc_url: String,
 }
 
 impl TestServer {
@@ -20,43 +22,39 @@ impl TestServer {
 
   pub(crate) fn spawn_with_args(rpc_server: &test_bitcoincore_rpc::Handle, args: &[&str]) -> Self {
     let tempdir = TempDir::new().unwrap();
-    fs::write(tempdir.path().join(".cookie"), "foo:bar").unwrap();
-    let port = TcpListener::bind("127.0.0.1:0")
-      .unwrap()
-      .local_addr()
-      .unwrap()
-      .port();
+    let cookiefile = tempdir.path().join("cookie");
+    fs::write(&cookiefile, "username:password").unwrap();
 
-    let child = Command::new(executable_path("ord-pepecoin")).args(format!(
-      "--chain {} --rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port {port} --address 127.0.0.1",
+    let (options, server) = parse_ord_server_args(&format!(
+      "ord-pepecoin --chain {} --rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port 0 --address 127.0.0.1",
       rpc_server.network(),
       rpc_server.url(),
       tempdir.path().display(),
       tempdir.path().display(),
       args.join(" "),
-    ).to_args())
-      .env("ORD_INTEGRATION_TEST", "1")
-      .current_dir(&tempdir)
-      .spawn().unwrap();
+    ));
 
-    for i in 0.. {
-      match reqwest::blocking::get(format!("http://127.0.0.1:{port}/status")) {
-        Ok(_) => break,
-        Err(err) => {
-          if i == 400 {
-            panic!("Server failed to start: {err}");
-          }
-        }
-      }
+    let index = Arc::new(Index::open(&options).unwrap());
+    let ord_server_handle = Handle::new();
+    let (tx, rx) = std::sync::mpsc::channel();
 
-      thread::sleep(Duration::from_millis(25));
+    {
+      let index = index.clone();
+      let ord_server_handle = ord_server_handle.clone();
+      thread::spawn(move || {
+        let options: Options = options;
+        server.run(options, index, ord_server_handle, Some(tx)).unwrap()
+      });
     }
 
+    let port = rx.recv().unwrap();
+    let client = Client::new(&rpc_server.url(), Auth::None).unwrap();
+
     Self {
-      child,
-      tempdir,
+      client,
+      ord_server_handle,
       port,
-      rpc_url: rpc_server.url(),
+      tempdir,
     }
   }
 
@@ -64,59 +62,27 @@ impl TestServer {
     format!("http://127.0.0.1:{}", self.port).parse().unwrap()
   }
 
+  pub(crate) fn sync_server(&self) {
+    let chain_block_count = self.client.get_block_count().unwrap() + 1;
+    let response = reqwest::blocking::get(self.url().join("/update").unwrap()).unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.text().unwrap().parse::<u64>().unwrap() >= chain_block_count);
+  }
+
   pub(crate) fn assert_response_regex(&self, path: impl AsRef<str>, regex: impl AsRef<str>) {
-    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
-    let chain_block_count = client.get_block_count().unwrap() + 1;
-
-    for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
-      assert_eq!(response.status(), StatusCode::OK);
-      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
-        break;
-      } else if i == 200 {
-        panic!("index failed to synchronize with chain");
-      }
-      thread::sleep(Duration::from_millis(25));
-    }
-
+    self.sync_server();
     let response = reqwest::blocking::get(self.url().join(path.as_ref()).unwrap()).unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_regex_match!(response.text().unwrap(), regex.as_ref());
   }
 
   pub(crate) fn request(&self, path: impl AsRef<str>) -> Response {
-    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
-    let chain_block_count = client.get_block_count().unwrap() + 1;
-
-    for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
-      assert_eq!(response.status(), StatusCode::OK);
-      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
-        break;
-      } else if i == 200 {
-        panic!("index failed to synchronize with chain");
-      }
-      thread::sleep(Duration::from_millis(25));
-    }
-
+    self.sync_server();
     reqwest::blocking::get(self.url().join(path.as_ref()).unwrap()).unwrap()
   }
 
   pub(crate) fn json_request(&self, path: impl AsRef<str>) -> Response {
-    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
-    let chain_block_count = client.get_block_count().unwrap() + 1;
-
-    for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
-      assert_eq!(response.status(), StatusCode::OK);
-      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
-        break;
-      } else if i == 200 {
-        panic!("index failed to synchronize with chain");
-      }
-      thread::sleep(Duration::from_millis(25));
-    }
-
+    self.sync_server();
     reqwest::blocking::Client::new()
       .get(self.url().join(path.as_ref()).unwrap())
       .header(reqwest::header::ACCEPT, "application/json")
@@ -125,20 +91,7 @@ impl TestServer {
   }
 
   pub(crate) fn post_json(&self, path: impl AsRef<str>, body: &impl serde::Serialize) -> Response {
-    let client = Client::new(&self.rpc_url, Auth::None).unwrap();
-    let chain_block_count = client.get_block_count().unwrap() + 1;
-
-    for i in 0.. {
-      let response = reqwest::blocking::get(self.url().join("/blockcount").unwrap()).unwrap();
-      assert_eq!(response.status(), StatusCode::OK);
-      if response.text().unwrap().parse::<u64>().unwrap() == chain_block_count {
-        break;
-      } else if i == 200 {
-        panic!("index failed to synchronize with chain");
-      }
-      thread::sleep(Duration::from_millis(25));
-    }
-
+    self.sync_server();
     reqwest::blocking::Client::new()
       .post(self.url().join(path.as_ref()).unwrap())
       .json(body)
@@ -149,6 +102,6 @@ impl TestServer {
 
 impl Drop for TestServer {
   fn drop(&mut self) {
-    self.child.kill().unwrap()
+    self.ord_server_handle.shutdown();
   }
 }
