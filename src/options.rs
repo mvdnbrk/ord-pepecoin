@@ -521,7 +521,7 @@ mod tests {
 
     assert_eq!(
       options.pepecoin_rpc_client().unwrap_err().to_string(),
-      "Pepecoin RPC server is on testnet but ord is on mainnet"
+      "Pepecoin RPC server is on testnet but ord-pepecoin is on mainnet"
     );
   }
 
