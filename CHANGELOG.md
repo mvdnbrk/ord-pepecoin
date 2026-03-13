@@ -17,6 +17,10 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `POST /outputs` batch endpoint and updated `GET /output/:outpoint` JSON response ([#7](https://github.com/mvdnbrk/ord-pepecoin/pull/7))
 - `POST /inscriptions` batch endpoint with upstream-compatible response format ([#9](https://github.com/mvdnbrk/ord-pepecoin/pull/9))
 - Integration tests for all JSON API endpoints ([#11](https://github.com/mvdnbrk/ord-pepecoin/pull/11))
+- Wallet commands talk to running ord server via HTTP instead of opening index directly ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
+- `server_url`, `http_port`, `address` config options in `ord.yaml` ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
+- `ord.yaml.example` with documented config options ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
+- `/update` test-only endpoint for synchronous index updates ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - Address index with inscription-aware UTXO selection
 - YAML config file support
 - Index export command and `index update` subcommand (replaces deprecated `index run`)
@@ -38,6 +42,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Fee rate and postage defaults tuned for Pepecoin
 - Use `Durability::Immediate` for redb writes
 - CI workflow simplified (test only, macOS + Ubuntu)
+- In-process TestServer aligned with upstream (channel-based readiness, no subprocess polling) ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - Extract API types into `src/api.rs` module matching upstream pattern ([#8](https://github.com/mvdnbrk/ord-pepecoin/pull/8))
 - Inscription API fields renamed to match upstream (`fee`, `height`, `id`, `satpoint`, `value`) ([#9](https://github.com/mvdnbrk/ord-pepecoin/pull/9))
 - Upgrade axum 0.6 → 0.8 with ecosystem deps to match upstream ([#12](https://github.com/mvdnbrk/ord-pepecoin/pull/12))
