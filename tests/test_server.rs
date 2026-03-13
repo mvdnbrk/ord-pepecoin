@@ -28,9 +28,10 @@ impl TestServer {
     std::env::set_var("ORD_INTEGRATION_TEST", "1");
 
     let (options, server) = parse_ord_server_args(&format!(
-      "ord-pepecoin --chain {} --rpc-url {} --pepecoin-data-dir {} --data-dir {} {} server --http-port 0 --address 127.0.0.1",
+      "ord-pepecoin --chain {} --rpc-url {} --cookie-file {} --pepecoin-data-dir {} --data-dir {} {} server --http-port 0 --address 127.0.0.1",
       rpc_server.network(),
       rpc_server.url(),
+      cookiefile.to_str().unwrap(),
       tempdir.path().display(),
       tempdir.path().display(),
       args.join(" "),
