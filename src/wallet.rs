@@ -42,7 +42,8 @@ impl Wallet {
     // Sync with server
     let bitcoin_block_count = bitcoin_client.get_block_count()? + 1;
     loop {
-      let response = ord_client.get(rpc_url.join("/blockcount")?).send()?;
+      let response = ord_client.get(rpc_url.join("/blockcount")?).send()
+        .context("wallet failed to retrieve block count from server. Make sure `ord server` is running.")?;
       if !response.status().is_success() {
         bail!("failed to get blockcount from ord server: {}", response.status());
       }
