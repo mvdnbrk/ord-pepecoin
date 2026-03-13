@@ -64,6 +64,6 @@ fn sats_from_tsv_file_not_found() {
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .expected_exit_code(1)
-    .stderr_regex("error: I/O error reading `.*`\nbecause: .*\n")
+    .stderr_regex("error: I/O error reading `.*`\n\nbecause:\n- .*\n")
     .run();
 }
