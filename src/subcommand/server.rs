@@ -29,7 +29,7 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
-  std::{cmp::Ordering, net::SocketAddr, str},
+  std::{cmp::Ordering, net::SocketAddr, str, sync::mpsc::Sender},
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,
@@ -149,7 +149,13 @@ pub(crate) struct Server {
 }
 
 impl Server {
-  pub(crate) fn run(self, options: Options, index: Arc<Index>, handle: Handle<SocketAddr>) -> Result {
+  pub(crate) fn run(
+    self,
+    options: Options,
+    index: Arc<Index>,
+    handle: Handle<SocketAddr>,
+    http_port_tx: Option<Sender<u16>>,
+  ) -> Result {
     Runtime::new()?.block_on(async {
       let clone = index.clone();
       let index_thread = thread::spawn(move || loop {
@@ -229,7 +235,7 @@ impl Server {
       match (http_port, self.https_port()) {
         (Some(http_port), None) => {
           self
-            .spawn(router, handle, http_port, SpawnConfig::Http, &address)?
+            .spawn(router, handle, http_port, SpawnConfig::Http, &address, http_port_tx)?
             .await??
         }
         (None, Some(https_port)) => {
@@ -240,6 +246,7 @@ impl Server {
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
               &address,
+              None,
             )?
             .await??
         }
@@ -255,13 +262,14 @@ impl Server {
           };
 
           let (http_result, https_result) = tokio::join!(
-            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config, &address)?,
+            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config, &address, http_port_tx)?,
             self.spawn(
               router,
               handle,
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
               &address,
+              None,
             )?
           );
           http_result.and(https_result)??;
@@ -284,6 +292,7 @@ impl Server {
     port: u16,
     config: SpawnConfig,
     address: &str,
+    http_port_tx: Option<Sender<u16>>,
   ) -> Result<task::JoinHandle<io::Result<()>>> {
     let addr = (address, port)
       .to_socket_addrs()?
@@ -301,17 +310,21 @@ impl Server {
     }
 
     Ok(tokio::spawn(async move {
+      let server = axum_server::Server::bind(addr).handle(handle.clone());
+
+      if let Some(tx) = http_port_tx {
+        tx.send(handle.listening().await.unwrap().port()).unwrap();
+      }
+
       match config {
         SpawnConfig::Https(acceptor) => {
-          axum_server::Server::bind(addr)
-            .handle(handle)
+          server
             .acceptor(acceptor)
             .serve(router.into_make_service())
             .await
         }
         SpawnConfig::Redirect(destination) => {
-          axum_server::Server::bind(addr)
-            .handle(handle)
+          server
             .serve(
               Router::new()
                 .fallback(Self::redirect_http_to_https)
@@ -321,8 +334,7 @@ impl Server {
             .await
         }
         SpawnConfig::Http => {
-          axum_server::Server::bind(addr)
-            .handle(handle)
+          server
             .serve(router.into_make_service())
             .await
         }
@@ -1306,7 +1318,7 @@ mod tests {
       {
         let index = index.clone();
         let ord_server_handle = ord_server_handle.clone();
-        thread::spawn(|| server.run(options, index, ord_server_handle).unwrap());
+        thread::spawn(|| server.run(options, index, ord_server_handle, None).unwrap());
       }
 
       while index.statistic(crate::index::Statistic::Commits) == 0 {
