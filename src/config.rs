@@ -12,6 +12,9 @@ pub(crate) struct Config {
   pub(crate) index: Option<PathBuf>,
   pub(crate) index_sats: Option<bool>,
   pub(crate) cookie_file: Option<PathBuf>,
+  pub(crate) server_url: Option<Url>,
+  pub(crate) http_port: Option<u16>,
+  pub(crate) address: Option<String>,
 }
 
 impl Config {

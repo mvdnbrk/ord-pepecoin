@@ -37,7 +37,7 @@ impl Wallet {
       })
       .build()?;
 
-    let rpc_url = options.server_url.clone();
+    let rpc_url = options.server_url()?;
 
     // Sync with server
     let bitcoin_block_count = bitcoin_client.get_block_count()? + 1;

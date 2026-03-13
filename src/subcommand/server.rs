@@ -117,10 +117,9 @@ impl Display for StaticHtml {
 pub(crate) struct Server {
   #[clap(
     long,
-    default_value = "0.0.0.0",
-    help = "Listen on <ADDRESS> for incoming requests."
+    help = "Listen on <ADDRESS> for incoming requests. [default: 0.0.0.0]"
   )]
-  address: String,
+  address: Option<String>,
   #[clap(
     long,
     help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ord-pepecoin instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
@@ -170,6 +169,8 @@ impl Server {
       });
 
       let config = options.load_config()?;
+      let address = self.listen_address(&config);
+      let http_port = self.http_port(&config);
       let acme_domains = self.acme_domains()?;
 
       let page_config = Arc::new(PageConfig {
@@ -225,10 +226,10 @@ impl Server {
         )
         .layer(CompressionLayer::new());
 
-      match (self.http_port(), self.https_port()) {
+      match (http_port, self.https_port()) {
         (Some(http_port), None) => {
           self
-            .spawn(router, handle, http_port, SpawnConfig::Http)?
+            .spawn(router, handle, http_port, SpawnConfig::Http, &address)?
             .await??
         }
         (None, Some(https_port)) => {
@@ -238,6 +239,7 @@ impl Server {
               handle,
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
+              &address,
             )?
             .await??
         }
@@ -253,12 +255,13 @@ impl Server {
           };
 
           let (http_result, https_result) = tokio::join!(
-            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config)?,
+            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config, &address)?,
             self.spawn(
               router,
               handle,
               https_port,
               SpawnConfig::Https(self.acceptor(&options)?),
+              &address,
             )?
           );
           http_result.and(https_result)??;
@@ -280,8 +283,9 @@ impl Server {
     handle: Handle<SocketAddr>,
     port: u16,
     config: SpawnConfig,
+    address: &str,
   ) -> Result<task::JoinHandle<io::Result<()>>> {
-    let addr = (self.address.as_str(), port)
+    let addr = (address, port)
       .to_socket_addrs()?
       .next()
       .ok_or_else(|| anyhow!("failed to get socket addrs"))?;
@@ -344,12 +348,20 @@ impl Server {
     }
   }
 
-  fn http_port(&self) -> Option<u16> {
+  fn http_port(&self, config: &Config) -> Option<u16> {
     if self.http || self.http_port.is_some() || (self.https_port.is_none() && !self.https) {
-      Some(self.http_port.unwrap_or(80))
+      Some(self.http_port.unwrap_or_else(|| {
+        config.http_port.unwrap_or(80)
+      }))
     } else {
       None
     }
+  }
+
+  fn listen_address(&self, config: &Config) -> String {
+    self.address.clone().unwrap_or_else(|| {
+      config.address.clone().unwrap_or_else(|| "0.0.0.0".to_string())
+    })
   }
 
   fn https_port(&self) -> Option<u16> {
@@ -1439,7 +1451,7 @@ mod tests {
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ord-pepecoin server").1.http_port(), Some(80));
+    assert_eq!(parse_server_args("ord-pepecoin server").1.http_port(&Config::default()), Some(80));
   }
 
   #[test]
@@ -1462,7 +1474,7 @@ mod tests {
     assert_eq!(
       parse_server_args("ord-pepecoin server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
-        .http_port(),
+        .http_port(&Config::default()),
       None
     );
   }
@@ -1474,7 +1486,7 @@ mod tests {
         "ord-pepecoin server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(),
+      .http_port(&Config::default()),
       None
     );
   }
@@ -1498,7 +1510,7 @@ mod tests {
         "ord-pepecoin server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(),
+      .http_port(&Config::default()),
       Some(80)
     );
   }

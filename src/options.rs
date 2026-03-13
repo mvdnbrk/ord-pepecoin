@@ -45,12 +45,8 @@ pub(crate) struct Options {
   pub(crate) testnet: bool,
   #[clap(long, default_value = "ord", help = "Use wallet named <WALLET>.")]
   pub(crate) wallet: String,
-  #[clap(
-    long,
-    default_value = "http://localhost:8383",
-    help = "Use ord-pepecoin server running at <SERVER_URL>."
-  )]
-  pub(crate) server_url: Url,
+  #[clap(long, help = "Use ord-pepecoin server running at <SERVER_URL>.")]
+  pub(crate) server_url: Option<Url>,
 }
 
 impl Default for Options {
@@ -71,7 +67,7 @@ impl Default for Options {
       signet: false,
       testnet: false,
       wallet: "ord".to_string(),
-      server_url: Url::parse("http://localhost:8383").unwrap(),
+      server_url: None,
     }
   }
 }
@@ -137,6 +133,16 @@ impl Options {
           self.wallet
         )
       })
+  }
+
+  pub(crate) fn server_url(&self) -> Result<Url> {
+    let config = self.load_config().unwrap_or_default();
+
+    self
+      .server_url
+      .clone()
+      .or(config.server_url)
+      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url or server_url in ord.yaml"))
   }
 
   pub(crate) fn auth(&self) -> Result<Auth> {
