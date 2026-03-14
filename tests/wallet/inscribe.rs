@@ -4,11 +4,10 @@ use super::*;
 fn inscribe_creates_inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
   assert_eq!(rpc_server.descriptors().len(), 0);
-
-  create_wallet(&rpc_server);
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &ord_server);
 
@@ -58,9 +57,9 @@ fn inscribe_fails_if_pepecoin_core_is_too_old() {
 fn inscribe_no_backup() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
   rpc_server.mine_blocks(1);
 
-  create_wallet(&rpc_server);
   assert_eq!(rpc_server.imported_privkeys().len(), 40);
 
   CommandBuilder::new("wallet inscribe hello.txt --no-backup")
@@ -428,4 +427,135 @@ fn inscribe_with_no_limit() {
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .output::<Inscribe>();
+}
+
+#[test]
+fn batch_inscribe_creates_inscriptions() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
+
+  // Create batch YAML with 2 files
+  let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("batch.yaml", "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n")
+    .write("foo.txt", "FOO")
+    .write("bar.txt", "BAR")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .output::<BatchInscribe>();
+
+  assert_eq!(output.inscriptions.len(), 2);
+
+  rpc_server.mine_blocks(1);
+
+  // Verify both inscriptions are indexed and have correct content
+  let response1 = ord_server.request(format!("/content/{}", output.inscriptions[0].inscription));
+  assert_eq!(response1.status(), 200);
+  assert_eq!(response1.text().unwrap(), "FOO");
+
+  let response2 = ord_server.request(format!("/content/{}", output.inscriptions[1].inscription));
+  assert_eq!(response2.status(), 200);
+  assert_eq!(response2.text().unwrap(), "BAR");
+
+  // All inscriptions without explicit destination should share the same address
+  assert_eq!(
+    output.inscriptions[0].destination,
+    output.inscriptions[1].destination
+  );
+}
+
+#[test]
+fn batch_inscribe_with_destinations() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
+
+  let destination = CommandBuilder::new("wallet receive")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .output::<ord::subcommand::wallet::receive::Output>()
+    .address;
+
+  let batch_yaml = format!(
+    "inscriptions:\n  - file: foo.txt\n    destination: \"{destination}\"\n  - file: bar.txt\n"
+  );
+
+  let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("batch.yaml", batch_yaml)
+    .write("foo.txt", "FOO")
+    .write("bar.txt", "BAR")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .output::<BatchInscribe>();
+
+  // First inscription should go to specified destination
+  assert_eq!(output.inscriptions[0].destination, destination.to_string());
+}
+
+#[test]
+fn batch_inscribe_with_dry_run() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
+
+  CommandBuilder::new("wallet inscribe --batch batch.yaml --dry-run")
+    .write("batch.yaml", "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n")
+    .write("foo.txt", "FOO")
+    .write("bar.txt", "BAR")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .output::<BatchInscribe>();
+
+  // No transactions should be broadcast
+  assert!(rpc_server.mempool().is_empty());
+}
+
+#[test]
+fn batch_inscribe_refuses_empty_batch() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
+
+  CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("batch.yaml", "inscriptions: []\n")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .expected_exit_code(1)
+    .stderr_regex("error: batch file contains no inscriptions\n")
+    .run();
+}
+
+#[test]
+fn batch_inscribe_file_not_found() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet(&rpc_server);
+  rpc_server.mine_blocks(1);
+
+  CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("batch.yaml", "inscriptions:\n  - file: nonexistent.txt\n")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .expected_exit_code(1)
+    .stderr_regex("error: io error reading .*nonexistent.txt.*\n")
+    .run();
+}
+
+#[test]
+fn batch_and_file_conflict() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  CommandBuilder::new("wallet inscribe --batch batch.yaml foo.txt")
+    .write("batch.yaml", "inscriptions:\n  - file: foo.txt\n")
+    .write("foo.txt", "FOO")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .expected_exit_code(2)  // clap argument conflict
+    .stderr_regex(".*cannot be used with.*")
+    .run();
 }

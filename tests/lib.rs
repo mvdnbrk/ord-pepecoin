@@ -50,6 +50,23 @@ struct Inscribe {
   fees: u64,
 }
 
+#[derive(Deserialize, Debug)]
+struct BatchInscribe {
+  #[allow(dead_code)]
+  commit: Txid,
+  inscriptions: Vec<BatchInscription>,
+  #[allow(dead_code)]
+  total_fees: u64,
+}
+
+#[derive(Deserialize, Debug)]
+struct BatchInscription {
+  inscription: String,
+  #[allow(dead_code)]
+  reveal: Txid,
+  destination: String,
+}
+
 fn inscribe(rpc_server: &test_bitcoincore_rpc::Handle, ord_server: &TestServer) -> Inscribe {
   rpc_server.mine_blocks(1);
 
