@@ -32,6 +32,10 @@ impl BatchFile {
     let mut inscriptions = Vec::new();
     let mut destinations = Vec::new();
 
+    // Use a single default address for all inscriptions without an explicit destination.
+    // This avoids burning a key pool address per inscription in large batches.
+    let default_address = get_change_address(client)?;
+
     for entry in &self.inscriptions {
       let path = if entry.file.is_absolute() {
         entry.file.clone()
@@ -44,8 +48,7 @@ impl BatchFile {
         entry
           .destination
           .clone()
-          .map(Ok)
-          .unwrap_or_else(|| get_change_address(client))?,
+          .unwrap_or_else(|| default_address.clone()),
       );
     }
 

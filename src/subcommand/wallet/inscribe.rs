@@ -150,9 +150,9 @@ impl Inscribe {
           for (j, reveal) in chain.into_iter().enumerate() {
             let mut tx = reveal.tx;
             if j == 0 {
-              tx.input[0].previous_output.txid = commit_txid;
+              tx.input[0].previous_output = OutPoint { txid: commit_txid, vout: i as u32 };
             } else {
-              tx.input[0].previous_output.txid = last_txid;
+              tx.input[0].previous_output = OutPoint { txid: last_txid, vout: 0 };
             }
 
             let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);

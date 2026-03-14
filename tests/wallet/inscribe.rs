@@ -457,6 +457,12 @@ fn batch_inscribe_creates_inscriptions() {
   let response2 = ord_server.request(format!("/content/{}", output.inscriptions[1].inscription));
   assert_eq!(response2.status(), 200);
   assert_eq!(response2.text().unwrap(), "BAR");
+
+  // All inscriptions without explicit destination should share the same address
+  assert_eq!(
+    output.inscriptions[0].destination,
+    output.inscriptions[1].destination
+  );
 }
 
 #[test]

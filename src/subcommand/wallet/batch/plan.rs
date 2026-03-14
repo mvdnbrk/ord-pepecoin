@@ -129,6 +129,7 @@ pub(crate) fn create_batch_inscription_transactions(
   postage: Amount,
 ) -> Result<(Transaction, Vec<Vec<RevealTx>>, u64)> {
   let mut reveal_chains: Vec<Vec<RevealTx>> = Vec::new();
+  let mut chain_initial_values: Vec<u64> = Vec::new();
   let mut total_reveal_value = 0;
   let mut fees = 0;
 
@@ -147,6 +148,7 @@ pub(crate) fn create_batch_inscription_transactions(
 
     let mut reveal_chain = Vec::new();
     let mut current_reveal_value = postage.to_sat() + chain_reveal_fees.iter().sum::<u64>();
+    chain_initial_values.push(current_reveal_value);
     total_reveal_value += current_reveal_value;
 
     for (i, (batch, lock)) in batches.into_iter().zip(locks.iter()).enumerate() {
@@ -249,23 +251,12 @@ pub(crate) fn create_batch_inscription_transactions(
     output: Vec::new(),
   };
 
-  for chain in &reveal_chains {
-    let initial_value = chain[0].tx.output[0].value
-      + chain
-        .iter()
-        .map(|r| {
-          let num_chunks = r.partial_script.instructions().count();
-          let estimated_sig_size = r.partial_script.len() + 1 + 72 + 1 + (33 + 1 + num_chunks + 1);
-          let tx_vsize = 82 + estimated_sig_size;
-          reveal_fee_rate.fee(tx_vsize).to_sat()
-        })
-        .sum::<u64>();
-
+  for (i, chain) in reveal_chains.iter().enumerate() {
     commit_tx.output.push(TxOut {
       script_pubkey: Address::p2sh(&chain[0].redeem_script, network)
         .unwrap()
         .script_pubkey(),
-      value: initial_value,
+      value: chain_initial_values[i],
     });
   }
 
