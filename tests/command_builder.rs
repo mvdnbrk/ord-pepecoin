@@ -1,4 +1,7 @@
-use super::*;
+use {
+  super::*,
+  std::path::PathBuf,
+};
 
 pub(crate) trait ToArgs {
   fn to_args(&self) -> Vec<String>;
@@ -36,6 +39,7 @@ pub(crate) struct CommandBuilder {
   rpc_server_url: Option<String>,
   server_url: Option<String>,
   tempdir: TempDir,
+  data_dir: Option<PathBuf>,
 }
 
 impl CommandBuilder {
@@ -48,6 +52,18 @@ impl CommandBuilder {
       rpc_server_url: None,
       server_url: None,
       tempdir: TempDir::new().unwrap(),
+      data_dir: None,
+    }
+  }
+
+  pub(crate) fn with_tempdir(self, tempdir: TempDir) -> Self {
+    Self { tempdir, ..self }
+  }
+
+  pub(crate) fn data_dir(self, data_dir: PathBuf) -> Self {
+    Self {
+      data_dir: Some(data_dir),
+      ..self
     }
   }
 
@@ -66,6 +82,7 @@ impl CommandBuilder {
   pub(crate) fn ord_server(self, ord_server: &TestServer) -> Self {
     Self {
       server_url: Some(ord_server.url().to_string()),
+      data_dir: Some(ord_server.directory()),
       ..self
     }
   }
@@ -116,6 +133,8 @@ impl CommandBuilder {
       command.args(["--server-url", server_url]);
     }
 
+    let data_dir: &Path = self.data_dir.as_ref().map(|d| d.as_path()).unwrap_or(self.tempdir.path());
+
     command
       .env("ORD_INTEGRATION_TEST", "1")
       .stdin(Stdio::null())
@@ -123,7 +142,7 @@ impl CommandBuilder {
       .stderr(Stdio::piped())
       .current_dir(&self.tempdir)
       .arg("--data-dir")
-      .arg(self.tempdir.path())
+      .arg(data_dir)
       .args(&self.args);
 
     command

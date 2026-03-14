@@ -1,4 +1,7 @@
-use super::*;
+use {
+  super::*,
+  bitcoin::secp256k1::rand::{self, RngCore},
+};
 
 #[derive(Serialize)]
 struct Output {
@@ -23,7 +26,7 @@ impl Create {
 
     let mnemonic = Mnemonic::from_entropy(&entropy)?;
 
-    initialize_wallet(&options, mnemonic.to_seed(self.passphrase.clone()))?;
+    crate::wallet::Wallet::initialize(&options, mnemonic.to_seed(self.passphrase.clone()))?;
 
     print_json(Output {
       mnemonic,

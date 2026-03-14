@@ -4,7 +4,7 @@ use {
   bitcoincore_rpc::{Auth, Client, RpcApi},
   ord::{Index, parse_ord_server_args},
   reqwest::blocking::Response,
-  std::{net::SocketAddr, sync::Arc},
+  std::{net::SocketAddr, path::PathBuf, sync::Arc},
 };
 
 pub(crate) struct TestServer {
@@ -62,6 +62,10 @@ impl TestServer {
 
   pub(crate) fn url(&self) -> Url {
     format!("http://127.0.0.1:{}", self.port).parse().unwrap()
+  }
+
+  pub(crate) fn directory(&self) -> PathBuf {
+    self.tempdir.path().to_owned()
   }
 
   pub(crate) fn sync_server(&self) {

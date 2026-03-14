@@ -1,41 +1,65 @@
-use super::*;
+use {
+  super::*,
+  clap::Parser as ClapParser,
+  ord::options::Options,
+  redb::{ReadableDatabase, ReadableTable, TableDefinition},
+  std::collections::BTreeMap,
+};
+
+const DESCRIPTORS: TableDefinition<&str, &str> = TableDefinition::new("DESCRIPTORS");
+
+fn read_descriptors(data_dir: &std::path::Path) -> BTreeMap<String, String> {
+  let options = Options::parse_from(["ordpep", "--data-dir", data_dir.to_str().unwrap()]);
+  let db = ord::wallet::Wallet::open_database(&options).unwrap();
+  let rtx = db.begin_read().unwrap();
+  let table = rtx.open_table(DESCRIPTORS).unwrap();
+  let mut descs = BTreeMap::new();
+  if let Some(v) = table.get("receive").unwrap() {
+    descs.insert("receive".to_string(), v.value().to_string());
+  }
+  if let Some(v) = table.get("change").unwrap() {
+    descs.insert("change".to_string(), v.value().to_string());
+  }
+  descs
+}
 
 #[test]
 fn restore_generates_same_descriptors() {
-  let (mnemonic, descriptors) = {
-    let rpc_server = test_bitcoincore_rpc::spawn();
-
-    let Create { mnemonic } = CommandBuilder::new("wallet create")
-      .rpc_server(&rpc_server)
-      .output::<Create>();
-
-    (mnemonic, rpc_server.descriptors())
-  };
-
+  let tempdir = TempDir::new().unwrap();
   let rpc_server = test_bitcoincore_rpc::spawn();
 
+  let Create { mnemonic } = CommandBuilder::new("wallet create")
+    .rpc_server(&rpc_server)
+    .data_dir(tempdir.path().to_owned())
+    .output::<Create>();
+
+  let descriptors = read_descriptors(tempdir.path());
+
+  let tempdir2 = TempDir::new().unwrap();
   CommandBuilder::new(["wallet", "restore", &mnemonic.to_string()])
     .rpc_server(&rpc_server)
+    .data_dir(tempdir2.path().to_owned())
     .run();
 
-  assert_eq!(rpc_server.descriptors(), descriptors);
+  let restored_descriptors = read_descriptors(tempdir2.path());
+
+  assert_eq!(restored_descriptors, descriptors);
 }
 
 #[test]
 fn restore_generates_same_descriptors_with_passphrase() {
   let passphrase = "foo";
-  let (mnemonic, descriptors) = {
-    let rpc_server = test_bitcoincore_rpc::spawn();
-
-    let Create { mnemonic } = CommandBuilder::new(["wallet", "create", "--passphrase", passphrase])
-      .rpc_server(&rpc_server)
-      .output::<Create>();
-
-    (mnemonic, rpc_server.descriptors())
-  };
-
+  let tempdir = TempDir::new().unwrap();
   let rpc_server = test_bitcoincore_rpc::spawn();
 
+  let Create { mnemonic } = CommandBuilder::new(["wallet", "create", "--passphrase", passphrase])
+    .rpc_server(&rpc_server)
+    .data_dir(tempdir.path().to_owned())
+    .output::<Create>();
+
+  let descriptors = read_descriptors(tempdir.path());
+
+  let tempdir2 = TempDir::new().unwrap();
   CommandBuilder::new([
     "wallet",
     "restore",
@@ -44,7 +68,10 @@ fn restore_generates_same_descriptors_with_passphrase() {
     &mnemonic.to_string(),
   ])
   .rpc_server(&rpc_server)
+  .data_dir(tempdir2.path().to_owned())
   .run();
 
-  assert_eq!(rpc_server.descriptors(), descriptors);
+  let restored_descriptors = read_descriptors(tempdir2.path());
+
+  assert_eq!(restored_descriptors, descriptors);
 }

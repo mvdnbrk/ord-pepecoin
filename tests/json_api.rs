@@ -18,7 +18,7 @@ fn status() {
 fn inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
   let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.json_request("/inscriptions");
@@ -34,7 +34,7 @@ fn inscriptions() {
 fn inscription() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
   let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.json_request(format!("/inscription/{}", inscribe.inscription));
@@ -50,7 +50,7 @@ fn inscription() {
 fn inscriptions_batch() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
   let inscribe = inscribe(&rpc_server, &test_server);
 
   let response = test_server.post_json("/inscriptions", &vec![inscribe.inscription.clone()]);
@@ -65,7 +65,7 @@ fn inscriptions_batch() {
 fn output() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
   let inscribe = inscribe(&rpc_server, &test_server);
 
   let outpoint = OutPoint::new(inscribe.reveal, 0);
@@ -82,7 +82,7 @@ fn output() {
 fn outputs_batch() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
   let inscribe = inscribe(&rpc_server, &test_server);
 
   let outpoint = OutPoint::new(inscribe.reveal, 0);

@@ -4,7 +4,7 @@ use {super::*, ord::subcommand::wallet::balance::Output};
 fn wallet_balance() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   assert_eq!(
     CommandBuilder::new("wallet balance")
@@ -31,7 +31,7 @@ fn wallet_balance() {
 fn wallet_balance_only_counts_cardinal_utxos() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   assert_eq!(
     CommandBuilder::new("wallet balance")

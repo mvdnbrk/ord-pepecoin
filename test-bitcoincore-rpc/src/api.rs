@@ -98,14 +98,22 @@ pub trait Api {
     blockhash: Option<String>,
   ) -> Result<Value, jsonrpc_core::Error>;
 
+  #[rpc(name = "importaddress")]
+  fn import_address(
+    &self,
+    address: String,
+    label: Option<String>,
+    rescan: Option<bool>,
+  ) -> Result<(), jsonrpc_core::Error>;
+
   #[rpc(name = "listunspent")]
   fn list_unspent(
     &self,
     minconf: Option<usize>,
     maxconf: Option<usize>,
-    address: Option<bitcoin::Address>,
+    addresses: Option<Vec<bitcoin::Address>>,
     include_unsafe: Option<bool>,
-    query_options: Option<String>,
+    query_options: Option<serde_json::Value>,
   ) -> Result<Vec<ListUnspentResultEntry>, jsonrpc_core::Error>;
 
   #[rpc(name = "listlockunspent")]

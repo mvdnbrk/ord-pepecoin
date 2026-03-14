@@ -1,4 +1,10 @@
-use {super::*, crate::wallet::Wallet};
+use {
+  super::*,
+  crate::wallet::{
+    signer::LocalSigner,
+    Wallet,
+  },
+};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Send {
@@ -48,27 +54,100 @@ impl Send {
           .map(|satpoint| satpoint.outpoint)
           .collect::<HashSet<OutPoint>>();
 
-        let wallet_inscription_outputs = wallet
-          .utxos()
-          .keys()
-          .filter(|utxo| inscribed_outputs.contains(utxo))
-          .cloned()
-          .collect::<Vec<OutPoint>>();
+        let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+        let change_address = wallet.get_address(true)?;
 
-        if !client.lock_unspent(&wallet_inscription_outputs)? {
-          bail!("failed to lock ordinal UTXOs");
+        // Select cardinal (non-inscribed) UTXOs
+        let mut cardinal_utxos: Vec<(OutPoint, Amount)> = wallet
+          .utxos()
+          .iter()
+          .filter(|(op, _)| !inscribed_outputs.contains(op))
+          .map(|(op, txo)| (*op, Amount::from_sat(txo.value)))
+          .collect();
+
+        // Sort largest first for simple coin selection
+        cardinal_utxos.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let mut selected = Vec::new();
+        let mut selected_amount = Amount::ZERO;
+
+        for (outpoint, utxo_amount) in &cardinal_utxos {
+          selected.push(*outpoint);
+          selected_amount += *utxo_amount;
+          if selected_amount >= amount {
+            break;
+          }
         }
 
-        let txid =
-          client.send_to_address(&self.address, amount, None, None, None, None, None, None)?;
+        if selected_amount < amount {
+          bail!("wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.");
+        }
+
+        // Estimate fee: ~148 bytes per P2PKH input, ~34 per output, ~10 overhead
+        let estimated_vsize = selected.len() * 148 + 2 * 34 + 10;
+        let fee = fee_rate.fee(estimated_vsize);
+
+        let total_needed = amount.checked_add(fee)
+          .ok_or_else(|| anyhow!("overflow calculating total amount + fee"))?;
+
+        // Re-select if we need more for fees
+        if selected_amount < total_needed {
+          for (outpoint, utxo_amount) in &cardinal_utxos {
+            if selected.contains(outpoint) {
+              continue;
+            }
+            selected.push(*outpoint);
+            selected_amount += *utxo_amount;
+            if selected_amount >= total_needed {
+              break;
+            }
+          }
+
+          if selected_amount < total_needed {
+            bail!("wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.");
+          }
+        }
+
+        let change_amount = selected_amount.checked_sub(total_needed)
+          .ok_or_else(|| anyhow!("insufficient funds for fee"))?;
+
+        let mut tx_outputs = vec![TxOut {
+          value: amount.to_sat(),
+          script_pubkey: self.address.script_pubkey(),
+        }];
+
+        let dust_limit = change_address.script_pubkey().dust_value();
+        if change_amount >= dust_limit {
+          tx_outputs.push(TxOut {
+            value: change_amount.to_sat(),
+            script_pubkey: change_address.script_pubkey(),
+          });
+        }
+
+        let unsigned_transaction = Transaction {
+          version: 1,
+          lock_time: bitcoin::PackedLockTime::ZERO,
+          input: selected
+            .iter()
+            .map(|outpoint| TxIn {
+              previous_output: *outpoint,
+              script_sig: Script::new(),
+              sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+              witness: bitcoin::Witness::default(),
+            })
+            .collect(),
+          output: tx_outputs,
+        };
+
+        let signed_tx = LocalSigner::sign_transaction(&wallet, unsigned_transaction)?;
+        let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
         print_json(Output { transaction: txid })?;
-
         return Ok(());
       }
     };
 
-    let change = [get_change_address(client)?, get_change_address(client)?];
+    let change = [wallet.get_address(true)?, wallet.get_address(true)?];
 
     let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
@@ -84,19 +163,9 @@ impl Send {
       postage,
     )?;
 
-    let tx_hex = bitcoin::consensus::encode::serialize_hex(&unsigned_transaction);
-    let result: serde_json::Value = client
-      .call("signrawtransaction", &[tx_hex.into()])
-      .context("failed to sign transaction")?;
-    let signed_hex = result["hex"]
-      .as_str()
-      .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
-    if result["complete"].as_bool() != Some(true) {
-      bail!("Failed to sign transaction: {}", result["errors"]);
-    }
-    let signed_tx = hex::decode(signed_hex)?;
+    let signed_tx = LocalSigner::sign_transaction(&wallet, unsigned_transaction)?;
 
-    let txid = client.send_raw_transaction(&signed_tx)?;
+    let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
     println!("{txid}");
 
