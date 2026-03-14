@@ -28,4 +28,4 @@ cd $DIST
 echo "Creating release archive..."
 ARCHIVE=$DIST/ordpep-$VERSION-$TARGET.tar.gz
 tar czf $ARCHIVE *
-echo "::set-output name=archive::$ARCHIVE"
+echo "archive=$ARCHIVE" >> $GITHUB_OUTPUT

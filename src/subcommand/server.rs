@@ -30,7 +30,6 @@ use {
     AcmeConfig,
   },
   std::{cmp::Ordering, net::SocketAddr, str, sync::mpsc::Sender},
-  tokio::task,
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,

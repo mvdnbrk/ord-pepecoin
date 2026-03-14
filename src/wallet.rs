@@ -14,14 +14,14 @@ use {
 #[derive(Clone, Debug)]
 pub(crate) struct Wallet {
   bitcoin_client: Arc<Client>,
-  ord_client: OrdClient,
-  rpc_url: Url,
-  has_sat_index: bool,
+  _ord_client: OrdClient,
+  _rpc_url: Url,
+  _has_sat_index: bool,
   utxos: BTreeMap<OutPoint, TxOut>,
   inscriptions: BTreeMap<SatPoint, Vec<InscriptionId>>,
   inscription_info: BTreeMap<InscriptionId, api::Inscription>,
   output_info: BTreeMap<OutPoint, api::Output>,
-  locked_utxos: BTreeMap<OutPoint, TxOut>,
+  _locked_utxos: BTreeMap<OutPoint, TxOut>,
   options: Options,
 }
 
@@ -150,14 +150,14 @@ impl Wallet {
 
     Ok(Self {
       bitcoin_client: Arc::new(bitcoin_client),
-      ord_client,
-      rpc_url,
-      has_sat_index: status.sat_index,
+      _ord_client: ord_client,
+      _rpc_url: rpc_url,
+      _has_sat_index: status.sat_index,
       utxos,
       inscriptions,
       inscription_info,
       output_info,
-      locked_utxos,
+      _locked_utxos: locked_utxos,
       options: options.clone(),
     })
   }
@@ -174,14 +174,6 @@ impl Wallet {
     &self.inscription_info
   }
 
-  pub(crate) fn output_info(&self) -> &BTreeMap<OutPoint, api::Output> {
-    &self.output_info
-  }
-
-  pub(crate) fn has_sat_index(&self) -> bool {
-    self.has_sat_index
-  }
-
   pub(crate) fn bitcoin_client(&self) -> &Client {
     &self.bitcoin_client
   }
@@ -191,7 +183,7 @@ impl Wallet {
   }
 
   pub(crate) fn get_unspent_output_ranges(&self) -> Result<Vec<(OutPoint, Vec<(u128, u128)>)>> {
-    if !self.has_sat_index {
+    if !self._has_sat_index {
       bail!("ordpep server does not have a sat index");
     }
     Ok(self.output_info
