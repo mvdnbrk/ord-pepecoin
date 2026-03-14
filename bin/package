@@ -14,31 +14,18 @@ RUSTFLAGS="--deny warnings $TARGET_RUSTFLAGS" \
   cargo build --bin ordpep --target $TARGET --release
 EXECUTABLE=target/$TARGET/release/ordpep
 
-if [[ $OS == windows-latest ]]; then
-  EXECUTABLE=$EXECUTABLE.exe
-fi
-
 echo "Copying release files..."
 mkdir dist
 cp \
   $EXECUTABLE \
   Cargo.lock \
   Cargo.toml \
-  LICENSE \
+  LICENSE.md \
   README.md \
   $DIST
 
 cd $DIST
 echo "Creating release archive..."
-case $OS in
-  ubuntu-latest | macos-latest)
-    ARCHIVE=$DIST/ordpep-$VERSION-$TARGET.tar.gz
-    tar czf $ARCHIVE *
-    echo "::set-output name=archive::$ARCHIVE"
-    ;;
-  windows-latest)
-    ARCHIVE=$DIST/ordpep-$VERSION-$TARGET.zip
-    7z a $ARCHIVE *
-    echo "::set-output name=archive::`pwd -W`/ordpep-$VERSION-$TARGET.zip"
-    ;;
-esac
+ARCHIVE=$DIST/ordpep-$VERSION-$TARGET.tar.gz
+tar czf $ARCHIVE *
+echo "::set-output name=archive::$ARCHIVE"

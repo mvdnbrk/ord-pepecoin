@@ -1,11 +1,11 @@
 # Changelog
 
-All notable changes to ord-pepecoin are documented in this file.
+All notable changes to ordpep are documented in this file.
 
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
-## [Unreleased]
+## [0.6.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.6.0) - 2026-03-14
 
 ### Added
 - P2SH scriptSig inscription support (commit, reveal, batch inscribe) ([#3](https://github.com/mvdnbrk/ord-pepecoin/pull/3))
@@ -22,6 +22,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `ord.yaml.example` with documented config options ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - `/update` test-only endpoint for synchronous index updates ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - Batch inscribe: `ordpep wallet inscribe --batch batch.yaml` for multiple files in one operation ([#17](https://github.com/mvdnbrk/ord-pepecoin/pull/17))
+- Index size on status page (human-readable HTML, raw bytes in JSON API)
 - Address index with inscription-aware UTXO selection
 - YAML config file support
 - Index export command and `index update` subcommand (replaces deprecated `index run`)
