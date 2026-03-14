@@ -131,10 +131,6 @@ The `/status` endpoint returns index information:
 
 Raw inscription content is always available at `/content/<inscription_id>`.
 
-## Reorg Resistance
-
-The indexer automatically creates database savepoints near the chain tip. If a blockchain reorganization is detected, it restores the most recent savepoint and re-indexes from there. This is important for Pepecoin due to its 1-minute block times which make reorgs more frequent than Bitcoin.
-
 ## Wallet
 
 `ordpep` relies on Pepecoin Core for private key management and transaction signing.
@@ -150,6 +146,23 @@ ordpep --config /path/to/ordpep.yaml wallet inscribe --dry-run /path/to/file.png
 ```
 
 Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large files are split across multiple chained transactions using 240-byte data chunks. Reveal transactions are signed locally.
+
+### Batch Inscribing
+
+Inscribe multiple files in a single operation:
+
+```bash
+ordpep wallet inscribe --batch batch.yaml
+```
+
+Example `batch.yaml`:
+
+```yaml
+inscriptions:
+  - file: first.png
+  - file: second.txt
+    destination: "PR7id..." # Optional custom destination
+```
 
 ## Credits
 
