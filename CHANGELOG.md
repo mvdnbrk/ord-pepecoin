@@ -21,6 +21,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `server_url`, `http_port`, `address` config options in `ord.yaml` ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - `ord.yaml.example` with documented config options ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
 - `/update` test-only endpoint for synchronous index updates ([#15](https://github.com/mvdnbrk/ord-pepecoin/pull/15))
+- Batch inscribe: `ordpep wallet inscribe --batch batch.yaml` for multiple files in one operation ([#17](https://github.com/mvdnbrk/ord-pepecoin/pull/17))
 - Address index with inscription-aware UTXO selection
 - YAML config file support
 - Index export command and `index update` subcommand (replaces deprecated `index run`)
@@ -31,13 +32,13 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Local signing for reveal transactions
 - Graceful shutdown to prevent redb corruption
 - RPC fetcher timeout and retry to prevent deadlock
-- Default data dir changed to `ord-pepecoin` to avoid collision with bitcoin ord
+- Default data dir changed to `ordpep` to avoid collision with bitcoin ord
 - Hostname leak in og:image meta tag
 - All tests passing (281 lib + 81 integration)
 - Handle RPC error code -5 for unknown transactions (Pepecoin Core compatibility)
 
 ### Changed
-- Binary renamed to `ord-pepecoin`
+- Binary renamed to `ordpep` (was `ord-pepecoin`) ([#16](https://github.com/mvdnbrk/ord-pepecoin/pull/16))
 - Adapted from Dogecoin to Pepecoin chain parameters
 - Fee rate and postage defaults tuned for Pepecoin
 - Use `Durability::Immediate` for redb writes
