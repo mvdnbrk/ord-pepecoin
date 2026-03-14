@@ -273,6 +273,10 @@ impl Index {
     })
   }
 
+  pub(crate) fn index_file_size(&self) -> u64 {
+    fs::metadata(&self.path).map(|m| m.len()).unwrap_or(0)
+  }
+
   pub(crate) fn has_sat_index(&self) -> Result<bool> {
     match self.begin_read()?.0.open_table(OUTPOINT_TO_SAT_RANGES) {
       Ok(_) => Ok(true),

@@ -49,6 +49,7 @@ pub struct Status {
   pub address_index: bool,
   pub chain: String,
   pub height: Option<u64>,
+  pub index_size: u64,
   pub inscriptions: u64,
   pub sat_index: bool,
   pub unrecoverably_reorged: bool,

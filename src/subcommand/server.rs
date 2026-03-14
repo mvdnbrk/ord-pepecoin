@@ -769,6 +769,7 @@ impl Server {
     accept_json: AcceptJson,
   ) -> ServerResult<Response> {
     let height = index.block_count().ok();
+    let index_size = index.index_file_size();
     let inscriptions = index.inscription_count().unwrap_or(0);
     let sat_index = index.has_sat_index().unwrap_or(false);
     let unrecoverably_reorged = index.is_unrecoverably_reorged();
@@ -779,6 +780,7 @@ impl Server {
           address_index: true,
           chain: page_config.chain.to_string(),
           height,
+          index_size,
           inscriptions,
           sat_index,
           unrecoverably_reorged,
@@ -791,6 +793,7 @@ impl Server {
           address_index: true,
           chain: page_config.chain,
           height,
+          index_size,
           inscriptions,
           sat_index,
           started: index.started,
