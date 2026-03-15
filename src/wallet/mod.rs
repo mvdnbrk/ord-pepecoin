@@ -157,6 +157,8 @@ impl Wallet {
       amount: f64,
     }
 
+    let wallet_scripts: HashSet<Script> = addresses.iter().map(|a| a.script_pubkey()).collect();
+
     let mut utxos = BTreeMap::new();
     let unspent: Vec<UnspentEntry> = bitcoin_client
       .call("listunspent", &[])
@@ -165,6 +167,9 @@ impl Wallet {
     for utxo in unspent {
       let script_pubkey = Script::from_str(&utxo.script_pub_key)
         .context("failed to parse scriptPubKey")?;
+      if !wallet_scripts.contains(&script_pubkey) {
+        continue;
+      }
       let outpoint = OutPoint::new(utxo.txid, utxo.vout);
       let amount = Amount::from_btc(utxo.amount)
         .map_err(|e| anyhow!("invalid amount: {e}"))?;
