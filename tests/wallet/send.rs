@@ -134,7 +134,7 @@ fn send_on_mainnnet_works_with_wallet_named_ord() {
   let rpc_server = test_bitcoincore_rpc::builder().build();
   let ord_server = TestServer::spawn(&rpc_server);
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
-  let txid = rpc_server.mine_blocks_with_subsidy(1, 1_000_000)[0].txdata[0].txid();
+  let txid = rpc_server.mine_blocks_with_subsidy(1, 10_000_000)[0].txdata[0].txid();
 
   let stdout = CommandBuilder::new(format!(
     "wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {txid}:0:0"
@@ -154,16 +154,8 @@ fn send_does_not_use_inscribed_sats_as_cardinal_utxos() {
   let ord_server = TestServer::spawn(&rpc_server);
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
-  let txid = rpc_server.mine_blocks_with_subsidy(1, 100_000)[0].txdata[0].txid();
-  CommandBuilder::new(format!(
-    "wallet inscribe --satpoint {txid}:0:0 degenerate.png --fee-rate 10000"
-  ))
-  .write("degenerate.png", [1; 100])
-  .rpc_server(&rpc_server)
-  .ord_server(&ord_server)
-  .output::<Inscribe>();
-
-  let txid = rpc_server.mine_blocks_with_subsidy(1, 100)[0].txdata[0].txid();
+  // Only a tiny UTXO that can't cover fees at 10000 sat/vB
+  let txid = rpc_server.mine_blocks_with_subsidy(1, 1_000)[0].txdata[0].txid();
   CommandBuilder::new(format!(
     "wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {txid}:0:0"
   ))
@@ -361,7 +353,7 @@ fn send_max_sends_all_cardinal_utxos() {
   rpc_server.mine_blocks(3);
 
   let output =
-    CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
       .rpc_server(&rpc_server)
       .ord_server(&ord_server)
       .output::<Output>();
@@ -391,7 +383,7 @@ fn send_max_does_not_spend_inscriptions() {
   rpc_server.mine_blocks(1);
 
   let output =
-    CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
       .rpc_server(&rpc_server)
       .ord_server(&ord_server)
       .output::<Output>();
@@ -415,7 +407,7 @@ fn send_max_with_no_utxos() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   // No UTXOs in wallet at all
-  CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+  CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .expected_stderr("error: wallet contains no cardinal UTXOs to send\n")

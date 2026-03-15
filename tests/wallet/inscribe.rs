@@ -432,7 +432,7 @@ fn inscribe_with_no_limit() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
-  rpc_server.mine_blocks(1);
+  rpc_server.mine_blocks_with_subsidy(1, 100_000_000_000_000);
 
   let four_megger = std::iter::repeat(0).take(4_000_000).collect::<Vec<u8>>();
   CommandBuilder::new("wallet inscribe --no-limit --fee-rate 10000.0 degenerate.png")
