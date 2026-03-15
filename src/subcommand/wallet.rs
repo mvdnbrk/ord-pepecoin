@@ -19,11 +19,11 @@ pub mod transactions;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WalletCommand {
-  #[clap(long, default_value = "ordpep", help = "Use wallet named <NAME>.")]
+  #[clap(long, global = true, default_value = "ordpep", help = "Use wallet named <NAME>.")]
   pub(crate) name: String,
-  #[clap(long, alias = "nosync", help = "Do not update index.")]
+  #[clap(long, global = true, alias = "nosync", help = "Do not update index.")]
   pub(crate) no_sync: bool,
-  #[clap(long, help = "Use ordpep server running at <SERVER_URL>.")]
+  #[clap(long, global = true, help = "Use ordpep server running at <SERVER_URL>.")]
   pub(crate) server_url: Option<Url>,
   #[clap(subcommand)]
   pub(crate) subcommand: WalletSubcommand,
