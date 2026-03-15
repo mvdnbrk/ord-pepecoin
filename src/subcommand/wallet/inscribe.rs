@@ -77,6 +77,16 @@ impl Inscribe {
       .fee_rate
       .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
     let commit_fee_rate = self.commit_fee_rate.unwrap_or(fee_rate);
+
+    let min = wallet.chain().min_fee_rate();
+    let min_fee_rate = FeeRate::try_from(min).unwrap();
+    if fee_rate < min_fee_rate {
+      bail!("fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+    }
+    if commit_fee_rate < min_fee_rate {
+      bail!("commit fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+    }
+
     let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
     let utxos = wallet

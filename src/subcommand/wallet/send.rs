@@ -186,6 +186,11 @@ impl Send {
 
     let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
+    let min = wallet.chain().min_fee_rate();
+    if fee_rate < FeeRate::try_from(min).unwrap() {
+      bail!("fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+    }
+
     let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
     let unsigned_transaction = TransactionBuilder::build_transaction_with_postage(
