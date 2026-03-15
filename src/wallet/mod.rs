@@ -98,6 +98,11 @@ impl Wallet {
   }
 
   pub(crate) fn load(options: &Options, wallet_name: &str, server_url: Option<Url>, no_sync: bool) -> Result<Self> {
+    let db_path = options.data_dir()?.join("wallets").join(wallet_name).join("wallet.redb");
+    if !db_path.exists() {
+      bail!("wallet `{wallet_name}` does not exist, create it first with `ordpep wallet create`");
+    }
+
     let bitcoin_client = options.pepecoin_rpc_client_for_wallet_command(false)?;
     let database = Self::open_database(options, wallet_name)?;
 
