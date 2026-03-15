@@ -4,7 +4,7 @@ use {super::*, ord::subcommand::wallet::send::Output};
 fn inscriptions_can_be_sent() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &ord_server);
@@ -48,7 +48,7 @@ fn inscriptions_can_be_sent() {
 fn send_unknown_inscription() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   let txid = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
@@ -66,7 +66,7 @@ fn send_unknown_inscription() {
 fn send_inscribed_sat() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &ord_server);
@@ -97,18 +97,15 @@ fn send_inscribed_sat() {
 fn send_on_mainnnet_works_with_wallet_named_foo() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_options(&rpc_server, Some(ord_server.directory()), Some("foo"));
   let txid = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
-  CommandBuilder::new("--wallet foo wallet create")
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .output::<Create>();
-
   CommandBuilder::new(format!(
-    "--wallet foo wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {txid}:0:0"
+    "wallet --name foo send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {txid}:0:0"
   ))
   .rpc_server(&rpc_server)
   .ord_server(&ord_server)
+  .data_dir(ord_server.directory())
   .stdout_regex(r"[[:xdigit:]]{64}\n")
   .run();
 }
@@ -118,7 +115,7 @@ fn send_addresses_must_be_valid_for_network() {
   let rpc_server = test_bitcoincore_rpc::builder().build();
   let ord_server = TestServer::spawn(&rpc_server);
   let txid = rpc_server.mine_blocks_with_subsidy(1, 1_000)[0].txdata[0].txid();
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   CommandBuilder::new(format!(
     "wallet send --fee-rate 10000 tb1q6en7qjxgw4ev8xwx94pzdry6a6ky7wlfeqzunz {txid}:0:0"
@@ -136,8 +133,8 @@ fn send_addresses_must_be_valid_for_network() {
 fn send_on_mainnnet_works_with_wallet_named_ord() {
   let rpc_server = test_bitcoincore_rpc::builder().build();
   let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   let txid = rpc_server.mine_blocks_with_subsidy(1, 10_000_000)[0].txdata[0].txid();
-  create_wallet(&rpc_server);
 
   let stdout = CommandBuilder::new(format!(
     "wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {txid}:0:0"
@@ -155,7 +152,7 @@ fn send_on_mainnnet_works_with_wallet_named_ord() {
 fn send_does_not_use_inscribed_sats_as_cardinal_utxos() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   // Only a tiny UTXO that can't cover fees at 10000 sat/vB
   let txid = rpc_server.mine_blocks_with_subsidy(1, 1_000)[0].txdata[0].txid();
@@ -173,7 +170,7 @@ fn send_does_not_use_inscribed_sats_as_cardinal_utxos() {
 fn do_not_accidentally_send_an_inscription() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   let Inscribe {
     reveal,
@@ -204,7 +201,7 @@ fn do_not_accidentally_send_an_inscription() {
 fn inscriptions_cannot_be_sent_by_satpoint() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   let Inscribe { reveal, .. } = inscribe(&rpc_server, &ord_server);
 
@@ -224,7 +221,7 @@ fn inscriptions_cannot_be_sent_by_satpoint() {
 fn send_btc() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   rpc_server.mine_blocks(1);
 
@@ -234,30 +231,25 @@ fn send_btc() {
       .ord_server(&ord_server)
       .output::<Output>();
 
-  assert_eq!(
-    output.transaction,
-    "0000000000000000000000000000000000000000000000000000000000000000"
-      .parse()
-      .unwrap()
-  );
+  // Transaction should be in the mempool
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
 
-  assert_eq!(
-    rpc_server.sent(),
-    &[Sent {
-      amount: 1.0,
-      address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-        .parse()
-        .unwrap(),
-      locked: Vec::new(),
-    }]
-  )
+  // Destination should receive 1 BTC
+  let dest_script = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+    .parse::<Address>()
+    .unwrap()
+    .script_pubkey();
+  let dest_output = mempool[0].output.iter().find(|o| o.script_pubkey == dest_script).unwrap();
+  assert_eq!(dest_output.value, 100_000_000);
 }
 
 #[test]
 fn send_btc_locks_inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   rpc_server.mine_blocks(1);
 
@@ -269,42 +261,32 @@ fn send_btc_locks_inscriptions() {
       .ord_server(&ord_server)
       .output::<Output>();
 
-  assert_eq!(
-    output.transaction,
-    "0000000000000000000000000000000000000000000000000000000000000000"
-      .parse()
-      .unwrap()
-  );
+  // Transaction should be in the mempool
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
 
-  assert_eq!(
-    rpc_server.sent(),
-    &[Sent {
-      amount: 1.0,
-      address: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-        .parse()
-        .unwrap(),
-      locked: vec![OutPoint {
-        txid: reveal,
-        vout: 0,
-      }]
-    }]
-  )
+  // The inscription UTXO should NOT be spent as an input
+  let inscribed_outpoint = OutPoint { txid: reveal, vout: 0 };
+  assert!(
+    !mempool[0].input.iter().any(|i| i.previous_output == inscribed_outpoint),
+    "inscription UTXO should not be spent when sending BTC"
+  );
 }
 
 #[test]
-fn send_btc_fails_if_lock_unspent_fails() {
-  let rpc_server = test_bitcoincore_rpc::builder()
-    .fail_lock_unspent(true)
-    .build();
+fn send_btc_insufficient_funds() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
-  rpc_server.mine_blocks(1);
+  // Mine a small amount — not enough to send 1 BTC
+  rpc_server.mine_blocks_with_subsidy(1, 100);
 
   CommandBuilder::new("wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc")
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
-    .expected_stderr("error: failed to lock ordinal UTXOs\n")
+    .expected_stderr("error: wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.\n")
     .expected_exit_code(1)
     .run();
 }
@@ -313,7 +295,7 @@ fn send_btc_fails_if_lock_unspent_fails() {
 fn wallet_send_with_fee_rate() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &ord_server);
@@ -347,7 +329,7 @@ fn wallet_send_with_fee_rate() {
 fn user_must_provide_fee_rate_to_send() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &ord_server);
@@ -360,4 +342,75 @@ fn user_must_provide_fee_rate_to_send() {
   .expected_exit_code(0)
   .stdout_regex("[[:xdigit:]]{64}\n")
   .run();
+}
+
+#[test]
+fn send_max_sends_all_cardinal_utxos() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  rpc_server.mine_blocks(3);
+
+  let output =
+    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .output::<Output>();
+
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
+
+  // Should have exactly one output (no change)
+  assert_eq!(mempool[0].output.len(), 1, "send --max should have no change output");
+
+  // All 3 mined UTXOs should be inputs
+  assert_eq!(mempool[0].input.len(), 3, "send --max should spend all cardinal UTXOs");
+}
+
+#[test]
+fn send_max_does_not_spend_inscriptions() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  rpc_server.mine_blocks(1);
+
+  let Inscribe { reveal, .. } = inscribe(&rpc_server, &ord_server);
+
+  // Mine another block to give us a cardinal UTXO
+  rpc_server.mine_blocks(1);
+
+  let output =
+    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .output::<Output>();
+
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
+
+  // The inscription UTXO should NOT be spent
+  let inscribed_outpoint = OutPoint { txid: reveal, vout: 0 };
+  assert!(
+    !mempool[0].input.iter().any(|i| i.previous_output == inscribed_outpoint),
+    "inscription UTXO must not be spent when using --max"
+  );
+}
+
+#[test]
+fn send_max_with_no_utxos() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  // No UTXOs in wallet at all
+  CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .expected_stderr("error: wallet contains no cardinal UTXOs to send\n")
+    .expected_exit_code(1)
+    .run();
 }

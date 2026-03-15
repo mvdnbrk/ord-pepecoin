@@ -1,4 +1,7 @@
-use super::*;
+use {
+  super::*,
+  crate::wallet::Wallet,
+};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Transactions {
@@ -13,10 +16,11 @@ pub struct Output {
 }
 
 impl Transactions {
-  pub(crate) fn run(self, options: Options) -> Result {
+  pub(crate) fn run(self, wallet: Wallet) -> Result {
     let mut output = Vec::new();
-    for tx in options
-      .pepecoin_rpc_client_for_wallet_command(false)?
+    let mut seen = HashSet::new();
+    for tx in wallet
+      .bitcoin_client()
       .list_transactions(
         None,
         Some(self.limit.unwrap_or(u16::MAX).into()),
@@ -24,10 +28,12 @@ impl Transactions {
         None,
       )?
     {
-      output.push(Output {
-        transaction: tx.info.txid,
-        confirmations: tx.info.confirmations,
-      });
+      if seen.insert(tx.info.txid) {
+        output.push(Output {
+          transaction: tx.info.txid,
+          confirmations: tx.info.confirmations,
+        });
+      }
     }
 
     print_json(output)?;

@@ -1,6 +1,9 @@
 use {
   super::*,
-  crate::wallet::Wallet,
+  crate::wallet::{
+    signer::LocalSigner,
+    Wallet,
+  },
   bitcoin::{
     blockdata::script,
     secp256k1::{self, Secp256k1},
@@ -23,6 +26,7 @@ struct Output {
   commit: Txid,
   inscription: InscriptionId,
   reveal: Txid,
+  destination: Address,
   fees: u64,
 }
 
@@ -69,7 +73,7 @@ pub(crate) struct Inscribe {
 impl Inscribe {
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     let client = wallet.bitcoin_client();
-    let (pubkey, privkey) = self.get_key_pair(client)?;
+    let (pubkey, privkey) = self.get_key_pair(&wallet)?;
     let fee_rate = self
       .fee_rate
       .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
@@ -108,7 +112,7 @@ impl Inscribe {
         existing_inscriptions,
         wallet.chain().network(),
         utxos,
-        [get_change_address(client)?, get_change_address(client)?],
+        [wallet.get_address(true)?, wallet.get_address(true)?],
         commit_fee_rate,
         fee_rate,
         pubkey,
@@ -131,23 +135,11 @@ impl Inscribe {
           total_fees: fees,
         })?;
       } else {
-        let commit_hex = bitcoin::consensus::encode::serialize_hex(&commit_tx);
-        let result: serde_json::Value = client
-          .call("signrawtransaction", &[commit_hex.into()])
-          .context("failed to sign commit transaction")?;
-        let signed_hex = result["hex"]
-          .as_str()
-          .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
-        if result["complete"].as_bool() != Some(true) {
-          bail!("Failed to sign commit transaction: {}", result["errors"]);
-        }
-        let signed_bytes = hex::decode(signed_hex)?;
-        let signed_commit_tx: Transaction =
-          bitcoin::consensus::encode::deserialize(&signed_bytes)?;
+        let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
         let commit_txid = signed_commit_tx.txid();
 
         client
-          .send_raw_transaction(&signed_bytes)
+          .send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_commit_tx))
           .context("Failed to send commit transaction")?;
 
         let mut inscription_outputs = Vec::new();
@@ -223,7 +215,7 @@ impl Inscribe {
         .destination
         .clone()
         .map(Ok)
-        .unwrap_or_else(|| get_change_address(client))?;
+        .unwrap_or_else(|| wallet.get_address(false))?;
 
       let (txs, scripts, fees) = self.create_inscription_transactions(
         self.satpoint,
@@ -231,8 +223,8 @@ impl Inscribe {
         existing_inscriptions,
         wallet.chain().network(),
         utxos.clone(),
-        [get_change_address(client)?, get_change_address(client)?],
-        reveal_tx_destination,
+        [wallet.get_address(true)?, wallet.get_address(true)?],
+        reveal_tx_destination.clone(),
         commit_fee_rate,
         fee_rate,
         pubkey,
@@ -245,28 +237,21 @@ impl Inscribe {
           commit: txs[0].txid(),
           reveal: txs.last().unwrap().txid(),
           inscription: inscription_id,
+          destination: reveal_tx_destination,
           fees,
         })?;
       } else {
-        let mut signed_txs = Vec::new();
-        let mut last_txid;
+        let signed_commit_tx = LocalSigner::sign_transaction(&wallet, txs[0].clone())?;
+        let mut last_txid = signed_commit_tx.txid();
+        let commit = last_txid;
 
-        let commit_hex = bitcoin::consensus::encode::serialize_hex(&txs[0]);
-        let result: serde_json::Value = client
-          .call("signrawtransaction", &[commit_hex.into()])
-          .context("failed to sign commit transaction")?;
-        let signed_hex = result["hex"]
-          .as_str()
-          .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
-        if result["complete"].as_bool() != Some(true) {
-          bail!("Failed to sign commit transaction: {}", result["errors"]);
-        }
-        let signed_bytes = hex::decode(signed_hex)?;
-        let signed_commit_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_bytes)?;
-        last_txid = signed_commit_tx.txid();
-        signed_txs.push(signed_bytes);
+        client
+          .send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_commit_tx))
+          .context("Failed to send commit transaction")?;
 
         let secp = Secp256k1::new();
+        let mut reveal_txid = Txid::all_zeros();
+        let mut inscription_id = InscriptionId { txid: Txid::all_zeros(), index: 0 };
 
         for i in 1..txs.len() {
           let (redeem_script, partial_script) = &scripts[i - 1];
@@ -301,29 +286,23 @@ impl Inscribe {
 
           reveal_tx.input[0].script_sig = script_sig.into_script();
           last_txid = reveal_tx.txid();
-          signed_txs.push(bitcoin::consensus::encode::serialize(&reveal_tx));
-        }
+          
+          if i == 1 {
+            inscription_id = last_txid.into();
+          }
+          reveal_txid = last_txid;
 
-        let commit_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_txs[0])?;
-        let commit = commit_tx.txid();
-
-        let reveal_tx: Transaction =
-          bitcoin::consensus::encode::deserialize(signed_txs.last().unwrap())?;
-        let reveal = reveal_tx.txid();
-
-        let inscription_tx: Transaction = bitcoin::consensus::encode::deserialize(&signed_txs[1])?;
-        let inscription_id = inscription_tx.txid().into();
-
-        for (i, signed_tx_bytes) in signed_txs.iter().enumerate() {
+          let signed_tx_bytes = bitcoin::consensus::encode::serialize(&reveal_tx);
           client
-            .send_raw_transaction(signed_tx_bytes)
+            .send_raw_transaction(&signed_tx_bytes)
             .context(format!("Failed to send transaction {}", i))?;
         }
 
         print_json(Output {
           commit,
-          reveal,
+          reveal: reveal_txid,
           inscription: inscription_id,
+          destination: reveal_tx_destination,
           fees,
         })?;
       };
@@ -332,22 +311,10 @@ impl Inscribe {
     Ok(())
   }
 
-  fn get_key_pair(&self, client: &Client) -> Result<(PublicKey, PrivateKey)> {
-    let address: Address = client.call("getnewaddress", &[])?;
-    let result: serde_json::Value = client
-      .call("validateaddress", &[address.to_string().into()])
-      .context("failed to validate address")?;
-    let pubkey_hex = result["pubkey"]
-      .as_str()
-      .ok_or_else(|| anyhow!("no pubkey in validateaddress response for {address}"))?;
-    let pubkey_bytes = hex::decode(pubkey_hex).context("invalid pubkey hex")?;
-    let pubkey = PublicKey::from_slice(&pubkey_bytes).context("invalid pubkey")?;
-
-    let wif: String = client
-      .call("dumpprivkey", &[address.to_string().into()])
-      .context("failed to dump private key")?;
-    let privkey = PrivateKey::from_wif(&wif).context("invalid WIF private key")?;
-
+  fn get_key_pair(&self, wallet: &Wallet) -> Result<(PublicKey, PrivateKey)> {
+    let privkey = wallet.get_private_key(false, 0)?;
+    let secp = Secp256k1::new();
+    let pubkey = privkey.public_key(&secp);
     Ok((pubkey, privkey))
   }
 
@@ -495,7 +462,7 @@ mod tests {
     )
     .unwrap();
 
-    let _inscribe = Inscribe {
+    let inscribe = Inscribe {
       satpoint: None,
       fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
       commit_fee_rate: None,
@@ -508,7 +475,7 @@ mod tests {
       batch: None,
     };
 
-    let (txs, _scripts, fees) = _inscribe.create_inscription_transactions(
+    let (txs, _scripts, fees) = inscribe.create_inscription_transactions(
       Some(satpoint(1, 0)),
       inscription,
       BTreeMap::new(),
@@ -545,7 +512,7 @@ mod tests {
     )
     .unwrap();
 
-    let _inscribe = Inscribe {
+    let inscribe = Inscribe {
       satpoint: None,
       fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
       commit_fee_rate: None,
@@ -558,7 +525,7 @@ mod tests {
       batch: None,
     };
 
-    let (txs, _, _) = _inscribe.create_inscription_transactions(
+    let (txs, _, _) = inscribe.create_inscription_transactions(
       Some(satpoint(1, 0)),
       inscription,
       BTreeMap::new(),
@@ -598,7 +565,7 @@ mod tests {
     )
     .unwrap();
 
-    let _inscribe = Inscribe {
+    let inscribe = Inscribe {
       satpoint: None,
       fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
       commit_fee_rate: None,
@@ -611,7 +578,7 @@ mod tests {
       batch: None,
     };
 
-    let error = _inscribe.create_inscription_transactions(
+    let error = inscribe.create_inscription_transactions(
       None,
       inscription,
       inscriptions,
@@ -649,7 +616,7 @@ mod tests {
     )
     .unwrap();
 
-    let _inscribe = Inscribe {
+    let inscribe = Inscribe {
       satpoint: None,
       fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
       commit_fee_rate: None,
@@ -662,7 +629,7 @@ mod tests {
       batch: None,
     };
 
-    let (txs, scripts, _fees) = _inscribe.create_inscription_transactions(
+    let (txs, scripts, _fees) = inscribe.create_inscription_transactions(
       Some(satpoint(1, 0)),
       inscription,
       BTreeMap::new(),

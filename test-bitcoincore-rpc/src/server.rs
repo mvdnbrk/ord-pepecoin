@@ -430,20 +430,32 @@ impl Api for Server {
     }
   }
 
+  fn import_address(
+    &self,
+    address: String,
+    _label: Option<String>,
+    _rescan: Option<bool>,
+  ) -> Result<(), jsonrpc_core::Error> {
+    if let Ok(addr) = Address::from_str(&address) {
+      let mut state = self.state();
+      // Register as a watch-only address so list_transactions can find it
+      if !state.address_pubkeys.contains_key(&addr) {
+        state.address_pubkeys.insert(addr, PublicKey::from_slice(
+          &[2; 33] // dummy pubkey for watch-only
+        ).unwrap());
+      }
+    }
+    Ok(())
+  }
+
   fn list_unspent(
     &self,
-    minconf: Option<usize>,
-    maxconf: Option<usize>,
-    address: Option<bitcoin::Address>,
-    include_unsafe: Option<bool>,
-    query_options: Option<String>,
+    _minconf: Option<usize>,
+    _maxconf: Option<usize>,
+    addresses: Option<Vec<Address>>,
+    _include_unsafe: Option<bool>,
+    _query_options: Option<serde_json::Value>,
   ) -> Result<Vec<ListUnspentResultEntry>, jsonrpc_core::Error> {
-    assert_eq!(minconf, None, "minconf param not supported");
-    assert_eq!(maxconf, None, "maxconf param not supported");
-    assert_eq!(address, None, "address param not supported");
-    assert_eq!(include_unsafe, None, "include_unsafe param not supported");
-    assert_eq!(query_options, None, "query_options param not supported");
-
     let state = self.state();
 
     let mut result = Vec::new();
@@ -457,6 +469,16 @@ impl Api for Server {
         
         let address = Address::from_script(&output.script_pubkey, self.network).ok();
         
+        if let Some(ref addresses) = addresses {
+          if let Some(ref address) = address {
+            if !addresses.contains(address) {
+              continue;
+            }
+          } else {
+            continue;
+          }
+        }
+
         result.push(ListUnspentResultEntry {
           txid: outpoint.txid,
           vout: outpoint.vout,

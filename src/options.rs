@@ -43,10 +43,6 @@ pub struct Options {
   pub(crate) signet: bool,
   #[clap(long, short, help = "Use testnet. Equivalent to `--chain testnet`.")]
   pub(crate) testnet: bool,
-  #[clap(long, default_value = "ord", help = "Use wallet named <WALLET>.")]
-  pub(crate) wallet: String,
-  #[clap(long, help = "Use ordpep server running at <SERVER_URL>.")]
-  pub(crate) server_url: Option<Url>,
 }
 
 impl Default for Options {
@@ -66,8 +62,6 @@ impl Default for Options {
       rpc_url: None,
       signet: false,
       testnet: false,
-      wallet: "ord".to_string(),
-      server_url: None,
     }
   }
 }
@@ -132,21 +126,18 @@ impl Options {
       .or(config.rpc_url)
       .unwrap_or_else(|| {
         format!(
-          "127.0.0.1:{}/wallet/{}",
+          "127.0.0.1:{}",
           self.chain().default_rpc_port(),
-          self.wallet
         )
       })
   }
 
-  pub(crate) fn server_url(&self) -> Result<Url> {
+  pub(crate) fn server_url(&self, server_url: Option<Url>) -> Result<Url> {
     let config = self.load_config().unwrap_or_default();
 
-    self
-      .server_url
-      .clone()
+    server_url
       .or(config.server_url)
-      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url or server_url in ordpep.yaml"))
+      .ok_or_else(|| anyhow!("server URL not specified. Set --server-url on the wallet command or server_url in ordpep.yaml"))
   }
 
   pub(crate) fn auth(&self) -> Result<Auth> {
@@ -288,7 +279,7 @@ mod tests {
   #[test]
   fn rpc_url_overrides_network() {
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--rpc-url=127.0.0.1:1234", "--chain=signet", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--rpc-url=127.0.0.1:1234", "--chain=signet", "index", "update"])
         .unwrap()
         .options
         .rpc_url(),
@@ -299,7 +290,7 @@ mod tests {
   #[test]
   fn cookie_file_overrides_network() {
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--cookie-file=/foo/bar", "--chain=signet", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--cookie-file=/foo/bar", "--chain=signet", "index", "update"])
         .unwrap()
         .options
         .cookie_file()
@@ -311,9 +302,9 @@ mod tests {
   #[test]
   fn use_default_network() {
     let tempdir = TempDir::new().unwrap();
-    let arguments = Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ordpep", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"]).unwrap();
 
-    assert_eq!(arguments.options.rpc_url(), "127.0.0.1:33873/wallet/ord");
+    assert_eq!(arguments.options.rpc_url(), "127.0.0.1:33873");
 
     assert!(arguments
       .options
@@ -325,9 +316,9 @@ mod tests {
   #[test]
   fn uses_network_defaults() {
     let tempdir = TempDir::new().unwrap();
-    let arguments = Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "--chain=signet", "index", "update"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ordpep", "--data-dir", tempdir.path().to_str().unwrap(), "--chain=signet", "index", "update"]).unwrap();
 
-    assert_eq!(arguments.options.rpc_url(), "127.0.0.1:38332/wallet/ord");
+    assert_eq!(arguments.options.rpc_url(), "127.0.0.1:38332");
 
     assert!(arguments
       .options
@@ -344,7 +335,7 @@ mod tests {
 
   #[test]
   fn mainnet_cookie_file_path() {
-    let cookie_file = Arguments::try_parse_from(["ord", "index", "update"])
+    let cookie_file = Arguments::try_parse_from(["ordpep", "index", "update"])
       .unwrap()
       .options
       .cookie_file()
@@ -363,7 +354,7 @@ mod tests {
 
   #[test]
   fn othernet_cookie_file_path() {
-    let arguments = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"]).unwrap();
+    let arguments = Arguments::try_parse_from(["ordpep", "--chain=signet", "index", "update"]).unwrap();
 
     let cookie_file = arguments
       .options
@@ -384,7 +375,7 @@ mod tests {
   #[test]
   fn cookie_file_defaults_to_pepecoin_data_dir() {
     let arguments =
-      Arguments::try_parse_from(["ord", "--pepecoin-data-dir=foo", "--chain=signet", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--pepecoin-data-dir=foo", "--chain=signet", "index", "update"])
         .unwrap();
 
     let cookie_file = arguments
@@ -403,7 +394,7 @@ mod tests {
 
   #[test]
   fn mainnet_data_dir() {
-    let data_dir = Arguments::try_parse_from(["ord", "index", "update"])
+    let data_dir = Arguments::try_parse_from(["ordpep", "index", "update"])
       .unwrap()
       .options
       .data_dir()
@@ -418,7 +409,7 @@ mod tests {
 
   #[test]
   fn othernet_data_dir() {
-    let data_dir = Arguments::try_parse_from(["ord", "--chain=signet", "index", "update"])
+    let data_dir = Arguments::try_parse_from(["ordpep", "--chain=signet", "index", "update"])
       .unwrap()
       .options
       .data_dir()
@@ -438,7 +429,7 @@ mod tests {
   #[test]
   fn network_is_joined_with_data_dir() {
     let data_dir =
-      Arguments::try_parse_from(["ord", "--chain=signet", "--data-dir", "foo", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--chain=signet", "--data-dir", "foo", "index", "update"])
         .unwrap()
         .options
         .data_dir()
@@ -458,7 +449,7 @@ mod tests {
   #[test]
   fn network_accepts_aliases() {
     fn check_network_alias(alias: &str, suffix: &str) {
-      let data_dir = Arguments::try_parse_from(["ord", "--chain", alias, "index", "update"])
+      let data_dir = Arguments::try_parse_from(["ordpep", "--chain", alias, "index", "update"])
         .unwrap()
         .options
         .data_dir()
@@ -533,48 +524,48 @@ mod tests {
 
   #[test]
   fn chain_flags() {
-    Arguments::try_parse_from(["ord", "--signet", "--chain", "signet", "index", "update"]).unwrap_err();
+    Arguments::try_parse_from(["ordpep", "--signet", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--signet", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--signet", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Signet
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-s", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "-s", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Signet
     );
 
-    Arguments::try_parse_from(["ord", "--regtest", "--chain", "signet", "index", "update"]).unwrap_err();
+    Arguments::try_parse_from(["ordpep", "--regtest", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--regtest", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--regtest", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Regtest
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-r", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "-r", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Regtest
     );
 
-    Arguments::try_parse_from(["ord", "--testnet", "--chain", "signet", "index", "update"]).unwrap_err();
+    Arguments::try_parse_from(["ordpep", "--testnet", "--chain", "signet", "index", "update"]).unwrap_err();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--testnet", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--testnet", "index", "update"])
         .unwrap()
         .options
         .chain(),
       Chain::Testnet
     );
     assert_eq!(
-      Arguments::try_parse_from(["ord", "-t", "index", "update"])
+      Arguments::try_parse_from(["ordpep", "-t", "index", "update"])
         .unwrap()
         .options
         .chain(),
@@ -583,29 +574,26 @@ mod tests {
   }
 
   #[test]
-  fn wallet_flag_overrides_default_name() {
-    assert_eq!(
-      Arguments::try_parse_from(["ord", "wallet", "create"])
-        .unwrap()
-        .options
-        .wallet,
-      "ord"
-    );
+  fn wallet_name_flag() {
+    let args = Arguments::try_parse_from(["ordpep", "wallet", "create"]).unwrap();
+    match args.subcommand {
+      Subcommand::Wallet(cmd) => assert_eq!(cmd.name, "ordpep"),
+      _ => panic!("expected wallet subcommand"),
+    }
 
-    assert_eq!(
-      Arguments::try_parse_from(["ord", "--wallet", "foo", "wallet", "create"])
-        .unwrap()
-        .options
-        .wallet,
-      "foo"
-    )
+    let args = Arguments::try_parse_from(["ordpep", "wallet", "--name", "foo", "create"]).unwrap();
+    match args.subcommand {
+      Subcommand::Wallet(cmd) => assert_eq!(cmd.name, "foo"),
+      _ => panic!("expected wallet subcommand"),
+    }
+
   }
 
   #[test]
   fn default_config_is_returned_if_config_option_is_not_passed() {
     let tempdir = TempDir::new().unwrap();
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--data-dir", tempdir.path().to_str().unwrap(), "index", "update"])
         .unwrap()
         .options
         .load_config()
@@ -625,7 +613,7 @@ mod tests {
     fs::write(&path, format!("hidden:\n- \"{id}\"")).unwrap();
 
     assert_eq!(
-      Arguments::try_parse_from(["ord", "--config", path.to_str().unwrap(), "index", "update"])
+      Arguments::try_parse_from(["ordpep", "--config", path.to_str().unwrap(), "index", "update"])
         .unwrap()
         .options
         .load_config()

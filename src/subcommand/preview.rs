@@ -61,9 +61,14 @@ impl Preview {
       thread::sleep(Duration::from_millis(50));
     }
 
-    super::wallet::Wallet::Create(super::wallet::create::Create {
-      passphrase: "".into(),
-    })
+    super::wallet::WalletCommand {
+      name: "ordpep".to_string(),
+      no_sync: false,
+      server_url: None,
+      subcommand: super::wallet::WalletSubcommand::Create(super::wallet::create::Create {
+        passphrase: "".into(),
+      }),
+    }
     .run(options.clone())?;
 
     let rpc_client = options.pepecoin_rpc_client_for_wallet_command(false)?;
@@ -76,20 +81,25 @@ impl Preview {
     for file in self.inscriptions {
       Arguments {
         options: options.clone(),
-        subcommand: Subcommand::Wallet(super::wallet::Wallet::Inscribe(
-          super::wallet::inscribe::Inscribe {
-            fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-            commit_fee_rate: None,
-            file: Some(file),
-            no_backup: true,
-            satpoint: None,
-            dry_run: false,
-            no_limit: false,
-            destination: None,
-            postage: None,
-            batch: None,
-          },
-        )),
+        subcommand: Subcommand::Wallet(super::wallet::WalletCommand {
+          name: "ordpep".to_string(),
+          no_sync: false,
+          server_url: None,
+          subcommand: super::wallet::WalletSubcommand::Inscribe(
+            super::wallet::inscribe::Inscribe {
+              fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
+              commit_fee_rate: None,
+              file: Some(file),
+              no_backup: true,
+              satpoint: None,
+              dry_run: false,
+              no_limit: false,
+              destination: None,
+              postage: None,
+              batch: None,
+            },
+          ),
+        }),
       }
       .run()?;
 

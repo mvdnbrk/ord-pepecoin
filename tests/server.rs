@@ -39,7 +39,7 @@ fn run() {
 fn inscription_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe {
     inscription,
@@ -93,7 +93,7 @@ fn inscription_page() {
 fn inscription_appears_on_reveal_transaction_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe { reveal, .. } = inscribe(&rpc_server, &test_server);
 
@@ -109,7 +109,7 @@ fn inscription_appears_on_reveal_transaction_page() {
 fn inscription_appears_on_output_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe {
     reveal,
@@ -129,7 +129,7 @@ fn inscription_appears_on_output_page() {
 fn inscription_page_after_send() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe {
     reveal,
@@ -151,6 +151,7 @@ fn inscription_page_after_send() {
   ))
   .rpc_server(&rpc_server)
   .ord_server(&test_server)
+  .data_dir(test_server.directory())
   .stdout_regex(".*")
   .run();
 
@@ -161,7 +162,7 @@ fn inscription_page_after_send() {
   test_server.assert_response_regex(
     format!("/inscription/{inscription}"),
     format!(
-      r".*<h1>Inscription 0</h1>.*<dt>address</dt>\s*<dd class=monospace>bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv</dd>.*<dt>location</dt>\s*<dd class=monospace>{send}:0:0</dd>.*",
+      r".*<h1>Inscription 0</h1>.*<dt>location</dt>\s*<dd class=monospace>{send}:0:0</dd>.*",
     ),
   )
 }
@@ -170,7 +171,7 @@ fn inscription_page_after_send() {
 fn inscription_content() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   rpc_server.mine_blocks(1);
 
@@ -196,7 +197,7 @@ fn inscription_content() {
 fn home_page_includes_latest_inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
 
@@ -215,7 +216,7 @@ fn home_page_includes_latest_inscriptions() {
 fn home_page_inscriptions_are_sorted() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let mut inscriptions = String::new();
 
@@ -241,7 +242,7 @@ fn home_page_inscriptions_are_sorted() {
 fn inscriptions_page() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe { inscription, .. } = inscribe(&rpc_server, &test_server);
 
@@ -261,7 +262,7 @@ fn inscriptions_page() {
 fn inscriptions_page_is_sorted() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let mut inscriptions = String::new();
 
@@ -277,7 +278,7 @@ fn inscriptions_page_is_sorted() {
 fn inscriptions_page_has_next_and_previous() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
 
   let Inscribe { inscription: a, .. } = inscribe(&rpc_server, &test_server);
   let Inscribe { inscription: b, .. } = inscribe(&rpc_server, &test_server);

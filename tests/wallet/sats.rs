@@ -8,7 +8,7 @@ use {
 fn sats() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   let second_coinbase = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
   let output = CommandBuilder::new("--index-sats wallet sats")
@@ -25,7 +25,7 @@ fn sats() {
 fn sats_from_tsv_success() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   let second_coinbase = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
   let output = CommandBuilder::new("--index-sats wallet sats --tsv foo.tsv")
@@ -42,7 +42,7 @@ fn sats_from_tsv_success() {
 fn sats_from_tsv_parse_error() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   CommandBuilder::new("wallet sats --tsv foo.tsv")
     .write("foo.tsv", "===")
@@ -59,7 +59,7 @@ fn sats_from_tsv_parse_error() {
 fn sats_from_tsv_file_not_found() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn_with_args(&rpc_server, &["--index-sats"]);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   CommandBuilder::new("wallet sats --tsv foo.tsv")
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)

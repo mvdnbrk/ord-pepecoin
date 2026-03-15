@@ -7,7 +7,7 @@ use {
 fn inscriptions() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
   let Inscribe {
@@ -31,6 +31,7 @@ fn inscriptions() {
 
   let address = CommandBuilder::new("wallet receive")
     .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
     .output::<receive::Output>()
     .address;
 
@@ -59,7 +60,7 @@ fn inscriptions() {
 fn inscriptions_includes_locked_utxos() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
-  create_wallet(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   rpc_server.mine_blocks(1);
 

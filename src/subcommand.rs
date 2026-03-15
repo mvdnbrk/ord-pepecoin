@@ -40,8 +40,8 @@ pub(crate) enum Subcommand {
   Server(server::Server),
   #[clap(about = "Display satoshi traits")]
   Traits(traits::Traits),
-  #[clap(subcommand, about = "Wallet commands")]
-  Wallet(wallet::Wallet),
+  #[clap(about = "Wallet commands")]
+  Wallet(wallet::WalletCommand),
 }
 
 impl Subcommand {

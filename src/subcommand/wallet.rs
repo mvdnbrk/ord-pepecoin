@@ -1,17 +1,10 @@
 use {
   super::*,
-  bitcoin::secp256k1::{
-    rand::{self, RngCore},
-    Secp256k1,
-  },
-  bitcoin::{
-    util::bip32::{ChildNumber, DerivationPath, ExtendedPrivKey},
-    PrivateKey,
-  },
   fee_rate::FeeRate,
   transaction_builder::TransactionBuilder,
 };
 
+pub mod addresses;
 pub mod balance;
 pub(crate) mod batch;
 pub mod create;
@@ -26,7 +19,21 @@ pub(crate) mod transaction_builder;
 pub mod transactions;
 
 #[derive(Debug, Parser)]
-pub(crate) enum Wallet {
+pub(crate) struct WalletCommand {
+  #[clap(long, global = true, default_value = "ordpep", help = "Use wallet named <NAME>.")]
+  pub(crate) name: String,
+  #[clap(long, global = true, alias = "nosync", help = "Do not update index.")]
+  pub(crate) no_sync: bool,
+  #[clap(long, global = true, help = "Use ordpep server running at <SERVER_URL>.")]
+  pub(crate) server_url: Option<Url>,
+  #[clap(subcommand)]
+  pub(crate) subcommand: WalletSubcommand,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum WalletSubcommand {
+  #[clap(about = "List wallet addresses")]
+  Addresses,
   #[clap(about = "Get wallet balance")]
   Balance,
   #[clap(about = "Create new wallet")]
@@ -46,33 +53,40 @@ pub(crate) enum Wallet {
   #[clap(about = "See wallet transactions")]
   Transactions(transactions::Transactions),
   #[clap(about = "List wallet outputs")]
-  Outputs,
+  Outputs(outputs::Outputs),
 }
 
-impl Wallet {
+impl WalletCommand {
   pub(crate) fn run(self, options: Options) -> Result {
-    match self {
-      Self::Balance
-      | Self::Inscriptions
-      | Self::Outputs
-      | Self::Sats(_)
-      | Self::Send(_)
-      | Self::Inscribe(_) => {
-        let wallet = crate::wallet::Wallet::load(&options)?;
-        match self {
-          Self::Balance => balance::run(wallet),
-          Self::Inscriptions => inscriptions::run(wallet),
-          Self::Outputs => outputs::run(wallet),
-          Self::Sats(sats) => sats.run(wallet),
-          Self::Send(send) => send.run(wallet),
-          Self::Inscribe(inscribe) => inscribe.run(wallet),
+    let wallet_name = self.name;
+    let no_sync = self.no_sync;
+    let server_url = self.server_url;
+    match self.subcommand {
+      WalletSubcommand::Addresses
+      | WalletSubcommand::Balance
+      | WalletSubcommand::Inscriptions
+      | WalletSubcommand::Outputs(_)
+      | WalletSubcommand::Receive
+      | WalletSubcommand::Sats(_)
+      | WalletSubcommand::Send(_)
+      | WalletSubcommand::Inscribe(_)
+      | WalletSubcommand::Transactions(_) => {
+        let wallet = crate::wallet::Wallet::load(&options, &wallet_name, server_url, no_sync)?;
+        match self.subcommand {
+          WalletSubcommand::Addresses => addresses::run(wallet),
+          WalletSubcommand::Balance => balance::run(wallet),
+          WalletSubcommand::Inscriptions => inscriptions::run(wallet),
+          WalletSubcommand::Outputs(outputs) => outputs.run(wallet),
+          WalletSubcommand::Receive => receive::run(wallet),
+          WalletSubcommand::Sats(sats) => sats.run(wallet),
+          WalletSubcommand::Send(send) => send.run(wallet),
+          WalletSubcommand::Inscribe(inscribe) => inscribe.run(wallet),
+          WalletSubcommand::Transactions(transactions) => transactions.run(wallet),
           _ => unreachable!(),
         }
       }
-      Self::Create(create) => create.run(options),
-      Self::Receive => receive::run(options),
-      Self::Restore(restore) => restore.run(options),
-      Self::Transactions(transactions) => transactions.run(options),
+      WalletSubcommand::Create(create) => create.run(options, &wallet_name),
+      WalletSubcommand::Restore(restore) => restore.run(options, &wallet_name),
     }
   }
 }
@@ -81,55 +95,4 @@ fn get_change_address(client: &Client) -> Result<Address> {
   client
     .call("getrawchangeaddress", &[])
     .context("could not get change addresses from wallet")
-}
-
-// BIP-44 derivation path for Pepecoin: m/44'/3434'/0'
-// SLIP-0044 coin type 3434 for Pepecoin
-const PEPECOIN_COIN_TYPE: u32 = 3434;
-const NUM_DERIVE_KEYS: u32 = 20;
-
-pub(crate) fn initialize_wallet(options: &Options, seed: [u8; 64]) -> Result {
-  let client = options.pepecoin_rpc_client_for_wallet_command(true)?;
-  let network = options.chain().network();
-
-  let secp = Secp256k1::new();
-
-  let master_private_key = ExtendedPrivKey::new_master(network, &seed)?;
-
-  // m/44'/3434'/0'
-  let derivation_path = DerivationPath::master()
-    .child(ChildNumber::Hardened { index: 44 })
-    .child(ChildNumber::Hardened { index: PEPECOIN_COIN_TYPE })
-    .child(ChildNumber::Hardened { index: 0 });
-
-  let account_key = master_private_key.derive_priv(&secp, &derivation_path)?;
-
-  // Import receive keys (m/44'/3434'/0'/0/i) and change keys (m/44'/3434'/0'/1/i)
-  for change in [false, true] {
-    let chain_key = account_key.derive_priv(
-      &secp,
-      &DerivationPath::master().child(ChildNumber::Normal {
-        index: u32::from(change),
-      }),
-    )?;
-
-    for i in 0..NUM_DERIVE_KEYS {
-      let child_key = chain_key.derive_priv(
-        &secp,
-        &DerivationPath::master().child(ChildNumber::Normal { index: i }),
-      )?;
-
-      let private_key = PrivateKey::new(child_key.private_key, network);
-
-      let label = if change {
-        format!("ord-change-{i}")
-      } else {
-        format!("ord-receive-{i}")
-      };
-
-      client.import_private_key(&private_key, Some(&label), Some(false))?;
-    }
-  }
-
-  Ok(())
 }

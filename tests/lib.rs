@@ -17,7 +17,7 @@ use {
   std::{
     fs,
     net::TcpListener,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     str::{self, FromStr},
     thread,
@@ -47,6 +47,8 @@ struct Inscribe {
   commit: Txid,
   inscription: String,
   reveal: Txid,
+  #[allow(dead_code)]
+  destination: String,
   fees: u64,
 }
 
@@ -74,6 +76,7 @@ fn inscribe(rpc_server: &test_bitcoincore_rpc::Handle, ord_server: &TestServer) 
     .write("foo.txt", "FOO")
     .rpc_server(rpc_server)
     .ord_server(ord_server)
+    .data_dir(ord_server.directory())
     .output();
 
   rpc_server.mine_blocks(1);
@@ -87,13 +90,30 @@ struct Create {
 }
 
 fn create_wallet(rpc_server: &test_bitcoincore_rpc::Handle) {
-  let Create { mnemonic } = CommandBuilder::new(format!("--chain {} wallet create", rpc_server.network()))
+  create_wallet_with_options(rpc_server, None, None)
+}
+
+fn create_wallet_with_data_dir(rpc_server: &test_bitcoincore_rpc::Handle, data_dir: Option<PathBuf>) {
+  create_wallet_with_options(rpc_server, data_dir, None)
+}
+
+fn create_wallet_with_options(
+  rpc_server: &test_bitcoincore_rpc::Handle,
+  data_dir: Option<PathBuf>,
+  wallet_name: Option<&str>,
+) {
+  let wallet_flag = wallet_name.map(|n| format!("--name {n} ")).unwrap_or_default();
+  let mut builder = CommandBuilder::new(format!("--chain {} wallet {wallet_flag}create", rpc_server.network()));
+  if let Some(ref data_dir) = data_dir {
+    builder = builder.data_dir(data_dir.clone());
+  }
+  let Create { mnemonic } = builder
     .rpc_server(rpc_server)
     .output::<Create>();
 
   let master_private_key = ExtendedPrivKey::new_master(rpc_server.network_enum(), &mnemonic.to_seed("")).unwrap();
   let secp = Secp256k1::new();
-  
+
   // m/44'/3434'/0'/0/0
   let derivation_path = DerivationPath::master()
     .child(ChildNumber::Hardened { index: 44 })
@@ -105,7 +125,7 @@ fn create_wallet(rpc_server: &test_bitcoincore_rpc::Handle) {
   let child_key = master_private_key.derive_priv(&secp, &derivation_path).unwrap();
   let privkey = PrivateKey::new(child_key.private_key, rpc_server.network_enum());
   let address = Address::p2pkh(&privkey.public_key(&secp), privkey.network);
-  
+
   rpc_server.set_coinbase_address(&address);
 }
 
