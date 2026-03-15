@@ -37,6 +37,12 @@ impl Chain {
     }
   }
 
+  pub(crate) fn min_fee_rate(self) -> f64 {
+    match self {
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 10000.0,
+    }
+  }
+
   pub(crate) fn default_postage(self) -> Amount {
     match self {
       Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => Amount::from_sat(100_000),
