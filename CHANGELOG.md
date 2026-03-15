@@ -8,9 +8,15 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ## [0.6.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.6.0) - 2026-03-14
 
 ### Added
+- Standalone wallet with local key management, no Core wallet dependency ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- Minimum fee rate validation (10,000 sat/vB Pepecoin relay fee) ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- `wallet send --max` to sweep all cardinal UTXOs ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- `wallet send <address> <amount>` for sending PEP by amount ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- `wallet addresses` subcommand ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- Destination address in inscribe output ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+- `wallet outputs` enhanced with address, inscriptions, and sat ranges ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
 - P2SH scriptSig inscription support (commit, reveal, batch inscribe) ([#3](https://github.com/mvdnbrk/ord-pepecoin/pull/3))
 - OP_PUSHDATA2/4 parser support ([#5](https://github.com/mvdnbrk/ord-pepecoin/pull/5))
-- Wallet rewrite for Pepecoin P2PKH (BIP-44, coin type 3434)
 - 240-byte chunk size for inscription data
 - JSON API support
 - Page-based pagination for `/inscriptions` endpoint ([#6](https://github.com/mvdnbrk/ord-pepecoin/pull/6))
@@ -35,7 +41,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - RPC fetcher timeout and retry to prevent deadlock
 - Default data dir changed to `ordpep` to avoid collision with bitcoin ord
 - Hostname leak in og:image meta tag
-- All tests passing (281 lib + 81 integration)
+- All tests passing (283 lib + 98 integration)
 - Handle RPC error code -5 for unknown transactions (Pepecoin Core compatibility)
 
 ### Changed
