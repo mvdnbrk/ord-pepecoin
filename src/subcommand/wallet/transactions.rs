@@ -18,6 +18,7 @@ pub struct Output {
 impl Transactions {
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     let mut output = Vec::new();
+    let mut seen = HashSet::new();
     for tx in wallet
       .bitcoin_client()
       .list_transactions(
@@ -27,10 +28,12 @@ impl Transactions {
         None,
       )?
     {
-      output.push(Output {
-        transaction: tx.info.txid,
-        confirmations: tx.info.confirmations,
-      });
+      if seen.insert(tx.info.txid) {
+        output.push(Output {
+          transaction: tx.info.txid,
+          confirmations: tx.info.confirmations,
+        });
+      }
     }
 
     print_json(output)?;
