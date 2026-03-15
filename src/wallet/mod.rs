@@ -141,21 +141,30 @@ impl Wallet {
       );
     }
 
-    let address_scripts: HashSet<Script> = addresses.iter().map(|a| a.script_pubkey()).collect();
+    #[derive(Deserialize)]
+    struct UnspentEntry {
+      txid: Txid,
+      vout: u32,
+      #[serde(rename = "scriptPubKey")]
+      script_pub_key: String,
+      amount: f64,
+    }
 
     let mut utxos = BTreeMap::new();
-    let unspent: Vec<bitcoincore_rpc::json::ListUnspentResultEntry> = bitcoin_client
+    let unspent: Vec<UnspentEntry> = bitcoin_client
       .call("listunspent", &[])
       .context("failed to list unspent outputs")?;
 
     for utxo in unspent {
-      if address_scripts.contains(&utxo.script_pub_key) {
-        let outpoint = OutPoint::new(utxo.txid, utxo.vout);
-        utxos.insert(outpoint, TxOut {
-          value: utxo.amount.to_sat(),
-          script_pubkey: utxo.script_pub_key,
-        });
-      }
+      let script_pubkey = Script::from_str(&utxo.script_pub_key)
+        .context("failed to parse scriptPubKey")?;
+      let outpoint = OutPoint::new(utxo.txid, utxo.vout);
+      let amount = Amount::from_btc(utxo.amount)
+        .map_err(|e| anyhow!("invalid amount: {e}"))?;
+      utxos.insert(outpoint, TxOut {
+        value: amount.to_sat(),
+        script_pubkey,
+      });
     }
 #[derive(Deserialize)]
 struct JsonOutPoint {
