@@ -26,6 +26,7 @@ struct Output {
   commit: Txid,
   inscription: InscriptionId,
   reveal: Txid,
+  destination: Address,
   fees: u64,
 }
 
@@ -223,7 +224,7 @@ impl Inscribe {
         wallet.chain().network(),
         utxos.clone(),
         [wallet.get_address(true)?, wallet.get_address(true)?],
-        reveal_tx_destination,
+        reveal_tx_destination.clone(),
         commit_fee_rate,
         fee_rate,
         pubkey,
@@ -236,6 +237,7 @@ impl Inscribe {
           commit: txs[0].txid(),
           reveal: txs.last().unwrap().txid(),
           inscription: inscription_id,
+          destination: reveal_tx_destination,
           fees,
         })?;
       } else {
@@ -300,6 +302,7 @@ impl Inscribe {
           commit,
           reveal: reveal_txid,
           inscription: inscription_id,
+          destination: reveal_tx_destination,
           fees,
         })?;
       };

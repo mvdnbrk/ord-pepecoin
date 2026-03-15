@@ -47,6 +47,8 @@ struct Inscribe {
   commit: Txid,
   inscription: String,
   reveal: Txid,
+  #[allow(dead_code)]
+  destination: String,
   fees: u64,
 }
 
