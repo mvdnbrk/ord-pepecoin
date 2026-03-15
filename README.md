@@ -2,7 +2,7 @@
 
 Ordinal indexer and block explorer for **Pepecoin**, forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin) (based on [ordinals/ord](https://github.com/ordinals/ord) v0.5.1).
 
-Inscriptions on Pepecoin use `script_sig` (no SegWit). The indexer and explorer support PRC-20 tokens and all inscription content types.
+The indexer and explorer support all inscription content types. While PRC-20 inscriptions are indexed, specialized PRC-20 balance tracking is not supported.
 
 ## Requirements
 
@@ -54,6 +54,7 @@ All configuration file fields are optional:
 | `index` | Path to the index database |
 | `index_sats` | Track location of all satoshis (`true`/`false`) |
 | `cookie_file` | Path to RPC cookie file |
+| `server_url` | URL of the ordpep server |
 | `hidden` | List of inscription IDs to hide |
 
 ### Authentication
@@ -133,16 +134,47 @@ Raw inscription content is always available at `/content/<inscription_id>`.
 
 ## Wallet
 
-`ordpep` relies on Pepecoin Core for private key management and transaction signing.
+`ordpep` includes a standalone wallet with local key management. Keys are derived locally (BIP-44 `m/44'/3434'/0'`) and stored in `wallet.redb` with restricted permissions (0600).
 
-- Pepecoin Core is not aware of inscriptions and does not perform sat control. Using `pepecoin-cli` commands with `ordpep` wallets may lead to loss of inscriptions.
-- Keep ordinal and cardinal wallets segregated.
+Signing and coin selection are performed locally, ensuring inscriptions are protected from accidental spending.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `create` | Create a new wallet and display the mnemonic |
+| `receive` | Generate a new receive address |
+| `balance` | Display the wallet's balance |
+| `send` | Send a specific amount, inscription, or satpoint |
+| `inscribe` | Create a new inscription |
+| `inscriptions` | List all inscriptions held by the wallet |
+| `addresses` | List all addresses in the wallet |
+| `restore` | Restore a wallet from a mnemonic |
+
+### Example Usage
+
+```bash
+# Create a new wallet
+ordpep wallet create
+
+# Generate a receive address
+ordpep wallet receive
+
+# Check balance
+ordpep wallet balance
+
+# Send an inscription
+ordpep wallet send <DESTINATION_ADDRESS> <INSCRIPTION_ID>
+
+# Send 100 pep (requires unit: pep or rib)
+ordpep wallet send <DESTINATION_ADDRESS> 100pep
+```
 
 ### Inscribing
 
 ```bash
-ordpep --config /path/to/ordpep.yaml wallet inscribe /path/to/file.png
-ordpep --config /path/to/ordpep.yaml wallet inscribe --dry-run /path/to/file.png
+ordpep wallet inscribe /path/to/file.png
+ordpep wallet inscribe --dry-run /path/to/file.png
 ```
 
 Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large files are split across multiple chained transactions using 240-byte data chunks. Reveal transactions are signed locally.
