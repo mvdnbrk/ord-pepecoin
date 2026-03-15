@@ -1,5 +1,6 @@
 use super::*;
 
+mod addresses;
 mod balance;
 mod create;
 mod inscribe;

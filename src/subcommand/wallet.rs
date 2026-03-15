@@ -4,6 +4,7 @@ use {
   transaction_builder::TransactionBuilder,
 };
 
+pub mod addresses;
 pub mod balance;
 pub(crate) mod batch;
 pub mod create;
@@ -31,6 +32,8 @@ pub(crate) struct WalletCommand {
 
 #[derive(Debug, Parser)]
 pub(crate) enum WalletSubcommand {
+  #[clap(about = "List wallet addresses")]
+  Addresses,
   #[clap(about = "Get wallet balance")]
   Balance,
   #[clap(about = "Create new wallet")]
@@ -59,7 +62,8 @@ impl WalletCommand {
     let no_sync = self.no_sync;
     let server_url = self.server_url;
     match self.subcommand {
-      WalletSubcommand::Balance
+      WalletSubcommand::Addresses
+      | WalletSubcommand::Balance
       | WalletSubcommand::Inscriptions
       | WalletSubcommand::Outputs
       | WalletSubcommand::Receive
@@ -69,6 +73,7 @@ impl WalletCommand {
       | WalletSubcommand::Transactions(_) => {
         let wallet = crate::wallet::Wallet::load(&options, &wallet_name, server_url, no_sync)?;
         match self.subcommand {
+          WalletSubcommand::Addresses => addresses::run(wallet),
           WalletSubcommand::Balance => balance::run(wallet),
           WalletSubcommand::Inscriptions => inscriptions::run(wallet),
           WalletSubcommand::Outputs => outputs::run(wallet),
