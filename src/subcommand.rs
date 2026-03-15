@@ -6,7 +6,6 @@ mod index;
 pub mod info;
 pub mod list;
 pub mod parse;
-mod preview;
 pub mod server;
 pub mod subsidy;
 pub mod traits;
@@ -22,8 +21,6 @@ fn print_json(output: impl Serialize) -> Result {
 pub(crate) enum Subcommand {
   #[clap(about = "List the first satoshis of each reward epoch")]
   Epochs,
-  #[clap(about = "Run an explorer server populated with inscriptions")]
-  Preview(preview::Preview),
   #[clap(about = "Find a satoshi's current location")]
   Find(find::Find),
   #[clap(subcommand, about = "Index commands")]
@@ -48,7 +45,6 @@ impl Subcommand {
   pub(crate) fn run(self, options: Options) -> Result {
     match self {
       Self::Epochs => epochs::run(),
-      Self::Preview(preview) => preview.run(),
       Self::Find(find) => find.run(options),
       Self::Index(index) => index.run(options),
       Self::Info(info) => info.run(options),
