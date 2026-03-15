@@ -351,3 +351,74 @@ fn user_must_provide_fee_rate_to_send() {
   .stdout_regex("[[:xdigit:]]{64}\n")
   .run();
 }
+
+#[test]
+fn send_max_sends_all_cardinal_utxos() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  rpc_server.mine_blocks(3);
+
+  let output =
+    CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .output::<Output>();
+
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
+
+  // Should have exactly one output (no change)
+  assert_eq!(mempool[0].output.len(), 1, "send --max should have no change output");
+
+  // All 3 mined UTXOs should be inputs
+  assert_eq!(mempool[0].input.len(), 3, "send --max should spend all cardinal UTXOs");
+}
+
+#[test]
+fn send_max_does_not_spend_inscriptions() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  rpc_server.mine_blocks(1);
+
+  let Inscribe { reveal, .. } = inscribe(&rpc_server, &ord_server);
+
+  // Mine another block to give us a cardinal UTXO
+  rpc_server.mine_blocks(1);
+
+  let output =
+    CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .output::<Output>();
+
+  let mempool = rpc_server.mempool();
+  assert_eq!(mempool.len(), 1);
+  assert_eq!(output.transaction, mempool[0].txid());
+
+  // The inscription UTXO should NOT be spent
+  let inscribed_outpoint = OutPoint { txid: reveal, vout: 0 };
+  assert!(
+    !mempool[0].input.iter().any(|i| i.previous_output == inscribed_outpoint),
+    "inscription UTXO must not be spent when using --max"
+  );
+}
+
+#[test]
+fn send_max_with_no_utxos() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  // No UTXOs in wallet at all
+  CommandBuilder::new("wallet send --fee-rate 1 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .expected_stderr("error: wallet contains no cardinal UTXOs to send\n")
+    .expected_exit_code(1)
+    .run();
+}

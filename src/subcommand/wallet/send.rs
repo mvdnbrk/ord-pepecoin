@@ -9,11 +9,13 @@ use {
 #[derive(Debug, Parser)]
 pub(crate) struct Send {
   address: Address,
-  outgoing: Outgoing,
+  outgoing: Option<Outgoing>,
   #[clap(long, help = "Use fee rate of <FEE_RATE> sats/vB. [default: 1000.0]")]
   fee_rate: Option<FeeRate>,
   #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
   postage: Option<Amount>,
+  #[clap(long, help = "Send all cardinal (non-inscription) UTXOs, minus fees.")]
+  max: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -57,7 +59,16 @@ impl Send {
 
     let client = wallet.bitcoin_client();
 
-    let satpoint = match self.outgoing {
+    if self.max {
+      if self.outgoing.is_some() {
+        bail!("cannot specify both an amount and --max");
+      }
+      return self.send_max(&wallet, client);
+    }
+
+    let outgoing = self.outgoing.ok_or_else(|| anyhow!("must specify an amount, inscription ID, or satpoint (or use --max)"))?;
+
+    let satpoint = match outgoing {
       Outgoing::SatPoint(satpoint) => {
         for inscription_satpoint in wallet.inscriptions().keys() {
           if satpoint == *inscription_satpoint {
@@ -192,6 +203,71 @@ impl Send {
     let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
     println!("{txid}");
+
+    Ok(())
+  }
+
+  fn send_max(self, wallet: &Wallet, client: &Client) -> Result {
+    let inscribed_outputs = wallet
+      .inscriptions()
+      .keys()
+      .map(|satpoint| satpoint.outpoint)
+      .collect::<HashSet<OutPoint>>();
+
+    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+
+    // Select ALL cardinal (non-inscribed) UTXOs
+    let cardinal_utxos: Vec<(OutPoint, Amount)> = wallet
+      .utxos()
+      .iter()
+      .filter(|(op, _)| !inscribed_outputs.contains(op))
+      .map(|(op, txo)| (*op, Amount::from_sat(txo.value)))
+      .collect();
+
+    if cardinal_utxos.is_empty() {
+      bail!("wallet contains no cardinal UTXOs to send");
+    }
+
+    let total_amount: Amount = cardinal_utxos.iter().map(|(_, a)| *a).sum();
+
+    // Estimate fee: ~148 bytes per P2PKH input, ~34 for single output (no change), ~10 overhead
+    let estimated_vsize = cardinal_utxos.len() * 148 + 34 + 10;
+    let fee = fee_rate.fee(estimated_vsize);
+
+    let send_amount = total_amount.checked_sub(fee)
+      .ok_or_else(|| anyhow!("cardinal balance ({}) is less than the estimated fee ({})", total_amount, fee))?;
+
+    if send_amount.to_sat() == 0 {
+      bail!("cardinal balance ({}) is too small to cover fees", total_amount);
+    }
+
+    let dust_limit = self.address.script_pubkey().dust_value();
+    if send_amount < dust_limit {
+      bail!("send amount ({}) after fees is below dust limit ({})", send_amount, dust_limit);
+    }
+
+    let unsigned_transaction = Transaction {
+      version: 1,
+      lock_time: bitcoin::PackedLockTime::ZERO,
+      input: cardinal_utxos
+        .iter()
+        .map(|(outpoint, _)| TxIn {
+          previous_output: *outpoint,
+          script_sig: Script::new(),
+          sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+          witness: bitcoin::Witness::default(),
+        })
+        .collect(),
+      output: vec![TxOut {
+        value: send_amount.to_sat(),
+        script_pubkey: self.address.script_pubkey(),
+      }],
+    };
+
+    let signed_tx = sign_transaction(wallet, unsigned_transaction)?;
+    let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
+
+    print_json(Output { transaction: txid })?;
 
     Ok(())
   }
