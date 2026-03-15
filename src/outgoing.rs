@@ -11,6 +11,11 @@ impl FromStr for Outgoing {
   type Err = Error;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
+    // Accept Pepecoin denominations as aliases for bitcoin crate denominations
+    let s = &s
+      .replace("ribbit", "sat").replace("RIBBIT", "SAT")
+      .replace("rib", "sat").replace("RIB", "SAT")
+      .replace("pep", "btc").replace("PEP", "BTC");
     Ok(if s.contains(':') {
       Self::SatPoint(s.parse()?)
     } else if s.len() >= 66 {
@@ -63,6 +68,26 @@ mod tests {
     assert_eq!(
       "0sat".parse::<Outgoing>().unwrap(),
       Outgoing::Amount("0 sat".parse().unwrap()),
+    );
+
+    assert_eq!(
+      "1pep".parse::<Outgoing>().unwrap(),
+      Outgoing::Amount("1 btc".parse().unwrap()),
+    );
+
+    assert_eq!(
+      "1 pep".parse::<Outgoing>().unwrap(),
+      Outgoing::Amount("1 btc".parse().unwrap()),
+    );
+
+    assert_eq!(
+      "100rib".parse::<Outgoing>().unwrap(),
+      Outgoing::Amount("100 sat".parse().unwrap()),
+    );
+
+    assert_eq!(
+      "100ribbit".parse::<Outgoing>().unwrap(),
+      Outgoing::Amount("100 sat".parse().unwrap()),
     );
 
     assert!("0".parse::<Outgoing>().is_err());
