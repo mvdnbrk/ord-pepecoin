@@ -100,8 +100,8 @@ fn create_wallet_with_options(
   data_dir: Option<PathBuf>,
   wallet_name: Option<&str>,
 ) {
-  let wallet_flag = wallet_name.map(|n| format!("--wallet {n} ")).unwrap_or_default();
-  let mut builder = CommandBuilder::new(format!("{wallet_flag}--chain {} wallet create", rpc_server.network()));
+  let wallet_flag = wallet_name.map(|n| format!("--name {n} ")).unwrap_or_default();
+  let mut builder = CommandBuilder::new(format!("--chain {} wallet {wallet_flag}create", rpc_server.network()));
   if let Some(ref data_dir) = data_dir {
     builder = builder.data_dir(data_dir.clone());
   }

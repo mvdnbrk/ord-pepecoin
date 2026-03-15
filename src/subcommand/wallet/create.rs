@@ -20,13 +20,13 @@ pub(crate) struct Create {
 }
 
 impl Create {
-  pub(crate) fn run(self, options: Options) -> Result {
+  pub(crate) fn run(self, options: Options, wallet_name: &str) -> Result {
     let mut entropy = [0; 16];
     rand::thread_rng().fill_bytes(&mut entropy);
 
     let mnemonic = Mnemonic::from_entropy(&entropy)?;
 
-    crate::wallet::Wallet::initialize(&options, mnemonic.to_seed(self.passphrase.clone()))?;
+    crate::wallet::Wallet::initialize(&options, wallet_name, mnemonic.to_seed(self.passphrase.clone()))?;
 
     print_json(Output {
       mnemonic,

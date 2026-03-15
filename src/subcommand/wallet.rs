@@ -18,7 +18,19 @@ pub(crate) mod transaction_builder;
 pub mod transactions;
 
 #[derive(Debug, Parser)]
-pub(crate) enum Wallet {
+pub(crate) struct WalletCommand {
+  #[clap(long, default_value = "ordpep", help = "Use wallet named <NAME>.")]
+  pub(crate) name: String,
+  #[clap(long, alias = "nosync", help = "Do not update index.")]
+  pub(crate) no_sync: bool,
+  #[clap(long, help = "Use ordpep server running at <SERVER_URL>.")]
+  pub(crate) server_url: Option<Url>,
+  #[clap(subcommand)]
+  pub(crate) subcommand: WalletSubcommand,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum WalletSubcommand {
   #[clap(about = "Get wallet balance")]
   Balance,
   #[clap(about = "Create new wallet")]
@@ -41,32 +53,35 @@ pub(crate) enum Wallet {
   Outputs,
 }
 
-impl Wallet {
+impl WalletCommand {
   pub(crate) fn run(self, options: Options) -> Result {
-    match self {
-      Self::Balance
-      | Self::Inscriptions
-      | Self::Outputs
-      | Self::Receive
-      | Self::Sats(_)
-      | Self::Send(_)
-      | Self::Inscribe(_)
-      | Self::Transactions(_) => {
-        let wallet = crate::wallet::Wallet::load(&options)?;
-        match self {
-          Self::Balance => balance::run(wallet),
-          Self::Inscriptions => inscriptions::run(wallet),
-          Self::Outputs => outputs::run(wallet),
-          Self::Receive => receive::run(wallet),
-          Self::Sats(sats) => sats.run(wallet),
-          Self::Send(send) => send.run(wallet),
-          Self::Inscribe(inscribe) => inscribe.run(wallet),
-          Self::Transactions(transactions) => transactions.run(wallet),
+    let wallet_name = self.name;
+    let no_sync = self.no_sync;
+    let server_url = self.server_url;
+    match self.subcommand {
+      WalletSubcommand::Balance
+      | WalletSubcommand::Inscriptions
+      | WalletSubcommand::Outputs
+      | WalletSubcommand::Receive
+      | WalletSubcommand::Sats(_)
+      | WalletSubcommand::Send(_)
+      | WalletSubcommand::Inscribe(_)
+      | WalletSubcommand::Transactions(_) => {
+        let wallet = crate::wallet::Wallet::load(&options, &wallet_name, server_url, no_sync)?;
+        match self.subcommand {
+          WalletSubcommand::Balance => balance::run(wallet),
+          WalletSubcommand::Inscriptions => inscriptions::run(wallet),
+          WalletSubcommand::Outputs => outputs::run(wallet),
+          WalletSubcommand::Receive => receive::run(wallet),
+          WalletSubcommand::Sats(sats) => sats.run(wallet),
+          WalletSubcommand::Send(send) => send.run(wallet),
+          WalletSubcommand::Inscribe(inscribe) => inscribe.run(wallet),
+          WalletSubcommand::Transactions(transactions) => transactions.run(wallet),
           _ => unreachable!(),
         }
       }
-      Self::Create(create) => create.run(options),
-      Self::Restore(restore) => restore.run(options),
+      WalletSubcommand::Create(create) => create.run(options, &wallet_name),
+      WalletSubcommand::Restore(restore) => restore.run(options, &wallet_name),
     }
   }
 }

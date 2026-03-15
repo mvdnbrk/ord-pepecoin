@@ -41,8 +41,8 @@ pub struct Wallet {
 }
 
 impl Wallet {
-  pub fn open_database(options: &Options) -> Result<Arc<Database>> {
-    let path = options.data_dir()?.join("wallets").join(&options.wallet);
+  pub fn open_database(options: &Options, wallet_name: &str) -> Result<Arc<Database>> {
+    let path = options.data_dir()?.join("wallets").join(wallet_name);
     fs::create_dir_all(&path)?;
     let db_path = path.join("wallet.redb");
 
@@ -63,8 +63,8 @@ impl Wallet {
     Ok(Arc::new(db))
   }
 
-  pub(crate) fn initialize(options: &Options, seed: [u8; 64]) -> Result {
-    let database = Self::open_database(options)?;
+  pub(crate) fn initialize(options: &Options, wallet_name: &str, seed: [u8; 64]) -> Result {
+    let database = Self::open_database(options, wallet_name)?;
     let network = options.chain().network();
     let secp = Secp256k1::new();
     let master_private_key = ExtendedPrivKey::new_master(network, &seed)?;
@@ -97,9 +97,9 @@ impl Wallet {
     Ok(())
   }
 
-  pub(crate) fn load(options: &Options) -> Result<Self> {
+  pub(crate) fn load(options: &Options, wallet_name: &str, server_url: Option<Url>, no_sync: bool) -> Result<Self> {
     let bitcoin_client = options.pepecoin_rpc_client_for_wallet_command(false)?;
-    let database = Self::open_database(options)?;
+    let database = Self::open_database(options, wallet_name)?;
 
     let ord_client = OrdClient::builder()
       .default_headers({
@@ -109,21 +109,23 @@ impl Wallet {
       })
       .build()?;
 
-    let rpc_url = options.server_url()?;
+    let rpc_url = options.server_url(server_url)?;
 
     // Sync with server
-    let bitcoin_block_count = bitcoin_client.get_block_count()? + 1;
-    loop {
-      let response = ord_client.get(rpc_url.join("/blockcount")?).send()
-        .context("wallet failed to retrieve block count from server. Make sure `ordpep server` is running.")?;
-      if !response.status().is_success() {
-        bail!("failed to get blockcount from ordpep server: {}", response.status());
+    if !no_sync {
+      let bitcoin_block_count = bitcoin_client.get_block_count()? + 1;
+      loop {
+        let response = ord_client.get(rpc_url.join("/blockcount")?).send()
+          .context("wallet failed to retrieve block count from server. Make sure `ordpep server` is running.")?;
+        if !response.status().is_success() {
+          bail!("failed to get blockcount from ordpep server: {}", response.status());
+        }
+        let ord_block_count: u64 = response.text()?.parse()?;
+        if ord_block_count >= bitcoin_block_count {
+          break;
+        }
+        thread::sleep(Duration::from_millis(100));
       }
-      let ord_block_count: u64 = response.text()?.parse()?;
-      if ord_block_count >= bitcoin_block_count {
-        break;
-      }
-      thread::sleep(Duration::from_millis(100));
     }
 
     let addresses = Self::get_addresses(&database, options.chain())?;

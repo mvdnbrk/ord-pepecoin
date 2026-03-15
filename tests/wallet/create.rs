@@ -10,7 +10,7 @@ fn create() {
     .data_dir(tempdir.path().to_owned())
     .output::<Create>();
 
-  assert!(tempdir.path().join("wallets/ord/wallet.redb").exists());
+  assert!(tempdir.path().join("wallets/ordpep/wallet.redb").exists());
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn create_with_different_name() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let tempdir = TempDir::new().unwrap();
 
-  CommandBuilder::new("--wallet inscription-wallet wallet create")
+  CommandBuilder::new("wallet --name inscription-wallet create")
     .rpc_server(&rpc_server)
     .data_dir(tempdir.path().to_owned())
     .output::<Create>();

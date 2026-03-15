@@ -334,7 +334,7 @@ fn inscribe_with_wallet_named_foo() {
 
   rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("--wallet foo wallet inscribe degenerate.png")
+  CommandBuilder::new("wallet --name foo inscribe degenerate.png")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)

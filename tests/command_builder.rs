@@ -129,10 +129,6 @@ impl CommandBuilder {
       ]);
     }
 
-    if let Some(server_url) = &self.server_url {
-      command.args(["--server-url", server_url]);
-    }
-
     let data_dir: &Path = self.data_dir.as_ref().map(|d| d.as_path()).unwrap_or(self.tempdir.path());
 
     command
@@ -142,8 +138,17 @@ impl CommandBuilder {
       .stderr(Stdio::piped())
       .current_dir(&self.tempdir)
       .arg("--data-dir")
-      .arg(data_dir)
-      .args(&self.args);
+      .arg(data_dir);
+
+    // Inject --server-url after "wallet" in args since it's a wallet subcommand flag
+    let mut args = self.args.clone();
+    if let Some(server_url) = &self.server_url {
+      if let Some(pos) = args.iter().position(|a| a == "wallet") {
+        args.insert(pos + 1, server_url.clone());
+        args.insert(pos + 1, "--server-url".to_string());
+      }
+    }
+    command.args(&args);
 
     command
   }
