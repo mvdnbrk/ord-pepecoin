@@ -5,7 +5,7 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
-## [0.6.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.6.0) - 2026-03-14
+## [0.7.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.7.0) - 2026-03-15
 
 ### Added
 - Standalone wallet with local key management, no Core wallet dependency ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
@@ -15,6 +15,10 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `wallet addresses` subcommand ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
 - Destination address in inscribe output ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
 - `wallet outputs` enhanced with address, inscriptions, and sat ranges ([#19](https://github.com/mvdnbrk/ord-pepecoin/pull/19))
+
+## [0.6.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.6.0) - 2026-03-14
+
+### Added
 - P2SH scriptSig inscription support (commit, reveal, batch inscribe) ([#3](https://github.com/mvdnbrk/ord-pepecoin/pull/3))
 - OP_PUSHDATA2/4 parser support ([#5](https://github.com/mvdnbrk/ord-pepecoin/pull/5))
 - 240-byte chunk size for inscription data
