@@ -53,7 +53,7 @@ pub(crate) enum WalletSubcommand {
   #[clap(about = "See wallet transactions")]
   Transactions(transactions::Transactions),
   #[clap(about = "List wallet outputs")]
-  Outputs,
+  Outputs(outputs::Outputs),
 }
 
 impl WalletCommand {
@@ -65,7 +65,7 @@ impl WalletCommand {
       WalletSubcommand::Addresses
       | WalletSubcommand::Balance
       | WalletSubcommand::Inscriptions
-      | WalletSubcommand::Outputs
+      | WalletSubcommand::Outputs(_)
       | WalletSubcommand::Receive
       | WalletSubcommand::Sats(_)
       | WalletSubcommand::Send(_)
@@ -76,7 +76,7 @@ impl WalletCommand {
           WalletSubcommand::Addresses => addresses::run(wallet),
           WalletSubcommand::Balance => balance::run(wallet),
           WalletSubcommand::Inscriptions => inscriptions::run(wallet),
-          WalletSubcommand::Outputs => outputs::run(wallet),
+          WalletSubcommand::Outputs(outputs) => outputs.run(wallet),
           WalletSubcommand::Receive => receive::run(wallet),
           WalletSubcommand::Sats(sats) => sats.run(wallet),
           WalletSubcommand::Send(send) => send.run(wallet),
