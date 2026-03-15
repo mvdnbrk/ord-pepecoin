@@ -31,7 +31,7 @@ fn inscribe_works_with_huge_expensive_inscriptions() {
   let txid = rpc_server.mine_blocks(1)[0].txdata[0].txid();
 
   CommandBuilder::new(format!(
-    "wallet inscribe foo.txt --satpoint {txid}:0:0 --fee-rate 10"
+    "wallet inscribe foo.txt --satpoint {txid}:0:0 --fee-rate 10000"
   ))
   .write("foo.txt", [0; 350_000])
   .rpc_server(&rpc_server)
@@ -245,7 +245,7 @@ fn inscribe_with_fee_rate() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --fee-rate 2000.0")
+  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --fee-rate 20000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
@@ -289,7 +289,7 @@ fn inscribe_with_commit_fee_rate() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --commit-fee-rate 2000.0")
+  CommandBuilder::new("--index-sats wallet inscribe degenerate.png --commit-fee-rate 20000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
@@ -375,7 +375,7 @@ fn inscribe_with_dry_run_flag_fees_inscrease() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  let total_fee_dry_run = CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 1000.0")
+  let total_fee_dry_run = CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 10000.0")
     .write("degenerate.png", [1; 520])
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
@@ -384,7 +384,7 @@ fn inscribe_with_dry_run_flag_fees_inscrease() {
     .fees;
 
   let total_fee_normal =
-    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 5000.0")
+    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 50000.0")
       .write("degenerate.png", [1; 520])
       .rpc_server(&rpc_server)
       .ord_server(&ord_server)
@@ -435,7 +435,7 @@ fn inscribe_with_no_limit() {
   rpc_server.mine_blocks(1);
 
   let four_megger = std::iter::repeat(0).take(4_000_000).collect::<Vec<u8>>();
-  CommandBuilder::new("wallet inscribe --no-limit --fee-rate 1.0 degenerate.png")
+  CommandBuilder::new("wallet inscribe --no-limit --fee-rate 10000.0 degenerate.png")
     .write("degenerate.png", four_megger)
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)

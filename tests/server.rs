@@ -147,7 +147,7 @@ fn inscription_page_after_send() {
   );
 
   let txid = CommandBuilder::new(format!(
-    "wallet send --fee-rate 1 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 {inscription}"
+    "wallet send --fee-rate 10000 bc1qcqgs2pps4u4yedfyl5pysdjjncs8et5utseepv {inscription}"
   ))
   .rpc_server(&rpc_server)
   .ord_server(&test_server)

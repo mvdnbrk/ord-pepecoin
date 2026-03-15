@@ -35,7 +35,7 @@ fn inscriptions() {
     .output::<receive::Output>()
     .address;
 
-  let stdout = CommandBuilder::new(format!("wallet send --fee-rate 1 {address} {inscription}"))
+  let stdout = CommandBuilder::new(format!("wallet send --fee-rate 10000 {address} {inscription}"))
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .expected_exit_code(0)
