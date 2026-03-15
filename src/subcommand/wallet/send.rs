@@ -21,6 +21,30 @@ pub struct Output {
   pub transaction: Txid,
 }
 
+/// Try LocalSigner first, fall back to Core's signrawtransaction for
+/// UTXOs at legacy Core-managed addresses.
+fn sign_transaction(wallet: &Wallet, unsigned_transaction: Transaction) -> Result<Transaction> {
+  match LocalSigner::sign_transaction(wallet, unsigned_transaction.clone()) {
+    Ok(signed) => Ok(signed),
+    Err(_) => {
+      let client = wallet.bitcoin_client();
+      let tx_hex = bitcoin::consensus::encode::serialize_hex(&unsigned_transaction);
+      let result: serde_json::Value = client
+        .call("signrawtransaction", &[tx_hex.into()])
+        .context("failed to sign transaction")?;
+      let signed_hex = result["hex"]
+        .as_str()
+        .ok_or_else(|| anyhow!("missing hex in signrawtransaction response"))?;
+      if result["complete"].as_bool() != Some(true) {
+        bail!("Failed to sign transaction: {}", result["errors"]);
+      }
+      let signed_tx: Transaction = bitcoin::consensus::deserialize(&hex::decode(signed_hex)?)
+        .context("failed to deserialize signed transaction")?;
+      Ok(signed_tx)
+    }
+  }
+}
+
 impl Send {
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     if !self.address.is_valid_for_network(wallet.chain().network()) {
@@ -139,7 +163,7 @@ impl Send {
           output: tx_outputs,
         };
 
-        let signed_tx = LocalSigner::sign_transaction(&wallet, unsigned_transaction)?;
+        let signed_tx = sign_transaction(&wallet, unsigned_transaction)?;
         let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
         print_json(Output { transaction: txid })?;
@@ -163,7 +187,7 @@ impl Send {
       postage,
     )?;
 
-    let signed_tx = LocalSigner::sign_transaction(&wallet, unsigned_transaction)?;
+    let signed_tx = sign_transaction(&wallet, unsigned_transaction)?;
 
     let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
