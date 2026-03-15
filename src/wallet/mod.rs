@@ -277,10 +277,6 @@ for outpoint in locked_outpoints {
     Ok(addresses)
   }
 
-  pub(crate) fn addresses(&self) -> Result<Vec<Address>> {
-    Self::get_addresses(&self.database, self.chain())
-  }
-
   pub(crate) fn utxos(&self) -> &BTreeMap<OutPoint, TxOut> {
     &self.utxos
   }
