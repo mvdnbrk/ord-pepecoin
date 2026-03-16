@@ -26,6 +26,7 @@ use {
 };
 mod entry;
 mod fetcher;
+pub(crate) mod reorg;
 mod rtx;
 mod updater;
 
@@ -70,7 +71,6 @@ pub struct Index {
   genesis_block_coinbase_transaction: Transaction,
   genesis_block_coinbase_txid: Txid,
   height_limit: Option<u64>,
-  reorged: AtomicBool,
   pub(crate) started: DateTime<Utc>,
   unrecoverably_reorged: AtomicBool,
   rpc_url: String,
@@ -91,6 +91,7 @@ pub(crate) enum Statistic {
   LostSats = 2,
   OutputsTraversed = 3,
   SatRanges = 4,
+  LastSavepointHeight = 5,
 }
 
 impl Statistic {
@@ -265,7 +266,6 @@ impl Index {
       first_inscription_height: options.first_inscription_height(),
       genesis_block_coinbase_transaction,
       height_limit: options.height_limit,
-      reorged: AtomicBool::new(false),
       started: Utc::now(),
       unrecoverably_reorged: AtomicBool::new(false),
       rpc_url,
@@ -354,13 +354,25 @@ impl Index {
       match Updater::update(self) {
         Ok(()) => return Ok(()),
         Err(error) => {
-          if self.unrecoverably_reorged.load(atomic::Ordering::Relaxed) {
-            return Err(error);
-          }
-          if self.reorged.load(atomic::Ordering::Relaxed) {
-            self.reorged.store(false, atomic::Ordering::Relaxed);
-            log::info!("Recovered from reorg, resuming indexing...");
-            continue;
+          if let Some(reorg_error) = error.downcast_ref::<reorg::Error>() {
+            match reorg_error {
+              reorg::Error::Recoverable { height, depth } => {
+                match reorg::Reorg::handle_reorg(self, *height, *depth) {
+                  Ok(()) => {
+                    log::info!("recovered from reorg, resuming indexing...");
+                    continue;
+                  }
+                  Err(recovery_error) => {
+                    self.unrecoverably_reorged.store(true, atomic::Ordering::Relaxed);
+                    return Err(recovery_error);
+                  }
+                }
+              }
+              reorg::Error::Unrecoverable => {
+                self.unrecoverably_reorged.store(true, atomic::Ordering::Relaxed);
+                return Err(error);
+              }
+            }
           }
           return Err(error);
         }
@@ -456,15 +468,10 @@ impl Index {
   }
 
   #[allow(dead_code)]
-  pub(crate) fn is_reorged(&self) -> bool {
-    self.reorged.load(atomic::Ordering::Relaxed)
-  }
-
   pub(crate) fn is_unrecoverably_reorged(&self) -> bool {
     self.unrecoverably_reorged.load(atomic::Ordering::Relaxed)
   }
 
-  #[allow(dead_code)]
   pub(crate) fn block_hash(&self, height: u64) -> Result<Option<BlockHash>> {
     let rtx = self.database.begin_read()?;
     let table = rtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
