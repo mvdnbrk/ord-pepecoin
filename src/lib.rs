@@ -49,14 +49,13 @@ use {
     cmp,
     collections::{BTreeMap, HashSet, VecDeque},
     env,
-    ffi::OsString,
     fmt::{self, Display, Formatter},
     fs::{self, File},
     io,
-    net::{TcpListener, ToSocketAddrs},
+    net::ToSocketAddrs,
     ops::{Add, AddAssign, Sub},
     path::{Path, PathBuf},
-    process::{self, Command},
+    process,
     str::FromStr,
     sync::{
       atomic::{self, AtomicU64},
@@ -65,7 +64,6 @@ use {
     thread,
     time::{Duration, Instant, SystemTime},
   },
-  tempfile::TempDir,
   tokio::{runtime::Runtime, task},
   url::Url,
 };
@@ -80,7 +78,7 @@ pub use crate::{
 mod test;
 
 #[cfg(test)]
-use self::test::*;
+use {self::test::*, std::ffi::OsString, tempfile::TempDir};
 
 macro_rules! tprintln {
     ($($arg:tt)*) => {
