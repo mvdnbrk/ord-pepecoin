@@ -2101,7 +2101,11 @@ mod tests {
     test_server.pepecoin_rpc_server.invalidate_tip();
     test_server.pepecoin_rpc_server.mine_blocks(2);
 
-    test_server.assert_response_regex("/status", StatusCode::OK, ".*<dd>true</dd>.*");
+    test_server.assert_response_regex(
+      "/status",
+      StatusCode::OK,
+      ".*<dt>unrecoverably reorged</dt>\n  <dd>true</dd>.*",
+    );
   }
 
   #[test]
