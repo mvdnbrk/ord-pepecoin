@@ -1116,6 +1116,37 @@ impl Index {
       .collect::<Result<Vec<InscriptionId>>>()
   }
 
+  pub(crate) fn get_highest_paying_inscriptions_in_block(
+    &self,
+    block_height: u64,
+    n: usize,
+  ) -> Result<(Vec<InscriptionId>, usize)> {
+    let inscription_ids = self.get_inscriptions_in_block(block_height)?;
+
+    let mut inscription_to_fee: Vec<(InscriptionId, u64)> = Vec::new();
+    for id in &inscription_ids {
+      inscription_to_fee.push((
+        *id,
+        self
+          .get_inscription_entry(*id)?
+          .ok_or_else(|| anyhow!("could not get entry for inscription {id}"))?
+          .fee,
+      ));
+    }
+
+    inscription_to_fee.sort_by_key(|(_, fee)| *fee);
+
+    Ok((
+      inscription_to_fee
+        .iter()
+        .map(|(id, _)| *id)
+        .rev()
+        .take(n)
+        .collect(),
+      inscription_ids.len(),
+    ))
+  }
+
   pub(crate) fn get_inscription_entry(
     &self,
     inscription_id: InscriptionId,
