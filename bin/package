@@ -27,8 +27,5 @@ cp \
 cd $DIST
 echo "Creating release archive..."
 ARCHIVE=$DIST/ordpep-$VERSION-$TARGET.tar.gz
-ARCHIVE_LATEST=$DIST/ordpep-$TARGET.tar.gz
 tar czf $ARCHIVE *
-cp $ARCHIVE $ARCHIVE_LATEST
 echo "archive=$ARCHIVE" >> $GITHUB_OUTPUT
-echo "archive_latest=$ARCHIVE_LATEST" >> $GITHUB_OUTPUT

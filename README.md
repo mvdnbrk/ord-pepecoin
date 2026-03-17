@@ -15,26 +15,11 @@ The indexer and explorer support all inscription content types. While PRC-20 ins
 
 ### Pre-built binary
 
-Download the latest release for your platform:
-
 ```bash
-# Linux (x86_64)
-curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-x86_64-unknown-linux-gnu.tar.gz
-tar xzf ordpep-x86_64-unknown-linux-gnu.tar.gz ordpep
-sudo mv ordpep /usr/local/bin/
-
-# macOS (Apple Silicon)
-curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-aarch64-apple-darwin.tar.gz
-tar xzf ordpep-aarch64-apple-darwin.tar.gz ordpep
-sudo mv ordpep /usr/local/bin/
-
-# macOS (Intel)
-curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-x86_64-apple-darwin.tar.gz
-tar xzf ordpep-x86_64-apple-darwin.tar.gz ordpep
-sudo mv ordpep /usr/local/bin/
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/main/install.sh | bash -s -- --to /usr/local/bin
 ```
 
-Or browse all releases at [GitHub Releases](https://github.com/mvdnbrk/ord-pepecoin/releases/latest).
+This auto-detects your platform (Linux x64, macOS Intel/ARM) and installs the latest release. See [all releases](https://github.com/mvdnbrk/ord-pepecoin/releases).
 
 ### From source
 
