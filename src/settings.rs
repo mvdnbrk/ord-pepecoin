@@ -503,7 +503,8 @@ mod tests {
   fn parse(args: &[&str]) -> Settings {
     let mut args = args.to_vec();
     args.insert(0, "ordpep");
-    Settings::merge(Options::try_parse_from(args).unwrap(), BTreeMap::new()).unwrap()
+    let settings = Settings::from_options(Options::try_parse_from(args).unwrap());
+    settings.or_defaults().unwrap()
   }
 
   #[test]
@@ -528,7 +529,7 @@ mod tests {
   fn use_default_network() {
     let settings = parse(&[]);
 
-    assert_eq!(settings.rpc_url(), "127.0.0.1:19073");
+    assert_eq!(settings.rpc_url(), "127.0.0.1:33873");
 
     assert!(settings.cookie_file().unwrap().ends_with(".cookie"));
   }
