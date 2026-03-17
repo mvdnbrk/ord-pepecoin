@@ -105,6 +105,16 @@ impl FromStr for Media {
       }
     }
 
+    // Try matching base type without parameters (e.g. "application/json; charset=utf-8" -> "application/json")
+    if let Some(base) = s.split(';').next() {
+      let base = base.trim();
+      for entry in Self::TABLE {
+        if entry.0 == base {
+          return Ok(entry.1);
+        }
+      }
+    }
+
     Err(anyhow!("unknown content type: {s}"))
   }
 }
@@ -135,7 +145,7 @@ mod tests {
   }
 
   #[test]
-  fn content_type_with_space_after_semicolon() {
+  fn content_type_with_extra_parameters() {
     assert_eq!(
       "text/plain; charset=utf-8".parse::<Media>().unwrap(),
       Media::Text
@@ -143,6 +153,10 @@ mod tests {
     assert_eq!(
       "text/html; charset=utf-8".parse::<Media>().unwrap(),
       Media::Iframe
+    );
+    assert_eq!(
+      "application/json; charset=utf-8".parse::<Media>().unwrap(),
+      Media::Text
     );
   }
 }
