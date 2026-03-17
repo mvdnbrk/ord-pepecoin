@@ -461,6 +461,18 @@ impl Index {
   }
 
   pub(crate) fn compact(&mut self) -> Result {
+    let wtx = self.database.begin_write()?;
+    let savepoints: Vec<u64> = wtx.list_persistent_savepoints()?.collect();
+    if !savepoints.is_empty() {
+      log::info!("Removing {} persistent savepoints before compaction", savepoints.len());
+      for id in savepoints {
+        wtx.delete_persistent_savepoint(id)?;
+      }
+      wtx.commit()?;
+    } else {
+      drop(wtx);
+    }
+
     if self.database.compact()? {
       log::info!("Database compacted successfully");
     } else {
