@@ -10,6 +10,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ### Added
 - Align media types with upstream: `Code(Language)`, `Font`, `Markdown`, `Model`, `Image(ImageRendering)` ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
 - Preview templates for code (highlight.js), fonts, markdown, and 3D models ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
+- Unified `Settings` struct with `ORDPEP_*` env var support ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
+- Configurable `savepoint_interval`, `max_savepoints`, `commit_interval`, `pepecoin_rpc_limit` ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
 
 ### Fixed
 - `index compact` failing when persistent savepoints exist ([`bd792cb`](https://github.com/mvdnbrk/ord-pepecoin/commit/bd792cbe))
@@ -17,6 +19,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ### Changed
 - Refactor `CommandBuilder` with `.wallet()` builder pattern for test wallet flags ([#30](https://github.com/mvdnbrk/ord-pepecoin/pull/30))
+- Default `max_savepoints` bumped from 2 to 3 for safer reorg recovery ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
 
 ## [0.8.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.8.0) - 2026-03-17
 
