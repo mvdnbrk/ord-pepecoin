@@ -7,8 +7,16 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+### Added
+- Align media types with upstream: `Code(Language)`, `Font`, `Markdown`, `Model`, `Image(ImageRendering)` ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
+- Preview templates for code (highlight.js), fonts, markdown, and 3D models ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
+
 ### Fixed
 - `index compact` failing when persistent savepoints exist ([`bd792cb`](https://github.com/mvdnbrk/ord-pepecoin/commit/bd792cbe))
+- Flaky server tests with index update retry ([#31](https://github.com/mvdnbrk/ord-pepecoin/pull/31))
+
+### Changed
+- Refactor `CommandBuilder` with `.wallet()` builder pattern for test wallet flags ([#30](https://github.com/mvdnbrk/ord-pepecoin/pull/30))
 
 ## [0.8.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.8.0) - 2026-03-17
 
