@@ -8,10 +8,10 @@ use {
   crate::page_config::PageConfig,
   crate::templates::{
     AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
-    InscriptionsHtml, OutputHtml,
- PageContent,
-    PageHtml, PreviewAudioHtml, PreviewImageHtml, PreviewPdfHtml, PreviewTextHtml,
-    PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml, TransactionHtml,
+    InscriptionsHtml, OutputHtml, PageContent, PageHtml, PreviewAudioHtml, PreviewCodeHtml,
+    PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml,
+    PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml,
+    TransactionHtml,
   },
   axum::{
     body::Body,
@@ -1054,18 +1054,55 @@ impl Server {
 
     return match inscription.media() {
       Media::Audio => Ok(PreviewAudioHtml { inscription_id }.into_response()),
+      Media::Code(language) => Ok(
+        (
+          [(
+            header::CONTENT_SECURITY_POLICY,
+            "script-src-elem 'self' https://cdn.jsdelivr.net",
+          )],
+          PreviewCodeHtml {
+            inscription_id,
+            language,
+          },
+        )
+          .into_response(),
+      ),
+      Media::Font => Ok(PreviewFontHtml { inscription_id }.into_response()),
       Media::Iframe => Ok(
         Self::content_response(inscription)
           .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
           .into_response(),
       ),
-      Media::Image => Ok(
+      Media::Image(image_rendering) => Ok(
         (
           [(
             header::CONTENT_SECURITY_POLICY,
             "default-src 'self' 'unsafe-inline'",
           )],
-          PreviewImageHtml { inscription_id },
+          PreviewImageHtml {
+            inscription_id,
+            image_rendering,
+          },
+        )
+          .into_response(),
+      ),
+      Media::Markdown => Ok(
+        (
+          [(
+            header::CONTENT_SECURITY_POLICY,
+            "script-src-elem 'self' https://cdn.jsdelivr.net",
+          )],
+          PreviewMarkdownHtml { inscription_id },
+        )
+          .into_response(),
+      ),
+      Media::Model => Ok(
+        (
+          [(
+            header::CONTENT_SECURITY_POLICY,
+            "script-src-elem 'self' https://ajax.googleapis.com",
+          )],
+          PreviewModelHtml { inscription_id },
         )
           .into_response(),
       ),

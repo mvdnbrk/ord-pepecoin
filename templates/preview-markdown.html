@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang=en>
+  <head>
+    <meta charset=utf-8>
+    <meta name=format-detection content='telephone=no'>
+    <style>
+      html {
+        background-color: #131516;
+        color: #fff;
+        font-family: sans-serif;
+        height: 100%;
+      }
+
+      body {
+        height: 100%;
+        margin: 0;
+        padding: 20px;
+        box-sizing: border-box;
+        overflow-y: auto;
+      }
+
+      #content {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      #content img {
+        max-width: 100%;
+      }
+
+      #content pre {
+        background-color: #282c34;
+        padding: 10px;
+        overflow-x: auto;
+      }
+
+      #content code {
+        font-family: monospace;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body>
+    <div id="content"></div>
+    <script>
+      fetch('/content/{{self.inscription_id}}')
+        .then(response => response.text())
+        .then(text => {
+          document.getElementById('content').innerHTML = marked.parse(text);
+        });
+    </script>
+  </body>
+</html>

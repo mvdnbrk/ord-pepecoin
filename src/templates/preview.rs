@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::media::{ImageRendering, Language}};
 
 #[derive(boilerplate::Boilerplate)]
 pub(crate) struct PreviewAudioHtml {
@@ -6,7 +6,29 @@ pub(crate) struct PreviewAudioHtml {
 }
 
 #[derive(boilerplate::Boilerplate)]
+pub(crate) struct PreviewCodeHtml {
+  pub(crate) inscription_id: InscriptionId,
+  pub(crate) language: Language,
+}
+
+#[derive(boilerplate::Boilerplate)]
+pub(crate) struct PreviewFontHtml {
+  pub(crate) inscription_id: InscriptionId,
+}
+
+#[derive(boilerplate::Boilerplate)]
 pub(crate) struct PreviewImageHtml {
+  pub(crate) inscription_id: InscriptionId,
+  pub(crate) image_rendering: ImageRendering,
+}
+
+#[derive(boilerplate::Boilerplate)]
+pub(crate) struct PreviewMarkdownHtml {
+  pub(crate) inscription_id: InscriptionId,
+}
+
+#[derive(boilerplate::Boilerplate)]
+pub(crate) struct PreviewModelHtml {
   pub(crate) inscription_id: InscriptionId,
 }
 
