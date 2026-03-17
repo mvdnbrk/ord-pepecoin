@@ -1006,7 +1006,7 @@ impl Index {
         .open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?
         .iter()?
         .rev()
-        .take(10)
+        .take(20)
         .map(|result| {
           let (_number, id) = result.expect("Error reading from inscription number table");
           Entry::load(*id.value())

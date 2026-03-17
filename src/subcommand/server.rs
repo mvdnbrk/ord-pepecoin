@@ -648,7 +648,7 @@ impl Server {
     Extension(index): Extension<Arc<Index>>,
   ) -> ServerResult<PageHtml<HomeHtml>> {
     Ok(
-      HomeHtml::new(index.blocks(100)?, index.get_homepage_inscriptions()?)
+      HomeHtml::new(index.blocks(5)?, index.get_homepage_inscriptions()?)
         .page(page_config, index.has_sat_index()?),
     )
   }

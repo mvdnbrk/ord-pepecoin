@@ -18,6 +18,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `HEIGHT_TO_LAST_INSCRIPTION_NUMBER` lookup table for O(1) inscription range queries ([#26](https://github.com/mvdnbrk/ord-pepecoin/pull/26))
 
 ### Changed
+- Home page: show 20 latest inscriptions (was 10) and 5 latest blocks (was 100)
 - Align height and inscription number types from `u64` to `u32` to match upstream ([#28](https://github.com/mvdnbrk/ord-pepecoin/pull/28))
 
 ## [0.7.1](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.7.1) - 2026-03-16
