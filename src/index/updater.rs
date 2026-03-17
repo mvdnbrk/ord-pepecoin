@@ -139,9 +139,7 @@ impl Updater {
 
       uncommitted += 1;
 
-      if uncommitted == 5000
-        || Reorg::is_savepoint_required(index, self.height)?
-      {
+      if uncommitted == 5000 {
         self.commit(wtx, value_cache, index)?;
         value_cache = HashMap::new();
         uncommitted = 0;
