@@ -152,12 +152,13 @@ pub struct Server {
 impl Server {
   pub fn run(
     self,
-    options: Options,
+    settings: Settings,
     index: Arc<Index>,
     handle: Handle<SocketAddr>,
     http_port_tx: Option<Sender<u16>>,
   ) -> Result {
-    Runtime::new()?.block_on(async {
+    let runtime = settings.runtime()?;
+    runtime.block_on(async {
       let clone = index.clone();
       let index_thread = thread::spawn(move || loop {
         if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
@@ -175,13 +176,12 @@ impl Server {
         }
       });
 
-      let config = options.load_config()?;
-      let address = self.listen_address(&config);
-      let http_port = self.http_port(&config);
+      let address = self.listen_address(&settings);
+      let http_port = self.http_port(&settings);
       let acme_domains = self.acme_domains()?;
 
       let page_config = Arc::new(PageConfig {
-        chain: options.chain(),
+        chain: settings.chain(),
         domain: self.acme_domain.first().cloned(),
       });
 
@@ -220,7 +220,7 @@ impl Server {
         .route("/update", get(Self::update))
         .layer(Extension(index))
         .layer(Extension(page_config))
-        .layer(Extension(Arc::new(config)))
+        .layer(Extension(Arc::new(settings.clone())))
         .layer(SetResponseHeaderLayer::if_not_present(
           header::CONTENT_SECURITY_POLICY,
           HeaderValue::from_static("default-src 'self'"),
@@ -248,7 +248,7 @@ impl Server {
               router,
               handle,
               https_port,
-              SpawnConfig::Https(self.acceptor(&options)?),
+              SpawnConfig::Https(self.acceptor(&settings)?),
               &address,
               None,
             )?
@@ -271,7 +271,7 @@ impl Server {
               router,
               handle,
               https_port,
-              SpawnConfig::Https(self.acceptor(&options)?),
+              SpawnConfig::Https(self.acceptor(&settings)?),
               &address,
               None,
             )?
@@ -350,11 +350,11 @@ impl Server {
     }))
   }
 
-  fn acme_cache(acme_cache: Option<&PathBuf>, options: &Options) -> Result<PathBuf> {
+  fn acme_cache(acme_cache: Option<&PathBuf>, settings: &Settings) -> Result<PathBuf> {
     let acme_cache = if let Some(acme_cache) = acme_cache {
       acme_cache.clone()
     } else {
-      options.data_dir()?.join("acme-cache")
+      settings.data_dir().join("acme-cache")
     };
 
     Ok(acme_cache)
@@ -368,19 +368,21 @@ impl Server {
     }
   }
 
-  fn http_port(&self, config: &Config) -> Option<u16> {
+  fn http_port(&self, settings: &Settings) -> Option<u16> {
     if self.http || self.http_port.is_some() || (self.https_port.is_none() && !self.https) {
       Some(self.http_port.unwrap_or_else(|| {
-        config.http_port.unwrap_or(80)
+        settings.http_port.unwrap_or(80)
       }))
     } else {
       None
     }
   }
 
-  fn listen_address(&self, config: &Config) -> String {
+  fn listen_address(&self, settings: &Settings) -> String {
     self.address.clone().unwrap_or_else(|| {
-      config.address.clone().unwrap_or_else(|| "0.0.0.0".to_string())
+      settings.rpc_url().parse::<Url>().ok()
+        .and_then(|url| url.host_str().map(|h| h.to_string()))
+        .unwrap_or_else(|| "0.0.0.0".to_string())
     })
   }
 
@@ -392,12 +394,12 @@ impl Server {
     }
   }
 
-  fn acceptor(&self, options: &Options) -> Result<AxumAcceptor> {
+  fn acceptor(&self, settings: &Settings) -> Result<AxumAcceptor> {
     let config = AcmeConfig::new(self.acme_domains()?)
       .contact(&self.acme_contact)
       .cache_option(Some(DirCache::new(Self::acme_cache(
         self.acme_cache.as_ref(),
-        options,
+        settings,
       )?)))
       .directory(if cfg!(test) {
         LETS_ENCRYPT_STAGING_DIRECTORY
@@ -998,10 +1000,10 @@ impl Server {
 
   async fn content(
     Extension(index): Extension<Arc<Index>>,
-    Extension(config): Extension<Arc<Config>>,
+    Extension(settings): Extension<Arc<Settings>>,
     Path(inscription_id): Path<InscriptionId>,
   ) -> ServerResult<Response> {
-    if config.is_hidden(inscription_id) {
+    if settings.is_hidden(inscription_id) {
       return Ok(PreviewUnknownHtml.into_response());
     }
 
@@ -1041,10 +1043,10 @@ impl Server {
 
   async fn preview(
     Extension(index): Extension<Arc<Index>>,
-    Extension(config): Extension<Arc<Config>>,
+    Extension(settings): Extension<Arc<Settings>>,
     Path(inscription_id): Path<InscriptionId>,
   ) -> ServerResult<Response> {
-    if config.is_hidden(inscription_id) {
+    if settings.is_hidden(inscription_id) {
       return Ok(PreviewUnknownHtml.into_response());
     }
 
@@ -1449,15 +1451,18 @@ mod tests {
         port,
         server_args.join(" "),
       ));
+let settings = Settings::merge(options, BTreeMap::new()).unwrap();
+let index = Arc::new(Index::open(&settings).unwrap());
+let ord_server_handle = Handle::new();
+let (_tx, _rx) = std::sync::mpsc::channel::<()>();
 
-      let index = Arc::new(Index::open(&options).unwrap());
-      let ord_server_handle = Handle::<SocketAddr>::new();
+{
+  let index = index.clone();
+  let ord_server_handle = ord_server_handle.clone();
+  let settings = settings.clone();
+  thread::spawn(move || server.run(settings, index, ord_server_handle, None).unwrap());
+}
 
-      {
-        let index = index.clone();
-        let ord_server_handle = ord_server_handle.clone();
-        thread::spawn(|| server.run(options, index, ord_server_handle, None).unwrap());
-      }
 
       while index.statistic(crate::index::Statistic::Commits) == 0 {
         thread::sleep(Duration::from_millis(25));
@@ -1601,7 +1606,7 @@ mod tests {
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ordpep server").1.http_port(&Config::default()), Some(80));
+    assert_eq!(parse_server_args("ordpep server").1.http_port(&Settings::default()), Some(80));
   }
 
   #[test]
@@ -1624,7 +1629,8 @@ mod tests {
     assert_eq!(
       parse_server_args("ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz")
         .1
-        .http_port(&Config::default()),
+        .http_port(&Settings::default())
+,
       None
     );
   }
@@ -1636,7 +1642,8 @@ mod tests {
         "ordpep server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(&Config::default()),
+      .http_port(&Settings::default())
+,
       None
     );
   }
@@ -1660,7 +1667,8 @@ mod tests {
         "ordpep server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(&Config::default()),
+      .http_port(&Settings::default())
+,
       Some(80)
     );
   }
@@ -1714,7 +1722,7 @@ mod tests {
   #[test]
   fn acme_cache_defaults_to_data_dir() {
     let arguments = Arguments::try_parse_from(["ord", "--data-dir", "foo", "server"]).unwrap();
-    let acme_cache = Server::acme_cache(None, &arguments.options)
+    let acme_cache = Server::acme_cache(None, &Settings::merge(arguments.options, BTreeMap::new()).unwrap())
       .unwrap()
       .display()
       .to_string();
@@ -1733,7 +1741,7 @@ mod tests {
     let arguments =
       Arguments::try_parse_from(["ord", "--data-dir", "foo", "server", "--acme-cache", "bar"])
         .unwrap();
-    let acme_cache = Server::acme_cache(Some(&"bar".into()), &arguments.options)
+    let acme_cache = Server::acme_cache(Some(&"bar".into()), &Settings::merge(arguments.options, BTreeMap::new()).unwrap())
       .unwrap()
       .display()
       .to_string();

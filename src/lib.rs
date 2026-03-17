@@ -14,7 +14,6 @@ use {
   self::{
     arguments::Arguments,
     blocktime::Blocktime,
-    config::Config,
     decimal::Decimal,
     deserialize_from_str::DeserializeFromStr,
     epoch::Epoch,
@@ -25,6 +24,7 @@ use {
     options::Options,
     outgoing::Outgoing,
     representation::Representation,
+    settings::Settings,
     subcommand::Subcommand,
     tally::Tally,
   },
@@ -94,7 +94,6 @@ pub mod api;
 mod arguments;
 mod blocktime;
 mod chain;
-mod config;
 mod decimal;
 mod deserialize_from_str;
 mod epoch;
@@ -112,6 +111,7 @@ mod rarity;
 mod representation;
 mod sat;
 mod sat_point;
+pub mod settings;
 pub mod subcommand;
 mod tally;
 mod templates;
@@ -123,21 +123,22 @@ static INTERRUPTS: AtomicU64 = AtomicU64::new(0);
 static LISTENERS: Mutex<Vec<axum_server::Handle<std::net::SocketAddr>>> = Mutex::new(Vec::new());
 
 fn integration_test() -> bool {
-  env::var_os("ORD_INTEGRATION_TEST")
-    .map(|value| value.len() > 0)
-    .unwrap_or(false)
+  env::var_os("ORD_INTEGRATION_TEST").is_some()
 }
 
 fn timestamp(seconds: u32) -> DateTime<Utc> {
   Utc.timestamp_opt(seconds.into(), 0).unwrap()
 }
 
-pub fn parse_ord_server_args(args: &str) -> (Options, subcommand::server::Server) {
+pub fn parse_ord_server_args(args: &str) -> (Settings, subcommand::server::Server) {
   match Arguments::try_parse_from(args.split_whitespace()) {
-    Ok(arguments) => match arguments.subcommand {
-      subcommand::Subcommand::Server(server) => (arguments.options, server),
-      subcommand => panic!("unexpected subcommand: {subcommand:?}"),
-    },
+    Ok(arguments) => {
+      let settings = Settings::load(arguments.options).unwrap();
+      match arguments.subcommand {
+        subcommand::Subcommand::Server(server) => (settings, server),
+        subcommand => panic!("unexpected subcommand: {subcommand:?}"),
+      }
+    }
     Err(err) => panic!("error parsing arguments: {err}"),
   }
 }

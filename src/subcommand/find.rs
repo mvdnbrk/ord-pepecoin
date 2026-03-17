@@ -12,8 +12,8 @@ pub struct Output {
 }
 
 impl Find {
-  pub(crate) fn run(self, options: Options) -> Result {
-    let index = Index::open(&options)?;
+  pub(crate) fn run(self, settings: Settings) -> Result {
+    let index = Index::open(&settings)?;
 
     index.update()?;
 

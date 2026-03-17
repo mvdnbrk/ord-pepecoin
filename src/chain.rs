@@ -12,6 +12,20 @@ pub(crate) enum Chain {
   Regtest,
 }
 
+impl FromStr for Chain {
+  type Err = Error;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+    match s {
+      "mainnet" | "main" => Ok(Self::Mainnet),
+      "testnet" | "test" => Ok(Self::Testnet),
+      "signet" => Ok(Self::Signet),
+      "regtest" => Ok(Self::Regtest),
+      _ => bail!("unknown chain: {s}"),
+    }
+  }
+}
+
 impl Chain {
   pub(crate) fn network(self) -> Network {
     match self {

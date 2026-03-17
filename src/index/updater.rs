@@ -139,7 +139,7 @@ impl Updater {
 
       uncommitted += 1;
 
-      if uncommitted == 5000 {
+      if uncommitted == index.settings.commit_interval() {
         self.commit(wtx, value_cache, index)?;
         value_cache = HashMap::new();
         uncommitted = 0;

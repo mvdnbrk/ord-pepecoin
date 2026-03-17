@@ -11,14 +11,14 @@ pub(crate) enum IndexSubcommand {
 }
 
 impl IndexSubcommand {
-  pub(crate) fn run(self, options: Options) -> Result {
+  pub(crate) fn run(self, settings: Settings) -> Result {
     match self {
       Self::Compact => {
-        let mut index = Index::open(&options)?;
+        let mut index = Index::open(&settings)?;
         index.compact()
       }
-      Self::Export(export) => export.run(options),
-      Self::Update => run(options),
+      Self::Export(export) => export.run(settings),
+      Self::Update => run(settings),
     }
   }
 }
@@ -32,8 +32,8 @@ pub(crate) struct Export {
 }
 
 impl Export {
-  pub(crate) fn run(self, options: Options) -> Result {
-    let index = Index::open(&options)?;
+  pub(crate) fn run(self, settings: Settings) -> Result {
+    let index = Index::open(&settings)?;
 
     index.update()?;
 
@@ -43,8 +43,8 @@ impl Export {
   }
 }
 
-pub(crate) fn run(options: Options) -> Result {
-  let index = Index::open(&options)?;
+pub(crate) fn run(settings: Settings) -> Result {
+  let index = Index::open(&settings)?;
 
   index.update()?;
 

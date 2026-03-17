@@ -10,7 +10,8 @@ const DESCRIPTORS: TableDefinition<&str, &str> = TableDefinition::new("DESCRIPTO
 
 fn read_descriptors(data_dir: &std::path::Path) -> BTreeMap<String, String> {
   let options = Options::parse_from(["ordpep", "--data-dir", data_dir.to_str().unwrap()]);
-  let db = ord::wallet::Wallet::open_database(&options, "ordpep").unwrap();
+  let settings = ord::settings::Settings::load(options).unwrap();
+  let db = ord::wallet::Wallet::open_database(&settings, "ordpep").unwrap();
   let rtx = db.begin_read().unwrap();
   let table = rtx.open_table(DESCRIPTORS).unwrap();
   let mut descs = BTreeMap::new();

@@ -27,7 +27,7 @@ impl TestServer {
 
     std::env::set_var("ORD_INTEGRATION_TEST", "1");
 
-    let (options, server) = parse_ord_server_args(&format!(
+    let (settings, server) = parse_ord_server_args(&format!(
       "ordpep --chain {} --rpc-url {} --cookie-file {} --pepecoin-data-dir {} --data-dir {} {} server --http-port 0 --address 127.0.0.1",
       rpc_server.network(),
       rpc_server.url(),
@@ -37,15 +37,16 @@ impl TestServer {
       args.join(" "),
     ));
 
-    let index = Arc::new(Index::open(&options).unwrap());
+    let index = Arc::new(Index::open(&settings).unwrap());
     let ord_server_handle = Handle::new();
     let (tx, rx) = std::sync::mpsc::channel();
 
     {
       let index = index.clone();
       let ord_server_handle = ord_server_handle.clone();
+      let settings = settings.clone();
       thread::spawn(move || {
-        server.run(options, index, ord_server_handle, Some(tx)).unwrap()
+        server.run(settings, index, ord_server_handle, Some(tx)).unwrap()
       });
     }
 
