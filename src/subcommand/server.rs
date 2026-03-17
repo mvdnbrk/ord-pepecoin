@@ -7,7 +7,8 @@ use {
   crate::api,
   crate::page_config::PageConfig,
   crate::templates::{
-    AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsHtml, OutputHtml,
+    AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
+    InscriptionsHtml, OutputHtml,
  PageContent,
     PageHtml, PreviewAudioHtml, PreviewImageHtml, PreviewPdfHtml, PreviewTextHtml,
     PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml, TransactionHtml,
@@ -201,6 +202,8 @@ impl Server {
         .route("/inscriptions", get(Self::inscriptions))
         .route("/inscriptions", post(Self::inscriptions_json).layer(body_limit))
         .route("/inscriptions/{from}", get(Self::inscriptions_from))
+        .route("/inscriptions/block/{height}", get(Self::inscriptions_in_block))
+        .route("/inscriptions/block/{height}/{page}", get(Self::inscriptions_in_block_paginated))
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
@@ -709,9 +712,9 @@ impl Server {
       }
     };
 
-    let inscriptions = index.get_inscriptions_on_output(OutPoint::null())?;
-
     if accept_json.0 {
+      let inscriptions = index.get_inscriptions_in_block(height)?;
+
       let info = index.block_header_info(block.header.block_hash())?
         .ok_or_not_found(|| format!("block {}", block.header.block_hash()))?;
 
@@ -732,8 +735,16 @@ impl Server {
         inscriptions,
       }).into_response())
     } else {
+      let (featured_inscriptions, inscription_count) =
+        index.get_highest_paying_inscriptions_in_block(height, 8)?;
       Ok(
-        BlockHtml::new(block, Height(height), Self::index_height(&index)?)
+        BlockHtml::new(
+          block,
+          Height(height),
+          Self::index_height(&index)?,
+          inscription_count,
+          featured_inscriptions,
+        )
           .page(page_config, index.has_sat_index()?)
           .into_response(),
       )
@@ -1241,6 +1252,66 @@ impl Server {
           page_index,
           more,
         }
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
+      )
+    }
+  }
+
+  async fn inscriptions_in_block(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
+    Path(block_height): Path<u64>,
+  ) -> ServerResult<Response> {
+    Self::inscriptions_in_block_paginated(
+      Extension(page_config),
+      Extension(index),
+      accept_json,
+      Path((block_height, 0)),
+    )
+    .await
+  }
+
+  async fn inscriptions_in_block_paginated(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
+    Path((block_height, page_index)): Path<(u64, u64)>,
+  ) -> ServerResult<Response> {
+    let page_size = 100;
+
+    let mut inscriptions = index
+      .get_inscriptions_in_block(block_height)?
+      .into_iter()
+      .skip((page_index as usize).saturating_mul(page_size))
+      .take(page_size.saturating_add(1))
+      .collect::<Vec<InscriptionId>>();
+
+    let more = inscriptions.len() > page_size;
+
+    if more {
+      inscriptions.pop();
+    }
+
+    if accept_json.0 {
+      Ok(
+        Json(api::Inscriptions {
+          ids: inscriptions,
+          page_index,
+          more,
+        })
+        .into_response(),
+      )
+    } else {
+      Ok(
+        InscriptionsBlockHtml::new(
+          block_height,
+          Self::index_height(&index)?.n(),
+          inscriptions,
+          more,
+          page_index,
+        )
         .page(page_config, index.has_sat_index()?)
         .into_response(),
       )

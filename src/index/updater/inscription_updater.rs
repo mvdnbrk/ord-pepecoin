@@ -21,7 +21,7 @@ pub(super) struct InscriptionUpdater<'a, 'tx> {
   value_receiver: &'a mut Receiver<u64>,
   id_to_entry: &'a mut Table<'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
   lost_sats: u64,
-  next_number: u64,
+  pub(super) next_number: u64,
   number_to_id: &'a mut Table<'tx, u64, &'static InscriptionIdValue>,
   outpoint_to_value: &'a mut Table<'tx, &'static OutPointValue, u64>,
   reward: u64,

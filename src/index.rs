@@ -44,6 +44,7 @@ macro_rules! define_multimap_table {
 }
 
 define_table! { HEIGHT_TO_BLOCK_HASH, u64, &BlockHashValue }
+define_table! { HEIGHT_TO_LAST_INSCRIPTION_NUMBER, u64, u64 }
 define_table! { INSCRIPTION_ID_TO_INSCRIPTION_ENTRY, &InscriptionIdValue, InscriptionEntryValue }
 define_table! { INSCRIPTION_ID_TO_SATPOINT, &InscriptionIdValue, &SatPointValue }
 define_table! { INSCRIPTION_NUMBER_TO_INSCRIPTION_ID, u64, &InscriptionIdValue }
@@ -60,7 +61,7 @@ define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
 define_multimap_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
 
-const SCHEMA_VERSION: u64 = 5;
+const SCHEMA_VERSION: u64 = 6;
 
 pub struct Index {
   auth: Auth,
@@ -227,6 +228,7 @@ impl Index {
         tx.set_quick_repair(true);
 
         tx.open_table(HEIGHT_TO_BLOCK_HASH)?;
+        tx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
         tx.open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?;
         tx.open_table(INSCRIPTION_ID_TO_SATPOINT)?;
         tx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
@@ -1083,6 +1085,67 @@ impl Index {
     )
   }
 
+
+  pub(crate) fn get_inscriptions_in_block(&self, block_height: u64) -> Result<Vec<InscriptionId>> {
+    let rtx = self.database.begin_read()?;
+
+    let height_to_last_inscription_number = rtx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
+    let inscription_number_to_inscription_id =
+      rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
+
+    let Some(newest_inscription_number) = height_to_last_inscription_number
+      .get(&block_height)?
+      .map(|ag| ag.value())
+    else {
+      return Ok(Vec::new());
+    };
+
+    let oldest_inscription_number = height_to_last_inscription_number
+      .get(block_height.saturating_sub(1))?
+      .map(|ag| ag.value())
+      .unwrap_or(0);
+
+    (oldest_inscription_number..newest_inscription_number)
+      .map(|num| match inscription_number_to_inscription_id.get(&num) {
+        Ok(Some(inscription_id)) => Ok(InscriptionId::load(*inscription_id.value())),
+        Ok(None) => Err(anyhow!(
+          "could not find inscription for inscription number {num}"
+        )),
+        Err(err) => Err(anyhow!(err)),
+      })
+      .collect::<Result<Vec<InscriptionId>>>()
+  }
+
+  pub(crate) fn get_highest_paying_inscriptions_in_block(
+    &self,
+    block_height: u64,
+    n: usize,
+  ) -> Result<(Vec<InscriptionId>, usize)> {
+    let inscription_ids = self.get_inscriptions_in_block(block_height)?;
+
+    let mut inscription_to_fee: Vec<(InscriptionId, u64)> = Vec::new();
+    for id in &inscription_ids {
+      inscription_to_fee.push((
+        *id,
+        self
+          .get_inscription_entry(*id)?
+          .ok_or_else(|| anyhow!("could not get entry for inscription {id}"))?
+          .fee,
+      ));
+    }
+
+    inscription_to_fee.sort_by_key(|(_, fee)| *fee);
+
+    Ok((
+      inscription_to_fee
+        .iter()
+        .map(|(id, _)| *id)
+        .rev()
+        .take(n)
+        .collect(),
+      inscription_ids.len(),
+    ))
+  }
 
   pub(crate) fn get_inscription_entry(
     &self,

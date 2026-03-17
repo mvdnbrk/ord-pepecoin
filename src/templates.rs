@@ -8,6 +8,7 @@ pub(crate) use {
   input::InputHtml,
   inscription::InscriptionHtml,
   inscriptions::InscriptionsHtml,
+  inscriptions_block::InscriptionsBlockHtml,
   output::OutputHtml,
   page_config::PageConfig,
   preview::{
@@ -28,6 +29,7 @@ mod iframe;
 mod input;
 mod inscription;
 mod inscriptions;
+mod inscriptions_block;
 mod output;
 mod preview;
 mod range;
