@@ -5,6 +5,18 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
+## [Unreleased]
+
+### Fixed
+- `/block/{height}` JSON endpoint returning same inscriptions for every block ([#26](https://github.com/mvdnbrk/ord-pepecoin/pull/26))
+
+### Added
+- Block page shows featured inscriptions, `/inscriptions/block/{height}` paginated endpoint ([#26](https://github.com/mvdnbrk/ord-pepecoin/pull/26))
+- `HEIGHT_TO_LAST_INSCRIPTION_NUMBER` lookup table for O(1) inscription range queries ([#26](https://github.com/mvdnbrk/ord-pepecoin/pull/26))
+
+### Changed
+- Align height and inscription number types from `u64` to `u32` to match upstream ([#28](https://github.com/mvdnbrk/ord-pepecoin/pull/28))
+
 ## [0.7.1](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.7.1) - 2026-03-16
 
 ### Fixed
