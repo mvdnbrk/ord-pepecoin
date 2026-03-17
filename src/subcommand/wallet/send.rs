@@ -114,8 +114,9 @@ impl Send {
           }
         }
 
+        let total_cardinal: Amount = cardinal_utxos.iter().map(|(_, a)| *a).sum();
         if selected_amount < amount {
-          bail!("wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.");
+          bail!("not enough cardinal UTXOs: need {} sat ({:.2} PEP) but only {} sat ({:.2} PEP) available", amount.to_sat(), amount.to_sat() as f64 / 100_000_000.0, total_cardinal.to_sat(), total_cardinal.to_sat() as f64 / 100_000_000.0);
         }
 
         // Estimate fee: ~148 bytes per P2PKH input, ~34 per output, ~10 overhead
@@ -139,7 +140,7 @@ impl Send {
           }
 
           if selected_amount < total_needed {
-            bail!("wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.");
+            bail!("not enough cardinal UTXOs: need {} sat ({:.2} PEP, amount + fee) but only {} sat ({:.2} PEP) available", total_needed.to_sat(), total_needed.to_sat() as f64 / 100_000_000.0, total_cardinal.to_sat(), total_cardinal.to_sat() as f64 / 100_000_000.0);
           }
         }
 

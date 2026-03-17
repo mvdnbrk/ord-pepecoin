@@ -159,7 +159,7 @@ fn inscribe_does_not_use_inscribed_sats_as_cardinal_utxos() {
   .data_dir(ord_server.directory())
   .write("degenerate.png", [1; 100])
   .expected_exit_code(1)
-  .expected_stderr("error: wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.\n")
+  .stderr_regex("error: not enough cardinal UTXOs: need .* sat \\(.* PEP\\) but only .* sat \\(.* PEP\\) available\n")
   .run();
 }
 

@@ -163,7 +163,7 @@ fn send_does_not_use_inscribed_sats_as_cardinal_utxos() {
   .rpc_server(&rpc_server)
   .ord_server(&ord_server)
   .expected_exit_code(1)
-  .expected_stderr("error: wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.\n")
+  .stderr_regex("error: not enough cardinal UTXOs: need .* sat \\(.* PEP.*\\) but only .* sat \\(.* PEP\\) available\n")
   .run();
 }
 
@@ -287,7 +287,7 @@ fn send_btc_insufficient_funds() {
   CommandBuilder::new("wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc")
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
-    .expected_stderr("error: wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.\n")
+    .stderr_regex("error: not enough cardinal UTXOs: need .* sat \\(.* PEP.*\\) but only .* sat \\(.* PEP\\) available\n")
     .expected_exit_code(1)
     .run();
 }

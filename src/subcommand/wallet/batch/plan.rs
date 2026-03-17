@@ -241,7 +241,13 @@ pub(crate) fn create_batch_inscription_transactions(
   }
 
   if input_value < total_reveal_value {
-    bail!("wallet does not contain enough cardinal UTXOs, please add additional funds to wallet.");
+    bail!(
+      "not enough cardinal UTXOs: need {} sat ({:.2} PEP) but only {} sat ({:.2} PEP) available",
+      total_reveal_value,
+      total_reveal_value as f64 / 100_000_000.0,
+      input_value,
+      input_value as f64 / 100_000_000.0,
+    );
   }
 
   let mut commit_tx = Transaction {

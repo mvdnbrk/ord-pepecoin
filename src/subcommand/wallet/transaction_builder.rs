@@ -48,7 +48,10 @@ pub enum Error {
     output_value: Amount,
     dust_value: Amount,
   },
-  NotEnoughCardinalUtxos,
+  NotEnoughCardinalUtxos {
+    needed: Amount,
+    available: Amount,
+  },
   NotInWallet(SatPoint),
   OutOfRange(SatPoint, u64),
   UtxoContainsAdditionalInscription {
@@ -74,10 +77,16 @@ impl fmt::Display for Error {
       } => write!(f, "output value is below dust value: {output_value} < {dust_value}"),
       Error::NotInWallet(outgoing_satpoint) => write!(f, "outgoing satpoint {outgoing_satpoint} not in wallet"),
       Error::OutOfRange(outgoing_satpoint, maximum) => write!(f, "outgoing satpoint {outgoing_satpoint} offset higher than maximum {maximum}"),
-      Error::NotEnoughCardinalUtxos => write!(
-        f,
-        "wallet does not contain enough cardinal UTXOs, please add additional funds to wallet."
-      ),
+      Error::NotEnoughCardinalUtxos { needed, available } => {
+        let n = needed.to_sat();
+        let a = available.to_sat();
+        write!(
+          f,
+          "not enough cardinal UTXOs: need {n} sat ({:.2} PEP) but only {a} sat ({:.2} PEP) available",
+          n as f64 / 100_000_000.0,
+          a as f64 / 100_000_000.0,
+        )
+      }
       Error::UtxoContainsAdditionalInscription {
         outgoing_satpoint,
         inscribed_satpoint,
@@ -652,20 +661,24 @@ impl TransactionBuilder {
       .map(|satpoint| satpoint.outpoint)
       .collect::<BTreeSet<OutPoint>>();
 
+    let mut available = Amount::ZERO;
     for utxo in &self.utxos {
       if inscribed_utxos.contains(utxo) {
         continue;
       }
 
       let value = self.amounts[utxo];
+      available += value;
 
-      if value >= minimum_value {
+      if found.is_none() && value >= minimum_value {
         found = Some((*utxo, value));
-        break;
       }
     }
 
-    let (utxo, value) = found.ok_or(Error::NotEnoughCardinalUtxos)?;
+    let (utxo, value) = found.ok_or(Error::NotEnoughCardinalUtxos {
+      needed: minimum_value,
+      available,
+    })?;
 
     self.utxos.remove(&utxo);
 
@@ -852,7 +865,7 @@ mod tests {
   fn insufficient_padding_to_add_postage_no_utxos() {
     let utxos = vec![(outpoint(1), Amount::from_sat(1_000_000))];
 
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_postage(
         satpoint(1, 999_950),
         BTreeMap::new(),
@@ -862,8 +875,8 @@ mod tests {
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(100_000),
       ),
-      Err(Error::NotEnoughCardinalUtxos),
-    )
+      Err(Error::NotEnoughCardinalUtxos { .. }),
+    ))
   }
 
   #[test]
@@ -873,7 +886,7 @@ mod tests {
       (outpoint(2), Amount::from_sat(1)),
     ];
 
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_postage(
         satpoint(1, 999_950),
         BTreeMap::new(),
@@ -883,8 +896,8 @@ mod tests {
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(100_000),
       ),
-      Err(Error::NotEnoughCardinalUtxos),
-    )
+      Err(Error::NotEnoughCardinalUtxos { .. }),
+    ))
   }
 
   #[test]
@@ -1302,7 +1315,7 @@ mod tests {
       (outpoint(2), Amount::from_sat(49 * COIN_VALUE)),
     ];
 
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_postage(
         satpoint(1, 0),
         BTreeMap::from([(satpoint(2, 10 * COIN_VALUE), inscription_id(1))]),
@@ -1312,8 +1325,8 @@ mod tests {
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(100_000),
       ),
-      Err(Error::NotEnoughCardinalUtxos)
-    )
+      Err(Error::NotEnoughCardinalUtxos { .. })
+    ))
   }
 
   #[test]
@@ -1443,7 +1456,7 @@ mod tests {
       (outpoint(2), Amount::from_sat(100)),
     ];
 
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_value(
         satpoint(1, 0),
         BTreeMap::new(),
@@ -1453,8 +1466,8 @@ mod tests {
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(1000)
       ),
-      Err(Error::NotEnoughCardinalUtxos),
-    )
+      Err(Error::NotEnoughCardinalUtxos { .. }),
+    ))
   }
 
   #[test]
@@ -1464,7 +1477,7 @@ mod tests {
       (outpoint(2), Amount::from_sat(500)),
     ];
 
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_value(
         satpoint(1, 0),
         BTreeMap::new(),
@@ -1474,8 +1487,8 @@ mod tests {
         FeeRate::try_from(4.0).unwrap(),
         Amount::from_sat(190_000)
       ),
-      Err(Error::NotEnoughCardinalUtxos),
-    )
+      Err(Error::NotEnoughCardinalUtxos { .. }),
+    ))
   }
 
   #[test]
@@ -1570,7 +1583,7 @@ mod tests {
 
   #[test]
   fn correct_error_is_returned_when_fee_cannot_be_paid() {
-    pretty_assert_eq!(
+    assert!(matches!(
       TransactionBuilder::build_transaction_with_value(
         satpoint(1, 0),
         BTreeMap::new(),
@@ -1582,8 +1595,8 @@ mod tests {
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(800_000)
       ),
-      Err(Error::NotEnoughCardinalUtxos)
-    );
+      Err(Error::NotEnoughCardinalUtxos { .. })
+    ));
   }
 
   #[test]
