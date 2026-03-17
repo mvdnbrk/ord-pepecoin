@@ -9,7 +9,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ### Fixed
 - `/block/{height}` JSON endpoint returning same inscriptions for every block ([#26](https://github.com/mvdnbrk/ord-pepecoin/pull/26))
-- Text inscription preview empty due to content type spacing mismatch ([`266d784`](https://github.com/mvdnbrk/ord-pepecoin/commit/266d784e))
+- Inscription preview empty due to content type spacing mismatch ([`266d784`](https://github.com/mvdnbrk/ord-pepecoin/commit/266d784e))
+- Inscription preview empty for content types with extra parameters ([`5cef247`](https://github.com/mvdnbrk/ord-pepecoin/commit/5cef247a))
 - Savepoint check in indexing loop causing unnecessary RPC calls and slower sync ([`f810018`](https://github.com/mvdnbrk/ord-pepecoin/commit/f810018b))
 
 ### Added
