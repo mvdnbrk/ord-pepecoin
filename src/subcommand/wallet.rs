@@ -71,6 +71,9 @@ impl WalletCommand {
       | WalletSubcommand::Send(_)
       | WalletSubcommand::Inscribe(_)
       | WalletSubcommand::Transactions(_) => {
+        if let WalletSubcommand::Inscribe(ref inscribe) = self.subcommand {
+          inscribe.validate_files()?;
+        }
         let wallet = crate::wallet::Wallet::load(&settings, &wallet_name, server_url, no_sync)?;
         match self.subcommand {
           WalletSubcommand::Addresses => addresses::run(wallet),

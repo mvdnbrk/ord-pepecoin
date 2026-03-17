@@ -20,6 +20,18 @@ impl BatchFile {
       bail!("batch file contains no inscriptions");
     }
 
+    let parent = path.parent().unwrap();
+    for entry in &batch_file.inscriptions {
+      let file_path = if entry.file.is_absolute() {
+        entry.file.clone()
+      } else {
+        parent.join(&entry.file)
+      };
+      if !file_path.exists() {
+        bail!("file not found: {}", file_path.display());
+      }
+    }
+
     Ok(batch_file)
   }
 

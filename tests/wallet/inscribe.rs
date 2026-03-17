@@ -556,7 +556,7 @@ fn batch_inscribe_file_not_found() {
     .ord_server(&ord_server)
     .data_dir(ord_server.directory())
     .expected_exit_code(1)
-    .stderr_regex("error: io error reading nonexistent.txt\n.*")
+    .stderr_regex("error: file not found: .*nonexistent.txt\n")
     .run();
 }
 

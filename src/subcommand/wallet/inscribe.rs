@@ -54,7 +54,7 @@ pub(crate) struct Inscribe {
     help = "Do not check that transactions are equal to or below the 100,000 bytes limit. Transactions over this limit are currently nonstandard and will not be relayed by bitcoind in its default configuration. Do not use this flag unless you understand the implications."
   )]
   pub(crate) no_limit: bool,
-  #[clap(long, help = "Don't sign or broadcast transactions.")]
+  #[clap(long, alias = "dryrun", help = "Don't sign or broadcast transactions.")]
   pub(crate) dry_run: bool,
   #[clap(long, help = "Do not back up recovery key.")]
   pub(crate) no_backup: bool,
@@ -71,6 +71,18 @@ pub(crate) struct Inscribe {
 }
 
 impl Inscribe {
+  pub(crate) fn validate_files(&self) -> Result {
+    if let Some(ref file) = self.file {
+      if !file.exists() {
+        bail!("file not found: {}", file.display());
+      }
+    }
+    if let Some(ref batch) = self.batch {
+      BatchFile::load(batch)?;
+    }
+    Ok(())
+  }
+
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     let client = wallet.bitcoin_client();
     let (pubkey, privkey) = self.get_key_pair(&wallet)?;
