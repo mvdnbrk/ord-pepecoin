@@ -6,10 +6,10 @@ pub struct Inscription {
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
   pub fee: u64,
-  pub height: u64,
+  pub height: u32,
   pub id: InscriptionId,
   pub next: Option<InscriptionId>,
-  pub number: u64,
+  pub number: u32,
   pub previous: Option<InscriptionId>,
   pub sat: Option<Sat>,
   pub satpoint: SatPoint,
@@ -21,7 +21,7 @@ pub struct Inscription {
 pub struct Inscriptions {
   pub ids: Vec<InscriptionId>,
   pub more: bool,
-  pub page_index: u64,
+  pub page_index: u32,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -48,7 +48,7 @@ pub struct Address {
 pub struct Status {
   pub address_index: bool,
   pub chain: String,
-  pub height: Option<u64>,
+  pub height: Option<u32>,
   pub index_size: u64,
   pub inscriptions: u64,
   pub sat_index: bool,
@@ -60,7 +60,7 @@ pub struct Block {
   pub hash: BlockHash,
   pub target: String,
   pub best_block: bool,
-  pub height: u64,
+  pub height: u32,
   pub chainweight: Option<usize>,
   pub mediantime: i64,
   pub nonce: u32,

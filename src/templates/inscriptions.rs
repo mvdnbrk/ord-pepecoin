@@ -3,7 +3,7 @@ use super::*;
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionsHtml {
   pub(crate) inscriptions: Vec<InscriptionId>,
-  pub(crate) page_index: u64,
+  pub(crate) page_index: u32,
   pub(crate) more: bool,
 }
 

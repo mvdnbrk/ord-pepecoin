@@ -3,7 +3,7 @@ use super::*;
 #[derive(Copy, Clone, Debug)]
 pub(crate) enum Inscription {
   Id(InscriptionId),
-  Number(u64),
+  Number(u32),
 }
 
 impl FromStr for Inscription {

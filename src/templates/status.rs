@@ -4,7 +4,7 @@ use super::*;
 pub(crate) struct StatusHtml {
   pub(crate) address_index: bool,
   pub(crate) chain: Chain,
-  pub(crate) height: Option<u64>,
+  pub(crate) height: Option<u32>,
   pub(crate) index_size: u64,
   pub(crate) inscriptions: u64,
   pub(crate) sat_index: bool,

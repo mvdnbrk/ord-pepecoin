@@ -65,7 +65,7 @@ where
 }
 
 enum BlockQuery {
-  Height(u64),
+  Height(u32),
   Hash(BlockHash),
 }
 
@@ -708,7 +708,7 @@ impl Server {
           .get_block_by_hash(hash)?
           .ok_or_not_found(|| format!("block {hash}"))?;
 
-        (block, info.height as u64)
+        (block, info.height as u32)
       }
     };
 
@@ -965,7 +965,7 @@ impl Server {
   async fn input(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    Path(path): Path<(u64, usize, usize)>,
+    Path(path): Path<(u32, usize, usize)>,
   ) -> Result<PageHtml<InputHtml>, ServerError> {
     let not_found = || format!("input /{}/{}/{}", path.0, path.1, path.2);
 
@@ -1192,7 +1192,7 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
-    Path(from): Path<u64>,
+    Path(from): Path<u32>,
   ) -> ServerResult<Response> {
     Self::inscriptions_inner(page_config, index, accept_json, Some(from)).await
   }
@@ -1201,12 +1201,12 @@ impl Server {
     page_config: Arc<PageConfig>,
     index: Arc<Index>,
     accept_json: AcceptJson,
-    from: Option<u64>,
+    from: Option<u32>,
   ) -> ServerResult<Response> {
     let page_index = from.unwrap_or(0);
     let count = index.inscription_count()?;
 
-    if page_index * 100 >= count {
+    if u64::from(page_index) * 100 >= count {
       if accept_json.0 {
         return Ok(
           Json(api::Inscriptions {
@@ -1229,7 +1229,7 @@ impl Server {
       }
     }
 
-    let from = (count - 1) - page_index * 100;
+    let from = u32::try_from((count - 1) - u64::from(page_index) * 100).unwrap();
 
     let (inscriptions, prev, _next) =
       index.get_latest_inscriptions_with_prev_and_next(100, Some(from))?;
@@ -1262,7 +1262,7 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
-    Path(block_height): Path<u64>,
+    Path(block_height): Path<u32>,
   ) -> ServerResult<Response> {
     Self::inscriptions_in_block_paginated(
       Extension(page_config),
@@ -1277,7 +1277,7 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     accept_json: AcceptJson,
-    Path((block_height, page_index)): Path<(u64, u64)>,
+    Path((block_height, page_index)): Path<(u32, u32)>,
   ) -> ServerResult<Response> {
     let page_size = 100;
 

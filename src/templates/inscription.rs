@@ -4,11 +4,11 @@ use super::*;
 pub(crate) struct InscriptionHtml {
   pub(crate) chain: Chain,
   pub(crate) fee: u64,
-  pub(crate) height: u64,
+  pub(crate) height: u32,
   pub(crate) inscription: Inscription,
   pub(crate) inscription_id: InscriptionId,
   pub(crate) next: Option<InscriptionId>,
-  pub(crate) number: u64,
+  pub(crate) number: u32,
   pub(crate) output: TxOut,
   pub(crate) previous: Option<InscriptionId>,
   pub(crate) sat: Option<Sat>,

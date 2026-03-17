@@ -31,7 +31,7 @@ impl From<Block> for BlockData {
 
 pub(crate) struct Updater {
   range_cache: HashMap<OutPointValue, Vec<u8>>,
-  height: u64,
+  height: u32,
   index_sats: bool,
   sat_ranges_since_flush: u64,
   outputs_cached: u64,
@@ -56,11 +56,11 @@ impl Updater {
 
     let rpc_height = index.client.get_block_count()? + 1;
 
-    if rpc_height > height {
+    if rpc_height > u64::from(height) {
       wtx
         .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
         .insert(
-          &height,
+          &u64::from(height),
           &SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .map(|duration| duration.as_millis())
@@ -91,13 +91,13 @@ impl Updater {
 
     let mut progress_bar = if cfg!(test)
       || log_enabled!(log::Level::Info)
-      || starting_height <= self.height
+      || starting_height <= u64::from(self.height)
       || integration_test()
     {
       None
     } else {
       let progress_bar = ProgressBar::new(starting_height);
-      progress_bar.set_position(self.height);
+      progress_bar.set_position(u64::from(self.height));
       progress_bar.set_style(
         ProgressStyle::with_template("[indexing blocks] {wide_bar} {pos}/{len}").unwrap(),
       );
@@ -164,7 +164,7 @@ impl Updater {
         wtx
           .open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?
           .insert(
-            &self.height,
+            &u64::from(self.height),
             &SystemTime::now()
               .duration_since(SystemTime::UNIX_EPOCH)
               .map(|duration| duration.as_millis())
@@ -190,7 +190,7 @@ impl Updater {
 
   fn fetch_blocks_from(
     index: &Index,
-    mut height: u64,
+    mut height: u32,
     index_sats: bool,
   ) -> Result<mpsc::Receiver<BlockData>> {
     let (tx, rx) = mpsc::sync_channel(32);
@@ -230,14 +230,14 @@ impl Updater {
 
   fn get_block_with_retries(
     client: &Client,
-    height: u64,
+    height: u32,
     index_sats: bool,
-    first_inscription_height: u64,
+    first_inscription_height: u32,
   ) -> Result<Option<Block>> {
     let mut errors = 0;
     loop {
       match client
-        .get_block_hash(height)
+        .get_block_hash(u64::from(height))
         .into_option()
         .and_then(|option| {
           option

@@ -15,7 +15,7 @@ impl Rtx {
     )
   }
 
-  pub(crate) fn block_count(&self) -> Result<u64> {
+  pub(crate) fn block_count(&self) -> Result<u32> {
     Ok(
       self
         .0
