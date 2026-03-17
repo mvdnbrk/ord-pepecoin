@@ -15,17 +15,36 @@ The indexer and explorer support all inscription content types. While PRC-20 ins
 
 ### Pre-built binary
 
-Download the latest release from [GitHub Releases](https://github.com/mvdnbrk/ord-pepecoin/releases/latest).
+Download the latest release for your platform:
+
+```bash
+# Linux (x86_64)
+curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-x86_64-unknown-linux-gnu.tar.gz
+tar xzf ordpep-x86_64-unknown-linux-gnu.tar.gz ordpep
+sudo mv ordpep /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-aarch64-apple-darwin.tar.gz
+tar xzf ordpep-aarch64-apple-darwin.tar.gz ordpep
+sudo mv ordpep /usr/local/bin/
+
+# macOS (Intel)
+curl -LO https://github.com/mvdnbrk/ord-pepecoin/releases/latest/download/ordpep-x86_64-apple-darwin.tar.gz
+tar xzf ordpep-x86_64-apple-darwin.tar.gz ordpep
+sudo mv ordpep /usr/local/bin/
+```
+
+Or browse all releases at [GitHub Releases](https://github.com/mvdnbrk/ord-pepecoin/releases/latest).
 
 ### From source
-
-Requires Rust 1.67+:
 
 ```bash
 cargo install --git https://github.com/mvdnbrk/ord-pepecoin.git
 ```
 
-Or build manually:
+### Manual build
+
+Requires Rust 1.67+:
 
 ```bash
 git clone https://github.com/mvdnbrk/ord-pepecoin.git
