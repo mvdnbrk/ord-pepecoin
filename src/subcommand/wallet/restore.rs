@@ -16,6 +16,8 @@ impl Restore {
   pub(crate) fn run(self, settings: Settings, wallet_name: &str) -> Result {
     crate::wallet::Wallet::initialize(&settings, wallet_name, self.mnemonic.to_seed(self.passphrase))?;
 
+    crate::wallet::Wallet::create_core_wallet(&settings, wallet_name, true)?;
+
     Ok(())
   }
 }

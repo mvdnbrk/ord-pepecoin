@@ -104,6 +104,24 @@ impl Wallet {
     }
 
     let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
+
+    match bitcoin_client.call::<serde_json::Value>("loadwallet", &[serde_json::to_value(wallet_name)?]) {
+      Ok(_) => {}
+      Err(e) => {
+        let error_str = e.to_string();
+        if error_str.contains("-35") {
+          // wallet already loaded
+        } else if error_str.contains("-18") {
+          // wallet not found — auto-create for existing ordpep wallets
+          log::info!("Core wallet `{wallet_name}` not found, creating...");
+          Self::create_core_wallet(settings, wallet_name, true)?;
+          let _ = bitcoin_client.call::<serde_json::Value>("loadwallet", &[serde_json::to_value(wallet_name)?]);
+        } else {
+          log::warn!("failed to load wallet `{wallet_name}`: {e}");
+        }
+      }
+    }
+
     let database = Self::open_database(settings, wallet_name)?;
 
     let ord_client = OrdClient::builder()
@@ -136,21 +154,6 @@ impl Wallet {
       }
     }
 
-    let addresses = Self::get_addresses(&database, settings.chain())?;
-
-    // Import wallet addresses as watch-only into Core (no rescan) so that
-    // listtransactions and other RPC calls can track our addresses.
-    for address in &addresses {
-      let _: Result<(), _> = bitcoin_client.call(
-        "importaddress",
-        &[
-          serde_json::to_value(address.to_string())?,
-          serde_json::to_value("")?,       // label
-          serde_json::to_value(false)?,    // rescan
-        ],
-      );
-    }
-
     #[derive(Deserialize)]
     struct UnspentEntry {
       txid: Txid,
@@ -160,8 +163,6 @@ impl Wallet {
       amount: f64,
     }
 
-    let wallet_scripts: HashSet<Script> = addresses.iter().map(|a| a.script_pubkey()).collect();
-
     let mut utxos = BTreeMap::new();
     let unspent: Vec<UnspentEntry> = bitcoin_client
       .call("listunspent", &[])
@@ -170,9 +171,6 @@ impl Wallet {
     for utxo in unspent {
       let script_pubkey = Script::from_str(&utxo.script_pub_key)
         .context("failed to parse scriptPubKey")?;
-      if !wallet_scripts.contains(&script_pubkey) {
-        continue;
-      }
       let outpoint = OutPoint::new(utxo.txid, utxo.vout);
       let amount = Amount::from_btc(utxo.amount)
         .map_err(|e| anyhow!("invalid amount: {e}"))?;
@@ -181,25 +179,24 @@ impl Wallet {
         script_pubkey,
       });
     }
-#[derive(Deserialize)]
-struct JsonOutPoint {
-  txid: Txid,
-  vout: u32,
-}
 
-let locked_outpoints = bitcoin_client.call::<Vec<JsonOutPoint>>("listlockunspent", &[])?;
-let mut locked_utxos = BTreeMap::new();
-
-for outpoint in locked_outpoints {
-  let outpoint = OutPoint::new(outpoint.txid, outpoint.vout);
-  let tx = bitcoin_client.get_raw_transaction(&outpoint.txid)?;
-  if let Some(txout) = tx.output.get(outpoint.vout as usize) {
-    if addresses.contains(&Address::from_script(&txout.script_pubkey, settings.chain().network()).unwrap()) {
-      utxos.insert(outpoint, txout.clone());
-      locked_utxos.insert(outpoint, txout.clone());
+    #[derive(Deserialize)]
+    struct JsonOutPoint {
+      txid: Txid,
+      vout: u32,
     }
-  }
-}
+
+    let locked_outpoints = bitcoin_client.call::<Vec<JsonOutPoint>>("listlockunspent", &[])?;
+    let mut locked_utxos = BTreeMap::new();
+
+    for outpoint in locked_outpoints {
+      let outpoint = OutPoint::new(outpoint.txid, outpoint.vout);
+      let tx = bitcoin_client.get_raw_transaction(&outpoint.txid)?;
+      if let Some(txout) = tx.output.get(outpoint.vout as usize) {
+        utxos.insert(outpoint, txout.clone());
+        locked_utxos.insert(outpoint, txout.clone());
+      }
+    }
 
     // Fetch output info
     let outpoints: Vec<OutPoint> = utxos.keys().cloned().collect();
@@ -254,7 +251,7 @@ for outpoint in locked_outpoints {
     ExtendedPubKey::from_str(xpub_str).context("invalid xpub in descriptor")
   }
 
-  fn get_addresses(database: &Database, chain: Chain) -> Result<Vec<Address>> {
+  pub(crate) fn addresses_from_database(database: &Database, chain: Chain) -> Result<Vec<Address>> {
     let rtx = database.begin_read()?;
     let descriptors = rtx.open_table(DESCRIPTORS)?;
     let address_index = rtx.open_table(ADDRESS_INDEX)?;
@@ -278,6 +275,51 @@ for outpoint in locked_outpoints {
     }
     
     Ok(addresses)
+  }
+
+  pub(crate) fn create_core_wallet(settings: &Settings, wallet_name: &str, rescan: bool) -> Result {
+    let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
+
+    // Try to create a named wallet. Pepecoin Core 1.1.0 doesn't support
+    // the /wallet/<name> HTTP endpoint for multi-wallet RPC routing, so we
+    // always fall back to using the default RPC client for importaddress.
+    match bitcoin_client.call::<serde_json::Value>(
+      "createwallet",
+      &[
+        serde_json::to_value(wallet_name)?,
+        serde_json::to_value(true)?, // disable_private_keys
+      ],
+    ) {
+      Ok(_) => log::info!("Created Pepecoin Core wallet `{wallet_name}`."),
+      Err(e) => {
+        if e.to_string().contains("-4") {
+          log::warn!("Pepecoin Core wallet `{wallet_name}` already exists.");
+          return Ok(());
+        }
+        log::warn!("Pepecoin Core does not support `createwallet`: {e}. Falling back to default wallet.");
+      }
+    }
+
+    Self::import_addresses(&bitcoin_client, settings, wallet_name, rescan)
+  }
+
+  fn import_addresses(client: &Client, settings: &Settings, wallet_name: &str, rescan: bool) -> Result {
+    let database = Self::open_database(settings, wallet_name)?;
+    let addresses = Self::addresses_from_database(&database, settings.chain())?;
+
+    for (i, address) in addresses.iter().enumerate() {
+      let is_last = i == addresses.len() - 1;
+      client.call::<serde_json::Value>(
+        "importaddress",
+        &[
+          serde_json::to_value(address.to_string())?,
+          serde_json::to_value("")?,
+          serde_json::to_value(rescan && is_last)?,
+        ],
+      )?;
+    }
+
+    Ok(())
   }
 
   pub(crate) fn utxos(&self) -> &BTreeMap<OutPoint, TxOut> {
@@ -335,6 +377,15 @@ for outpoint in locked_outpoints {
     tx.open_table(ADDRESS_INDEX)?.insert(key, index + 1)?;
     tx.commit()?;
     
+    let _: Result<serde_json::Value, _> = self.bitcoin_client.call(
+      "importaddress",
+      &[
+        serde_json::to_value(address.to_string())?,
+        serde_json::to_value("")?,    // label
+        serde_json::to_value(false)?, // rescan
+      ],
+    );
+
     Ok(address)
   }
 

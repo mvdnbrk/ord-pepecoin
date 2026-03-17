@@ -28,6 +28,8 @@ impl Create {
 
     crate::wallet::Wallet::initialize(&settings, wallet_name, mnemonic.to_seed(self.passphrase.clone()))?;
 
+    crate::wallet::Wallet::create_core_wallet(&settings, wallet_name, false)?;
+
     print_json(Output {
       mnemonic,
       passphrase: Some(self.passphrase),

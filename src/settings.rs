@@ -449,6 +449,19 @@ impl Settings {
     Ok(client)
   }
 
+  // Pepecoin Core 1.1.0 doesn't support /wallet/<name> HTTP endpoint.
+  // Keep for future use when multi-wallet HTTP routing is available.
+  #[allow(dead_code)]
+  pub(crate) fn pepecoin_rpc_client_for_wallet(&self, wallet_name: &str) -> Result<Client> {
+    let rpc_url = format!("{}/wallet/{}", self.rpc_url(), wallet_name);
+    let auth = self.auth()?;
+
+    log::info!("Connecting to Pepecoin Core RPC server for wallet `{wallet_name}` at {rpc_url}");
+
+    Client::new(&rpc_url, auth)
+      .with_context(|| format!("failed to connect to Pepecoin Core RPC at {rpc_url}"))
+  }
+
   pub(crate) fn pepecoin_rpc_client_for_wallet_command(&self) -> Result<Client> {
     let client = self.pepecoin_rpc_client()?;
 
