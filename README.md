@@ -23,7 +23,7 @@ This auto-detects your platform and installs the latest release to `/usr/local/b
 
 ### Build from source
 
-Requires Rust 1.67+:
+Requires Rust 1.89+:
 
 ```bash
 git clone https://github.com/mvdnbrk/ord-pepecoin.git
