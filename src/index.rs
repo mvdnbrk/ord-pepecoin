@@ -1343,6 +1343,17 @@ mod tests {
     index: Index,
   }
 
+  fn update_index_with_retry(index: &Index) {
+    let mut attempt = 0;
+    while let Err(err) = index.update() {
+      attempt += 1;
+      if attempt > 3 {
+        panic!("Failed to update index after {attempt} attempts: {err}");
+      }
+      std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+  }
+
   impl Context {
     fn builder() -> ContextBuilder {
       ContextBuilder {
@@ -1353,13 +1364,13 @@ mod tests {
 
     fn mine_blocks(&self, n: u64) -> Vec<Block> {
       let blocks = self.rpc_server.mine_blocks(n);
-      self.index.update().unwrap();
+      update_index_with_retry(&self.index);
       blocks
     }
 
     fn mine_blocks_with_subsidy(&self, n: u64, subsidy: u64) -> Vec<Block> {
       let blocks = self.rpc_server.mine_blocks_with_subsidy(n, subsidy);
-      self.index.update().unwrap();
+      update_index_with_retry(&self.index);
       blocks
     }
 
