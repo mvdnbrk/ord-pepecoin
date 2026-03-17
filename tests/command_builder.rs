@@ -38,6 +38,7 @@ pub(crate) struct CommandBuilder {
   expected_stdout: Expected,
   rpc_server_url: Option<String>,
   server_url: Option<String>,
+  wallet_name: Option<String>,
   tempdir: TempDir,
   data_dir: Option<PathBuf>,
 }
@@ -51,13 +52,10 @@ impl CommandBuilder {
       expected_stdout: Expected::String(String::new()),
       rpc_server_url: None,
       server_url: None,
+      wallet_name: None,
       tempdir: TempDir::new().unwrap(),
       data_dir: None,
     }
-  }
-
-  pub(crate) fn with_tempdir(self, tempdir: TempDir) -> Self {
-    Self { tempdir, ..self }
   }
 
   pub(crate) fn data_dir(self, data_dir: PathBuf) -> Self {
@@ -83,6 +81,13 @@ impl CommandBuilder {
     Self {
       server_url: Some(ord_server.url().to_string()),
       data_dir: Some(ord_server.directory()),
+      ..self
+    }
+  }
+
+  pub(crate) fn wallet(self, wallet_name: impl Into<String>) -> Self {
+    Self {
+      wallet_name: Some(wallet_name.into()),
       ..self
     }
   }
@@ -140,12 +145,19 @@ impl CommandBuilder {
       .arg("--data-dir")
       .arg(data_dir);
 
-    // Inject --server-url after "wallet" in args since it's a wallet subcommand flag
-    let mut args = self.args.clone();
-    if let Some(server_url) = &self.server_url {
-      if let Some(pos) = args.iter().position(|a| a == "wallet") {
-        args.insert(pos + 1, server_url.clone());
-        args.insert(pos + 1, "--server-url".to_string());
+    let mut args = Vec::new();
+
+    for arg in &self.args {
+      args.push(arg.clone());
+      if arg == "wallet" {
+        if let Some(server_url) = &self.server_url {
+          args.push("--server-url".to_string());
+          args.push(server_url.clone());
+        }
+        if let Some(wallet_name) = &self.wallet_name {
+          args.push("--name".to_string());
+          args.push(wallet_name.clone());
+        }
       }
     }
     command.args(&args);

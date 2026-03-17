@@ -89,10 +89,6 @@ struct Create {
   mnemonic: Mnemonic,
 }
 
-fn create_wallet(rpc_server: &test_bitcoincore_rpc::Handle) {
-  create_wallet_with_options(rpc_server, None, None)
-}
-
 fn create_wallet_with_data_dir(rpc_server: &test_bitcoincore_rpc::Handle, data_dir: Option<PathBuf>) {
   create_wallet_with_options(rpc_server, data_dir, None)
 }
@@ -102,8 +98,12 @@ fn create_wallet_with_options(
   data_dir: Option<PathBuf>,
   wallet_name: Option<&str>,
 ) {
-  let wallet_flag = wallet_name.map(|n| format!("--name {n} ")).unwrap_or_default();
-  let mut builder = CommandBuilder::new(format!("--chain {} wallet {wallet_flag}create", rpc_server.network()));
+  let mut builder = CommandBuilder::new(format!("--chain {} wallet create", rpc_server.network()));
+
+  if let Some(wallet_name) = wallet_name {
+    builder = builder.wallet(wallet_name);
+  }
+
   if let Some(ref data_dir) = data_dir {
     builder = builder.data_dir(data_dir.clone());
   }

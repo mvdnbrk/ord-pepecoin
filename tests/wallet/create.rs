@@ -27,7 +27,8 @@ fn create_with_different_name() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let tempdir = TempDir::new().unwrap();
 
-  CommandBuilder::new("wallet --name inscription-wallet create")
+  CommandBuilder::new("wallet create")
+    .wallet("inscription-wallet")
     .rpc_server(&rpc_server)
     .data_dir(tempdir.path().to_owned())
     .output::<Create>();
