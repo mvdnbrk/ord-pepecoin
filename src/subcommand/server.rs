@@ -709,9 +709,9 @@ impl Server {
       }
     };
 
-    let inscriptions = index.get_inscriptions_on_output(OutPoint::null())?;
-
     if accept_json.0 {
+      let inscriptions = index.get_inscriptions_in_block(height)?;
+
       let info = index.block_header_info(block.header.block_hash())?
         .ok_or_not_found(|| format!("block {}", block.header.block_hash()))?;
 

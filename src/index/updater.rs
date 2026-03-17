@@ -396,6 +396,7 @@ impl Updater {
     }
 
     let mut height_to_block_hash = wtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
+    let mut height_to_last_inscription_number = wtx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
 
     let start = Instant::now();
     let mut sat_ranges_written = 0;
@@ -547,6 +548,9 @@ impl Updater {
     }
 
     statistic_to_count.insert(&Statistic::LostSats.key(), &lost_sats)?;
+
+    height_to_last_inscription_number
+      .insert(&self.height, &inscription_updater.next_number)?;
 
     height_to_block_hash.insert(&self.height, &block.header.block_hash().store())?;
 
