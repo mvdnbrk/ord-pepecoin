@@ -16,10 +16,10 @@ The indexer and explorer support all inscription content types. While PRC-20 ins
 ### Pre-built binary
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/main/install.sh | bash -s -- --to /usr/local/bin
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/mvdnbrk/ord-pepecoin/main/install.sh | sh
 ```
 
-This auto-detects your platform (Linux x64, macOS Intel/ARM) and installs the latest release. See [all releases](https://github.com/mvdnbrk/ord-pepecoin/releases).
+This auto-detects your platform and installs the latest release to `/usr/local/bin`. See [all releases](https://github.com/mvdnbrk/ord-pepecoin/releases).
 
 ### From source
 
