@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang=en>
+  <head>
+    <meta charset=utf-8>
+    <meta name=format-detection content='telephone=no'>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
+    <style>
+      html {
+        background-color: #131516;
+        height: 100%;
+      }
+
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      pre {
+        height: 100%;
+        margin: 0;
+      }
+
+      code {
+        height: 100%;
+        box-sizing: border-box;
+        font-family: monospace;
+        font-size: 14px;
+        overflow: auto !important;
+      }
+    </style>
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+  </head>
+  <body>
+    <pre><code class="language-{{self.language}}"></code></pre>
+    <script>
+      fetch('/content/{{self.inscription_id}}')
+        .then(response => response.text())
+        .then(text => {
+          const codeElement = document.querySelector('code');
+          codeElement.textContent = text;
+          hljs.highlightElement(codeElement);
+        });
+    </script>
+  </body>
+</html>

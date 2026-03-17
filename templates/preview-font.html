@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang=en>
+  <head>
+    <meta charset=utf-8>
+    <meta name=format-detection content='telephone=no'>
+    <style>
+      @font-face {
+        font-family: 'InscriptionFont';
+        src: url(/content/{{self.inscription_id}});
+      }
+
+      html {
+        background-color: #131516;
+        color: #fff;
+        height: 100%;
+      }
+
+      body {
+        font-family: 'InscriptionFont';
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        text-align: center;
+      }
+
+      .preview {
+        font-size: 5vw;
+        word-wrap: break-word;
+        padding: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview">
+      ABCDEFGHIJKLMN<br>
+      OPQRSTUVWXYZ<br>
+      abcdefghijklmn<br>
+      opqrstuvwxyz<br>
+      0123456789
+    </div>
+  </body>
+</html>

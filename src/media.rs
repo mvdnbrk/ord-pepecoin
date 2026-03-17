@@ -7,35 +7,102 @@ use {
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum Media {
   Audio,
+  Code(Language),
+  Font,
   Iframe,
-  Image,
+  Image(ImageRendering),
+  Markdown,
+  Model,
   Pdf,
   Text,
   Unknown,
   Video,
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) enum Language {
+  Css,
+  JavaScript,
+  Json,
+  Python,
+  Yaml,
+}
+
+impl Display for Language {
+  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        Self::Css => "css",
+        Self::JavaScript => "javascript",
+        Self::Json => "json",
+        Self::Python => "python",
+        Self::Yaml => "yaml",
+      }
+    )
+  }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) enum ImageRendering {
+  Auto,
+  Pixelated,
+}
+
+impl Display for ImageRendering {
+  fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    write!(
+      f,
+      "{}",
+      match self {
+        Self::Auto => "auto",
+        Self::Pixelated => "pixelated",
+      }
+    )
+  }
+}
+
 impl Media {
   const TABLE: &'static [(&'static str, Media, &'static [&'static str])] = &[
-    ("application/json", Media::Text, &["json"]),
+    ("application/cbor", Media::Unknown, &["cbor"]),
+    ("application/json", Media::Code(Language::Json), &["json"]),
+    ("application/octet-stream", Media::Unknown, &["bin"]),
     ("application/pdf", Media::Pdf, &["pdf"]),
     ("application/pgp-signature", Media::Text, &["asc"]),
-    ("application/yaml", Media::Text, &["yaml", "yml"]),
+    ("application/protobuf", Media::Unknown, &["binpb"]),
+    ("application/x-bittorrent", Media::Unknown, &["torrent"]),
+    ("application/x-javascript", Media::Code(Language::JavaScript), &[]),
+    ("application/yaml", Media::Code(Language::Yaml), &["yaml", "yml"]),
     ("audio/flac", Media::Audio, &["flac"]),
     ("audio/mpeg", Media::Audio, &["mp3"]),
+    ("audio/ogg", Media::Audio, &[]),
+    ("audio/ogg;codecs=opus", Media::Audio, &["opus"]),
     ("audio/wav", Media::Audio, &["wav"]),
-    ("image/apng", Media::Image, &["apng"]),
-    ("image/avif", Media::Image, &[]),
-    ("image/gif", Media::Image, &["gif"]),
-    ("image/jpeg", Media::Image, &["jpg", "jpeg"]),
-    ("image/png", Media::Image, &["png"]),
+    ("font/otf", Media::Font, &["otf"]),
+    ("font/ttf", Media::Font, &["ttf"]),
+    ("font/woff", Media::Font, &["woff"]),
+    ("font/woff2", Media::Font, &["woff2"]),
+    ("image/apng", Media::Image(ImageRendering::Pixelated), &["apng"]),
+    ("image/avif", Media::Image(ImageRendering::Auto), &[]),
+    ("image/gif", Media::Image(ImageRendering::Pixelated), &["gif"]),
+    ("image/jpeg", Media::Image(ImageRendering::Pixelated), &["jpg", "jpeg"]),
+    ("image/jxl", Media::Image(ImageRendering::Auto), &["jxl"]),
+    ("image/png", Media::Image(ImageRendering::Pixelated), &["png"]),
     ("image/svg+xml", Media::Iframe, &["svg"]),
-    ("image/webp", Media::Image, &["webp"]),
-    ("model/gltf-binary", Media::Unknown, &["glb"]),
+    ("image/webp", Media::Image(ImageRendering::Pixelated), &["webp"]),
+    ("model/gltf+json", Media::Model, &["gltf"]),
+    ("model/gltf-binary", Media::Model, &["glb"]),
     ("model/stl", Media::Unknown, &["stl"]),
+    ("text/css", Media::Code(Language::Css), &["css"]),
+    ("text/html", Media::Iframe, &[]),
     ("text/html;charset=utf-8", Media::Iframe, &["html"]),
+    ("text/javascript", Media::Code(Language::JavaScript), &["js"]),
+    ("text/markdown", Media::Markdown, &[]),
+    ("text/markdown;charset=utf-8", Media::Markdown, &["md"]),
     ("text/plain", Media::Text, &[]),
     ("text/plain;charset=utf-8", Media::Text, &["txt"]),
+    ("text/x-python", Media::Code(Language::Python), &["py"]),
     ("video/mp4", Media::Video, &["mp4"]),
     ("video/webm", Media::Video, &["webm"]),
   ];
@@ -140,7 +207,7 @@ mod tests {
 
     assert_regex_match!(
       Media::content_type_for_path(Path::new("pepe.foo")).unwrap_err(),
-      r"unsupported file extension `\.foo`, supported extensions: apng .*"
+      r"unsupported file extension `\.foo`, supported extensions: apng asc .*"
     );
   }
 
@@ -156,7 +223,11 @@ mod tests {
     );
     assert_eq!(
       "application/json; charset=utf-8".parse::<Media>().unwrap(),
-      Media::Text
+      Media::Code(Language::Json)
+    );
+    assert_eq!(
+      "text/markdown; charset=utf-8".parse::<Media>().unwrap(),
+      Media::Markdown
     );
   }
 }
