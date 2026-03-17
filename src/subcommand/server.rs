@@ -1371,6 +1371,17 @@ impl Server {
 mod tests {
   use {super::*, reqwest::Url, std::net::TcpListener};
 
+  fn update_index_with_retry(index: &Index) {
+    let mut attempt = 0;
+    while let Err(err) = index.update() {
+      attempt += 1;
+      if attempt > 3 {
+        panic!("Failed to update index after {attempt} attempts: {err}");
+      }
+      std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+  }
+
   struct TestServer {
     pepecoin_rpc_server: test_bitcoincore_rpc::Handle,
     index: Arc<Index>,
@@ -1552,7 +1563,7 @@ mod tests {
 
     fn mine_blocks(&self, n: u64) -> Vec<bitcoin::Block> {
       let blocks = self.pepecoin_rpc_server.mine_blocks(n);
-      self.index.update().unwrap();
+      update_index_with_retry(&self.index);
       blocks
     }
 
@@ -1560,7 +1571,7 @@ mod tests {
       let blocks = self
         .pepecoin_rpc_server
         .mine_blocks_with_subsidy(n, subsidy);
-      self.index.update().unwrap();
+      update_index_with_retry(&self.index);
       blocks
     }
   }
