@@ -1033,10 +1033,6 @@ impl Server {
       header::CONTENT_SECURITY_POLICY,
       HeaderValue::from_static("default-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob:"),
     );
-    headers.append(
-      header::CONTENT_SECURITY_POLICY,
-      HeaderValue::from_static("default-src *:*/content/ 'unsafe-eval' 'unsafe-inline' data: blob:"),
-    );
     headers.insert(
       header::CACHE_CONTROL,
       HeaderValue::from_static("max-age=31536000, immutable"),
