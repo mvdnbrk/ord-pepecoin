@@ -10,9 +10,22 @@ The indexer and explorer support all inscription content types. While PRC-20 ins
 ## Requirements
 
 - Synced `pepecoind` node with `-txindex`
-- Rust 1.67+
 
-## Building
+## Installation
+
+### Pre-built binary
+
+Download the latest release from [GitHub Releases](https://github.com/mvdnbrk/ord-pepecoin/releases/latest).
+
+### From source
+
+Requires Rust 1.67+:
+
+```bash
+cargo install --git https://github.com/mvdnbrk/ord-pepecoin.git
+```
+
+Or build manually:
 
 ```bash
 git clone https://github.com/mvdnbrk/ord-pepecoin.git
