@@ -36,13 +36,13 @@ pub struct Wallet {
   inscription_info: BTreeMap<InscriptionId, api::Inscription>,
   output_info: BTreeMap<OutPoint, api::Output>,
   _locked_utxos: BTreeMap<OutPoint, TxOut>,
-  options: Options,
+  settings: Settings,
   database: Arc<Database>,
 }
 
 impl Wallet {
-  pub fn open_database(options: &Options, wallet_name: &str) -> Result<Arc<Database>> {
-    let path = options.data_dir()?.join("wallets").join(wallet_name);
+  pub fn open_database(settings: &Settings, wallet_name: &str) -> Result<Arc<Database>> {
+    let path = settings.data_dir().join("wallets").join(wallet_name);
     fs::create_dir_all(&path)?;
     let db_path = path.join("wallet.redb");
 
@@ -63,9 +63,9 @@ impl Wallet {
     Ok(Arc::new(db))
   }
 
-  pub(crate) fn initialize(options: &Options, wallet_name: &str, seed: [u8; 64]) -> Result {
-    let database = Self::open_database(options, wallet_name)?;
-    let network = options.chain().network();
+  pub(crate) fn initialize(settings: &Settings, wallet_name: &str, seed: [u8; 64]) -> Result {
+    let database = Self::open_database(settings, wallet_name)?;
+    let network = settings.chain().network();
     let secp = Secp256k1::new();
     let master_private_key = ExtendedPrivKey::new_master(network, &seed)?;
     let fingerprint = master_private_key.fingerprint(&secp);
@@ -97,14 +97,14 @@ impl Wallet {
     Ok(())
   }
 
-  pub(crate) fn load(options: &Options, wallet_name: &str, server_url: Option<Url>, no_sync: bool) -> Result<Self> {
-    let db_path = options.data_dir()?.join("wallets").join(wallet_name).join("wallet.redb");
+  pub(crate) fn load(settings: &Settings, wallet_name: &str, server_url: Option<Url>, no_sync: bool) -> Result<Self> {
+    let db_path = settings.data_dir().join("wallets").join(wallet_name).join("wallet.redb");
     if !db_path.exists() {
       bail!("wallet `{wallet_name}` does not exist, create it first with `ordpep wallet create`");
     }
 
-    let bitcoin_client = options.pepecoin_rpc_client_for_wallet_command(false)?;
-    let database = Self::open_database(options, wallet_name)?;
+    let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
+    let database = Self::open_database(settings, wallet_name)?;
 
     let ord_client = OrdClient::builder()
       .default_headers({
@@ -114,7 +114,10 @@ impl Wallet {
       })
       .build()?;
 
-    let rpc_url = options.server_url(server_url)?;
+    let rpc_url = match server_url {
+      Some(url) => url,
+      None => settings.server_url()?,
+    };
 
     // Sync with server
     if !no_sync {
@@ -133,7 +136,7 @@ impl Wallet {
       }
     }
 
-    let addresses = Self::get_addresses(&database, options.chain())?;
+    let addresses = Self::get_addresses(&database, settings.chain())?;
 
     // Import wallet addresses as watch-only into Core (no rescan) so that
     // listtransactions and other RPC calls can track our addresses.
@@ -191,7 +194,7 @@ for outpoint in locked_outpoints {
   let outpoint = OutPoint::new(outpoint.txid, outpoint.vout);
   let tx = bitcoin_client.get_raw_transaction(&outpoint.txid)?;
   if let Some(txout) = tx.output.get(outpoint.vout as usize) {
-    if addresses.contains(&Address::from_script(&txout.script_pubkey, options.chain().network()).unwrap()) {
+    if addresses.contains(&Address::from_script(&txout.script_pubkey, settings.chain().network()).unwrap()) {
       utxos.insert(outpoint, txout.clone());
       locked_utxos.insert(outpoint, txout.clone());
     }
@@ -238,7 +241,7 @@ for outpoint in locked_outpoints {
       inscription_info,
       output_info,
       _locked_utxos: locked_utxos,
-      options: options.clone(),
+      settings: settings.clone(),
       database,
     })
   }
@@ -294,7 +297,7 @@ for outpoint in locked_outpoints {
   }
 
   pub(crate) fn chain(&self) -> Chain {
-    self.options.chain()
+    self.settings.chain()
   }
 
   pub(crate) fn get_unspent_output_ranges(&self) -> Result<Vec<(OutPoint, Vec<(u128, u128)>)>> {

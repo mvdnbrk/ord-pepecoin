@@ -42,23 +42,23 @@ pub(crate) enum Subcommand {
 }
 
 impl Subcommand {
-  pub(crate) fn run(self, options: Options) -> Result {
+  pub(crate) fn run(self, settings: Settings) -> Result {
     match self {
       Self::Epochs => epochs::run(),
-      Self::Find(find) => find.run(options),
-      Self::Index(index) => index.run(options),
-      Self::Info(info) => info.run(options),
-      Self::List(list) => list.run(options),
+      Self::Find(find) => find.run(settings),
+      Self::Index(index) => index.run(settings),
+      Self::Info(info) => info.run(settings),
+      Self::List(list) => list.run(settings),
       Self::Parse(parse) => parse.run(),
       Self::Subsidy(subsidy) => subsidy.run(),
       Self::Server(server) => {
-        let index = Arc::new(Index::open(&options)?);
+        let index = Arc::new(Index::open(&settings)?);
         let handle = axum_server::Handle::new();
         LISTENERS.lock().unwrap().push(handle.clone());
-        server.run(options, index, handle, None)
+        server.run(settings, index, handle, None)
       }
       Self::Traits(traits) => traits.run(),
-      Self::Wallet(wallet) => wallet.run(options),
+      Self::Wallet(wallet) => wallet.run(settings),
     }
   }
 }

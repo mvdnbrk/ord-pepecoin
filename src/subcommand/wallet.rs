@@ -57,7 +57,7 @@ pub(crate) enum WalletSubcommand {
 }
 
 impl WalletCommand {
-  pub(crate) fn run(self, options: Options) -> Result {
+  pub(crate) fn run(self, settings: Settings) -> Result {
     let wallet_name = self.name;
     let no_sync = self.no_sync;
     let server_url = self.server_url;
@@ -71,7 +71,7 @@ impl WalletCommand {
       | WalletSubcommand::Send(_)
       | WalletSubcommand::Inscribe(_)
       | WalletSubcommand::Transactions(_) => {
-        let wallet = crate::wallet::Wallet::load(&options, &wallet_name, server_url, no_sync)?;
+        let wallet = crate::wallet::Wallet::load(&settings, &wallet_name, server_url, no_sync)?;
         match self.subcommand {
           WalletSubcommand::Addresses => addresses::run(wallet),
           WalletSubcommand::Balance => balance::run(wallet),
@@ -85,8 +85,8 @@ impl WalletCommand {
           _ => unreachable!(),
         }
       }
-      WalletSubcommand::Create(create) => create.run(options, &wallet_name),
-      WalletSubcommand::Restore(restore) => restore.run(options, &wallet_name),
+      WalletSubcommand::Create(create) => create.run(settings, &wallet_name),
+      WalletSubcommand::Restore(restore) => restore.run(settings, &wallet_name),
     }
   }
 }

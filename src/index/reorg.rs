@@ -1,8 +1,5 @@
 use {super::*, super::updater::BlockData};
 
-const DEFAULT_SAVEPOINT_INTERVAL: u64 = 10;
-const DEFAULT_MAX_SAVEPOINTS: u64 = 2;
-
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
   Recoverable { height: u32, depth: u32 },
@@ -40,8 +37,8 @@ impl Reorg {
       return Ok(());
     }
 
-    let savepoint_interval = DEFAULT_SAVEPOINT_INTERVAL as u32;
-    let max_savepoints = DEFAULT_MAX_SAVEPOINTS as u32;
+    let savepoint_interval = index.settings.savepoint_interval() as u32;
+    let max_savepoints = index.settings.max_savepoints() as u32;
     let max_recoverable_reorg_depth =
       (max_savepoints - 1) * savepoint_interval + height % savepoint_interval;
 
@@ -99,7 +96,7 @@ impl Reorg {
       return Ok(false);
     }
 
-    let savepoint_interval = DEFAULT_SAVEPOINT_INTERVAL;
+    let savepoint_interval = index.settings.savepoint_interval() as u64;
 
     let last_savepoint_height = index
       .database
@@ -114,7 +111,7 @@ impl Reorg {
 
     let result = (height < savepoint_interval
       || height.saturating_sub(last_savepoint_height) >= savepoint_interval)
-      && chain_height.saturating_sub(height) <= savepoint_interval * DEFAULT_MAX_SAVEPOINTS + 1;
+      && chain_height.saturating_sub(height) <= savepoint_interval * index.settings.max_savepoints() as u64 + 1;
 
     Ok(result)
   }
@@ -124,7 +121,7 @@ impl Reorg {
       return Ok(());
     }
 
-    let max_savepoints = DEFAULT_MAX_SAVEPOINTS as usize;
+    let max_savepoints = index.settings.max_savepoints();
 
     let wtx = index.begin_write()?;
 

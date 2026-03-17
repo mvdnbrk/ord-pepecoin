@@ -76,6 +76,7 @@ pub struct Index {
   unrecoverably_reorged: AtomicBool,
   rpc_url: String,
   chain: Chain,
+  pub(crate) settings: Settings,
 }
 
 #[derive(Debug, PartialEq)]
@@ -158,9 +159,9 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 }
 
 impl Index {
-  pub fn open(options: &Options) -> Result<Self> {
-    let rpc_url = options.rpc_url();
-    let auth = options.auth()?;
+  pub fn open(settings: &Settings) -> Result<Self> {
+    let rpc_url = settings.rpc_url();
+    let auth = settings.auth()?;
 
     match &auth {
       Auth::CookieFile(path) => log::info!(
@@ -177,20 +178,15 @@ impl Index {
 
     let client = Client::new(&rpc_url, auth.clone()).context("failed to connect to RPC URL")?;
 
-    let data_dir = options.data_dir()?;
+    let data_dir = settings.data_dir();
 
     if let Err(err) = fs::create_dir_all(&data_dir) {
       bail!("failed to create data dir `{}`: {err}", data_dir.display());
     }
 
-    let config = options.load_config().unwrap_or_default();
-    let index_sats = options.index_sats || config.index_sats.unwrap_or(false);
+    let index_sats = settings.index_sats();
 
-    let path = if let Some(path) = options.index.clone().or(config.index) {
-      path
-    } else {
-      data_dir.join("index.redb")
-    };
+    let path = settings.index();
 
     let database: Database = if path.exists() {
       let database = Database::builder()
@@ -257,7 +253,7 @@ impl Index {
     };
 
     let genesis_block_coinbase_transaction =
-      options.chain().genesis_block().coinbase().unwrap().clone();
+      settings.chain().genesis_block().coinbase().unwrap().clone();
 
     Ok(Self {
       genesis_block_coinbase_txid: genesis_block_coinbase_transaction.txid(),
@@ -265,13 +261,14 @@ impl Index {
       client,
       database,
       path,
-      first_inscription_height: options.first_inscription_height(),
+      first_inscription_height: settings.first_inscription_height(),
       genesis_block_coinbase_transaction,
-      height_limit: options.height_limit,
+      height_limit: settings.height_limit(),
       started: Utc::now(),
       unrecoverably_reorged: AtomicBool::new(false),
       rpc_url,
-      chain: options.chain(),
+      chain: settings.chain(),
+      settings: settings.clone(),
     })
   }
 
@@ -1308,11 +1305,11 @@ mod tests {
       ];
 
       let options = Options::try_parse_from(command.into_iter().chain(self.args)).unwrap();
-      let index = Index::open(&options)?;
+      let settings = Settings::merge(options.clone(), BTreeMap::new())?;
+      let index = Index::open(&settings)?;
       index.update().unwrap();
 
       Ok(Context {
-        options,
         rpc_server,
         tempdir,
         index,
@@ -1336,7 +1333,6 @@ mod tests {
   }
 
   struct Context {
-    options: Options,
     rpc_server: test_bitcoincore_rpc::Handle,
     #[allow(unused)]
     tempdir: TempDir,
