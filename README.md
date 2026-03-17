@@ -21,13 +21,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/mvdnbrk/o
 
 This auto-detects your platform and installs the latest release to `/usr/local/bin`. See [all releases](https://github.com/mvdnbrk/ord-pepecoin/releases).
 
-### From source
-
-```bash
-cargo install --git https://github.com/mvdnbrk/ord-pepecoin.git
-```
-
-### Manual build
+### Build from source
 
 Requires Rust 1.67+:
 
