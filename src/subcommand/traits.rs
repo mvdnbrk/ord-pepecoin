@@ -10,7 +10,7 @@ pub(crate) struct Traits {
 pub struct Output {
   pub number: u128,
   pub decimal: String,
-  pub height: u64,
+  pub height: u32,
   pub epoch: u64,
   pub offset: u64,
   pub rarity: Rarity,

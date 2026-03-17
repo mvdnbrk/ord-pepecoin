@@ -2,21 +2,21 @@ use super::*;
 
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionsBlockHtml {
-  pub(crate) block: u64,
+  pub(crate) block: u32,
   pub(crate) inscriptions: Vec<InscriptionId>,
-  pub(crate) prev_block: Option<u64>,
-  pub(crate) next_block: Option<u64>,
-  pub(crate) prev_page: Option<u64>,
-  pub(crate) next_page: Option<u64>,
+  pub(crate) prev_block: Option<u32>,
+  pub(crate) next_block: Option<u32>,
+  pub(crate) prev_page: Option<u32>,
+  pub(crate) next_page: Option<u32>,
 }
 
 impl InscriptionsBlockHtml {
   pub(crate) fn new(
-    block: u64,
-    current_blockheight: u64,
+    block: u32,
+    current_blockheight: u32,
     inscriptions: Vec<InscriptionId>,
     more_inscriptions: bool,
-    page_index: u64,
+    page_index: u32,
   ) -> Self {
     Self {
       block,

@@ -1,10 +1,10 @@
 use super::*;
 
 #[derive(Copy, Clone, Debug, Display, FromStr, Ord, Eq, PartialEq, PartialOrd)]
-pub(crate) struct Height(pub(crate) u64);
+pub(crate) struct Height(pub(crate) u32);
 
 impl Height {
-  pub(crate) fn n(self) -> u64 {
+  pub(crate) fn n(self) -> u32 {
     self.0
   }
 
@@ -17,28 +17,28 @@ impl Height {
     let epoch_starting_sat = epoch.starting_sat();
     let epoch_starting_height = epoch.starting_height();
     epoch_starting_sat
-      + ((self - epoch_starting_height.n()).n() as u128) * (epoch.subsidy() as u128)
+      + (u128::from((self - epoch_starting_height.n()).n())) * (epoch.subsidy() as u128)
   }
 }
 
-impl Add<u64> for Height {
+impl Add<u32> for Height {
   type Output = Self;
 
-  fn add(self, other: u64) -> Height {
+  fn add(self, other: u32) -> Height {
     Self(self.0 + other)
   }
 }
 
-impl Sub<u64> for Height {
+impl Sub<u32> for Height {
   type Output = Self;
 
-  fn sub(self, other: u64) -> Height {
+  fn sub(self, other: u32) -> Height {
     Self(self.0 - other)
   }
 }
 
-impl PartialEq<u64> for Height {
-  fn eq(&self, other: &u64) -> bool {
+impl PartialEq<u32> for Height {
+  fn eq(&self, other: &u32) -> bool {
     self.0 == *other
   }
 }

@@ -5,7 +5,7 @@ const DEFAULT_MAX_SAVEPOINTS: u64 = 2;
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
-  Recoverable { height: u64, depth: u64 },
+  Recoverable { height: u32, depth: u32 },
   Unrecoverable,
 }
 
@@ -25,7 +25,7 @@ impl std::error::Error for Error {}
 pub(crate) struct Reorg {}
 
 impl Reorg {
-  pub(crate) fn detect_reorg(block: &BlockData, height: u64, index: &Index) -> Result {
+  pub(crate) fn detect_reorg(block: &BlockData, height: u32, index: &Index) -> Result {
     let prev_height = match height.checked_sub(1) {
       Some(h) => h,
       None => return Ok(()),
@@ -40,8 +40,8 @@ impl Reorg {
       return Ok(());
     }
 
-    let savepoint_interval = DEFAULT_SAVEPOINT_INTERVAL;
-    let max_savepoints = DEFAULT_MAX_SAVEPOINTS;
+    let savepoint_interval = DEFAULT_SAVEPOINT_INTERVAL as u32;
+    let max_savepoints = DEFAULT_MAX_SAVEPOINTS as u32;
     let max_recoverable_reorg_depth =
       (max_savepoints - 1) * savepoint_interval + height % savepoint_interval;
 
@@ -49,7 +49,7 @@ impl Reorg {
       let index_block_hash = index.block_hash(height.saturating_sub(depth))?;
       let bitcoind_block_hash = index
         .client
-        .get_block_hash(height.saturating_sub(depth))
+        .get_block_hash(u64::from(height.saturating_sub(depth)))
         .into_option()?;
 
       if index_block_hash == bitcoind_block_hash {
@@ -60,7 +60,7 @@ impl Reorg {
     Err(anyhow!(Error::Unrecoverable))
   }
 
-  pub(crate) fn handle_reorg(index: &Index, height: u64, depth: u64) -> Result {
+  pub(crate) fn handle_reorg(index: &Index, height: u32, depth: u32) -> Result {
     log::info!("rolling back database after reorg of depth {depth} at height {height}");
 
     let mut wtx = index.begin_write()?;
@@ -94,7 +94,7 @@ impl Reorg {
     Ok(())
   }
 
-  pub(crate) fn is_savepoint_required(index: &Index, height: u64) -> Result<bool> {
+  pub(crate) fn is_savepoint_required(index: &Index, height: u32) -> Result<bool> {
     if integration_test() {
       return Ok(false);
     }
@@ -109,6 +109,7 @@ impl Reorg {
       .map(|v| v.value())
       .unwrap_or(0);
 
+    let height = u64::from(height);
     let chain_height = index.client.get_block_count()?;
 
     let result = (height < savepoint_interval
@@ -118,7 +119,7 @@ impl Reorg {
     Ok(result)
   }
 
-  pub(crate) fn update_savepoints(index: &Index, height: u64) -> Result {
+  pub(crate) fn update_savepoints(index: &Index, height: u32) -> Result {
     if !Self::is_savepoint_required(index, height)? {
       return Ok(());
     }
@@ -145,7 +146,7 @@ impl Reorg {
 
     wtx
       .open_table(STATISTIC_TO_COUNT)?
-      .insert(&Statistic::LastSavepointHeight.key(), &height)?;
+      .insert(&Statistic::LastSavepointHeight.key(), &u64::from(height))?;
 
     Index::increment_statistic(&wtx, Statistic::Commits, 1)?;
     wtx.commit()?;

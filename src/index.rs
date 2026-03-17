@@ -43,11 +43,11 @@ macro_rules! define_multimap_table {
   };
 }
 
-define_table! { HEIGHT_TO_BLOCK_HASH, u64, &BlockHashValue }
-define_table! { HEIGHT_TO_LAST_INSCRIPTION_NUMBER, u64, u64 }
+define_table! { HEIGHT_TO_BLOCK_HASH, u32, &BlockHashValue }
+define_table! { HEIGHT_TO_LAST_INSCRIPTION_NUMBER, u32, u32 }
 define_table! { INSCRIPTION_ID_TO_INSCRIPTION_ENTRY, &InscriptionIdValue, InscriptionEntryValue }
 define_table! { INSCRIPTION_ID_TO_SATPOINT, &InscriptionIdValue, &SatPointValue }
-define_table! { INSCRIPTION_NUMBER_TO_INSCRIPTION_ID, u64, &InscriptionIdValue }
+define_table! { INSCRIPTION_NUMBER_TO_INSCRIPTION_ID, u32, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_TXIDS, &InscriptionIdValue, &[u8] }
 define_table! { INSCRIPTION_TXID_TO_TX, &[u8], &[u8] }
 define_table! { PARTIAL_TXID_TO_INSCRIPTION_TXIDS, &[u8], &[u8] }
@@ -68,10 +68,10 @@ pub struct Index {
   client: Client,
   database: Database,
   path: PathBuf,
-  first_inscription_height: u64,
+  first_inscription_height: u32,
   genesis_block_coinbase_transaction: Transaction,
   genesis_block_coinbase_txid: Txid,
-  height_limit: Option<u64>,
+  height_limit: Option<u32>,
   pub(crate) started: DateTime<Utc>,
   unrecoverably_reorged: AtomicBool,
   rpc_url: String,
@@ -312,7 +312,7 @@ impl Index {
         .unwrap_or(0);
       Info {
         index_path: self.path.clone(),
-        blocks_indexed: wtx
+        blocks_indexed: u64::from(wtx
           .open_table(HEIGHT_TO_BLOCK_HASH)?
           .range(0..)?
           .rev()
@@ -321,7 +321,7 @@ impl Index {
             let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
             height.value() + 1
           })
-          .unwrap_or(0),
+          .unwrap_or(0)),
         branch_pages: stats.branch_pages() as usize,
         fragmented_bytes: stats.fragmented_bytes() as usize,
         index_file_size: fs::metadata(&self.path)?.len(),
@@ -474,7 +474,7 @@ impl Index {
     self.unrecoverably_reorged.load(atomic::Ordering::Relaxed)
   }
 
-  pub(crate) fn block_hash(&self, height: u64) -> Result<Option<BlockHash>> {
+  pub(crate) fn block_hash(&self, height: u32) -> Result<Option<BlockHash>> {
     let rtx = self.database.begin_read()?;
     let table = rtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
     let hash = table
@@ -531,7 +531,7 @@ impl Index {
     self.begin_read()?.height()
   }
 
-  pub(crate) fn block_count(&self) -> Result<u64> {
+  pub(crate) fn block_count(&self) -> Result<u32> {
     self.begin_read()?.block_count()
   }
 
@@ -545,7 +545,7 @@ impl Index {
     )
   }
 
-  pub(crate) fn blocks(&self, take: usize) -> Result<Vec<(u64, BlockHash)>> {
+  pub(crate) fn blocks(&self, take: usize) -> Result<Vec<(u32, BlockHash)>> {
     let mut blocks = Vec::new();
 
     let rtx = self.begin_read()?;
@@ -604,7 +604,7 @@ impl Index {
     self.client.get_block_header_info(&hash).into_option()
   }
 
-  pub(crate) fn get_block_by_height(&self, height: u64) -> Result<Option<Block>> {
+  pub(crate) fn get_block_by_height(&self, height: u32) -> Result<Option<Block>> {
     let tx = self.database.begin_read()?;
 
     let indexed = tx.open_table(HEIGHT_TO_BLOCK_HASH)?.get(&height)?.is_some();
@@ -616,7 +616,7 @@ impl Index {
     Ok(
       self
         .client
-        .get_block_hash(height)
+        .get_block_hash(u64::from(height))
         .into_option()?
         .map(|hash| self.client.get_block(&hash))
         .transpose()?,
@@ -657,7 +657,7 @@ impl Index {
 
   pub(crate) fn get_inscription_id_by_inscription_number(
     &self,
-    n: u64,
+    n: u32,
   ) -> Result<Option<InscriptionId>> {
     Ok(
       self
@@ -1019,8 +1019,8 @@ impl Index {
   pub(crate) fn get_latest_inscriptions_with_prev_and_next(
     &self,
     n: usize,
-    from: Option<u64>,
-  ) -> Result<(Vec<InscriptionId>, Option<u64>, Option<u64>)> {
+    from: Option<u32>,
+  ) -> Result<(Vec<InscriptionId>, Option<u32>, Option<u32>)> {
     let rtx = self.database.begin_read()?;
 
     let inscription_number_to_inscription_id =
@@ -1068,7 +1068,7 @@ impl Index {
     Ok((inscriptions, prev, next))
   }
 
-  pub(crate) fn get_feed_inscriptions(&self, n: usize) -> Result<Vec<(u64, InscriptionId)>> {
+  pub(crate) fn get_feed_inscriptions(&self, n: usize) -> Result<Vec<(u32, InscriptionId)>> {
     Ok(
       self
         .database
@@ -1086,7 +1086,7 @@ impl Index {
   }
 
 
-  pub(crate) fn get_inscriptions_in_block(&self, block_height: u64) -> Result<Vec<InscriptionId>> {
+  pub(crate) fn get_inscriptions_in_block(&self, block_height: u32) -> Result<Vec<InscriptionId>> {
     let rtx = self.database.begin_read()?;
 
     let height_to_last_inscription_number = rtx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
@@ -1118,7 +1118,7 @@ impl Index {
 
   pub(crate) fn get_highest_paying_inscriptions_in_block(
     &self,
-    block_height: u64,
+    block_height: u32,
     n: usize,
   ) -> Result<(Vec<InscriptionId>, usize)> {
     let inscription_ids = self.get_inscriptions_in_block(block_height)?;

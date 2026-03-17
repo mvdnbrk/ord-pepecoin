@@ -13,7 +13,7 @@ pub(crate) enum Origin {
 
 pub(super) struct InscriptionUpdater<'a, 'tx> {
   flotsam: Vec<Flotsam>,
-  height: u64,
+  height: u32,
   id_to_satpoint: &'a mut Table<'tx, &'static InscriptionIdValue, &'static SatPointValue>,
   id_to_txids: &'a mut Table<'tx, &'static InscriptionIdValue, &'static [u8]>,
   txid_to_tx: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
@@ -21,8 +21,8 @@ pub(super) struct InscriptionUpdater<'a, 'tx> {
   value_receiver: &'a mut Receiver<u64>,
   id_to_entry: &'a mut Table<'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
   lost_sats: u64,
-  pub(super) next_number: u64,
-  number_to_id: &'a mut Table<'tx, u64, &'static InscriptionIdValue>,
+  pub(super) next_number: u32,
+  number_to_id: &'a mut Table<'tx, u32, &'static InscriptionIdValue>,
   outpoint_to_value: &'a mut Table<'tx, &'static OutPointValue, u64>,
   reward: u64,
   sat_to_inscription_id: &'a mut Table<'tx, u128, &'static InscriptionIdValue>,
@@ -36,7 +36,7 @@ pub(super) struct InscriptionUpdater<'a, 'tx> {
 
 impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
   pub(super) fn new(
-    height: u64,
+    height: u32,
     id_to_satpoint: &'a mut Table<'tx, &'static InscriptionIdValue, &'static SatPointValue>,
     id_to_txids: &'a mut Table<'tx, &'static InscriptionIdValue, &'static [u8]>,
     txid_to_tx: &'a mut Table<'tx, &'static [u8], &'static [u8]>,
@@ -44,7 +44,7 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
     value_receiver: &'a mut Receiver<u64>,
     id_to_entry: &'a mut Table<'tx, &'static InscriptionIdValue, InscriptionEntryValue>,
     lost_sats: u64,
-    number_to_id: &'a mut Table<'tx, u64, &'static InscriptionIdValue>,
+    number_to_id: &'a mut Table<'tx, u32, &'static InscriptionIdValue>,
     outpoint_to_value: &'a mut Table<'tx, &'static OutPointValue, u64>,
     sat_to_inscription_id: &'a mut Table<'tx, u128, &'static InscriptionIdValue>,
     satpoint_to_id: &'a mut Table<'tx, &'static SatPointValue, &'static InscriptionIdValue>,

@@ -11,7 +11,7 @@ impl Sat {
 
   pub(crate) fn height(self) -> Height {
     self.epoch().starting_height()
-      + u64::try_from(self.epoch_position() / self.epoch().subsidy() as u128).unwrap()
+      + u32::try_from(self.epoch_position() / self.epoch().subsidy() as u128).unwrap()
   }
 
   pub(crate) fn epoch(self) -> Epoch {
