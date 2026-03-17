@@ -5,6 +5,11 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
+## [Unreleased]
+
+### Fixed
+- `index compact` failing when persistent savepoints exist ([`bd792cb`](https://github.com/mvdnbrk/ord-pepecoin/commit/bd792cbe))
+
 ## [0.8.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.8.0) - 2026-03-17
 
 ### Fixed
