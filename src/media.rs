@@ -34,6 +34,7 @@ impl Media {
     ("model/gltf-binary", Media::Unknown, &["glb"]),
     ("model/stl", Media::Unknown, &["stl"]),
     ("text/html;charset=utf-8", Media::Iframe, &["html"]),
+    ("text/plain", Media::Text, &[]),
     ("text/plain;charset=utf-8", Media::Text, &["txt"]),
     ("video/mp4", Media::Video, &["mp4"]),
     ("video/webm", Media::Video, &["webm"]),
@@ -97,8 +98,9 @@ impl FromStr for Media {
   type Err = Error;
 
   fn from_str(s: &str) -> Result<Self, Self::Err> {
+    let normalized: String = s.replace("; ", ";");
     for entry in Self::TABLE {
-      if entry.0 == s {
+      if entry.0 == normalized {
         return Ok(entry.1);
       }
     }
@@ -132,4 +134,15 @@ mod tests {
     );
   }
 
+  #[test]
+  fn content_type_with_space_after_semicolon() {
+    assert_eq!(
+      "text/plain; charset=utf-8".parse::<Media>().unwrap(),
+      Media::Text
+    );
+    assert_eq!(
+      "text/html; charset=utf-8".parse::<Media>().unwrap(),
+      Media::Iframe
+    );
+  }
 }
