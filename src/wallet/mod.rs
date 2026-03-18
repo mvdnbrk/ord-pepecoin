@@ -37,6 +37,7 @@ pub struct Wallet {
   output_info: BTreeMap<OutPoint, api::Output>,
   _locked_utxos: BTreeMap<OutPoint, TxOut>,
   settings: Settings,
+  name: String,
   database: Arc<Database>,
 }
 
@@ -239,8 +240,17 @@ impl Wallet {
       output_info,
       _locked_utxos: locked_utxos,
       settings: settings.clone(),
+      name: wallet_name.to_string(),
       database,
     })
+  }
+
+  pub(crate) fn settings(&self) -> &Settings {
+    &self.settings
+  }
+
+  pub(crate) fn name(&self) -> &str {
+    &self.name
   }
 
   fn parse_xpub_from_descriptor(descriptor: &str) -> Result<ExtendedPubKey> {

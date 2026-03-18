@@ -19,6 +19,7 @@ use {
     },
     BatchOutput, InscriptionOutput,
   },
+  super::job::{RevealJob, RevealTx, sanitize_batch_name, MEMPOOL_CHAIN_LIMIT},
 };
 
 #[derive(Serialize)]
@@ -28,6 +29,18 @@ struct Output {
   reveal: Txid,
   destination: Address,
   fees: u64,
+}
+
+#[derive(Serialize)]
+struct DryRunOutput {
+  commit: Txid,
+  inscription: InscriptionId,
+  reveal: Txid,
+  destination: Address,
+  fees: u64,
+  reveal_count: usize,
+  batch_count: usize,
+  batch_size: usize,
 }
 
 #[derive(Debug, Parser)]
@@ -102,11 +115,20 @@ impl Inscribe {
 
     let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
-    let utxos = wallet
+    let mut utxos = wallet
       .utxos()
       .iter()
       .map(|(outpoint, txout)| (*outpoint, Amount::from_sat(txout.value)))
       .collect::<BTreeMap<OutPoint, Amount>>();
+
+    // Add a large fake UTXO for dry-run so transaction building succeeds
+    // regardless of wallet balance.
+    if self.dry_run {
+      utxos.insert(
+        OutPoint::null(),
+        Amount::from_sat(1_000_000_000_000),
+      );
+    }
 
     let existing_inscriptions = wallet
       .inscriptions()
@@ -131,6 +153,8 @@ impl Inscribe {
         postage,
       )?;
 
+      let total_reveal_count: usize = reveal_chains.iter().map(|c| c.len()).sum();
+
       if self.dry_run {
         let mut inscription_outputs = Vec::new();
         for (i, chain) in reveal_chains.iter().enumerate() {
@@ -141,11 +165,37 @@ impl Inscribe {
           });
         }
 
-        print_json(BatchOutput {
+        let batch_count = (total_reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+
+        let dry_dir = wallet.settings().data_dir()
+          .join("wallets")
+          .join(wallet.name())
+          .join("jobs")
+          .join("dry");
+        fs::create_dir_all(&dry_dir)?;
+        let dry_file = dry_dir.join(format!("{}.json", commit_tx.txid()));
+
+        #[derive(Serialize)]
+        struct BatchDryRunOutput {
+          commit: Txid,
+          inscriptions: Vec<InscriptionOutput>,
+          total_fees: u64,
+          reveal_count: usize,
+          batch_count: usize,
+          batch_size: usize,
+        }
+
+        let output = BatchDryRunOutput {
           commit: commit_tx.txid(),
           inscriptions: inscription_outputs,
           total_fees: fees,
-        })?;
+          reveal_count: total_reveal_count,
+          batch_count,
+          batch_size: MEMPOOL_CHAIN_LIMIT,
+        };
+
+        serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
+        print_json(&output)?;
       } else {
         let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
         let commit_txid = signed_commit_tx.txid();
@@ -156,10 +206,12 @@ impl Inscribe {
 
         let mut inscription_outputs = Vec::new();
         let secp = Secp256k1::new();
+        let mut jobs = Vec::new();
 
         for (i, chain) in reveal_chains.into_iter().enumerate() {
           let mut last_txid = commit_txid;
           let mut signed_chain = Vec::new();
+          let mut current_reveals = Vec::new();
 
           for (j, reveal) in chain.into_iter().enumerate() {
             let mut tx = reveal.tx;
@@ -194,21 +246,50 @@ impl Inscribe {
             tx.input[0].script_sig = script_sig.into_script();
             last_txid = tx.txid();
 
-            let signed_tx_bytes = bitcoin::consensus::encode::serialize(&tx);
-            client
-              .send_raw_transaction(&signed_tx_bytes)
-              .context(format!(
-                "Failed to send reveal transaction {} for inscription {}",
-                j, i
-              ))?;
+            current_reveals.push(RevealTx {
+              index: j,
+              txid: tx.txid(),
+              raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
+              broadcast: false,
+              confirmed: false,
+            });
+
             signed_chain.push(tx);
           }
 
+          let inscription_id = InscriptionId { txid: signed_chain[0].txid(), index: 0 };
           inscription_outputs.push(InscriptionOutput {
-            inscription: signed_chain[0].txid().into(),
+            inscription: inscription_id,
             reveal: signed_chain.last().unwrap().txid(),
             destination: destinations[i].clone(),
           });
+
+          jobs.push(RevealJob {
+            file_name: "batch.yaml".to_string(),
+            content_type: "application/yaml".to_string(),
+            file_size: fs::metadata(batch_path).map(|m| m.len()).unwrap_or(0),
+            commit_txid,
+            inscription_id,
+            destination: destinations[i].clone(),
+            total_fees: fees,
+            batch_size: MEMPOOL_CHAIN_LIMIT,
+            created_at: Utc::now(),
+            reveals: current_reveals,
+          });
+        }
+
+        let batch_name = sanitize_batch_name(batch_path.file_stem().unwrap().to_str().unwrap());
+        let timestamp = Utc::now().format("%Y%m%d%H%M%S").to_string();
+        let batch_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name())
+          .join(format!("{}-{}", batch_name, timestamp));
+
+        fs::create_dir_all(&batch_dir)?;
+        fs::copy(batch_path, batch_dir.join("batch.yaml"))?;
+
+        for mut job in jobs {
+          let job_file = batch_dir.join(format!("{}.json", job.inscription_id.txid));
+          job.broadcast_batch(client);
+          job.save(&job_file)?;
         }
 
         print_json(BatchOutput {
@@ -216,6 +297,8 @@ impl Inscribe {
           inscriptions: inscription_outputs,
           total_fees: fees,
         })?;
+
+        log::info!("Reveal broadcast jobs created in: {}", batch_dir.display());
       }
     } else {
       let inscription = Inscription::from_file(
@@ -243,15 +326,33 @@ impl Inscribe {
         postage,
       )?;
 
+      let reveal_count = txs.len() - 1; // exclude commit tx
+
       if self.dry_run {
         let inscription_id = txs[1].txid().into();
-        print_json(Output {
+        let batch_count = (reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+
+        let dry_dir = wallet.settings().data_dir()
+          .join("wallets")
+          .join(wallet.name())
+          .join("jobs")
+          .join("dry");
+        fs::create_dir_all(&dry_dir)?;
+        let dry_file = dry_dir.join(format!("{}.json", txs[0].txid()));
+
+        let output = DryRunOutput {
           commit: txs[0].txid(),
-          reveal: txs.last().unwrap().txid(),
           inscription: inscription_id,
+          reveal: txs.last().unwrap().txid(),
           destination: reveal_tx_destination,
           fees,
-        })?;
+          reveal_count,
+          batch_count,
+          batch_size: MEMPOOL_CHAIN_LIMIT,
+        };
+
+        serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
+        print_json(&output)?;
       } else {
         let signed_commit_tx = LocalSigner::sign_transaction(&wallet, txs[0].clone())?;
         let mut last_txid = signed_commit_tx.txid();
@@ -264,6 +365,7 @@ impl Inscribe {
         let secp = Secp256k1::new();
         let mut reveal_txid = Txid::all_zeros();
         let mut inscription_id = InscriptionId { txid: Txid::all_zeros(), index: 0 };
+        let mut reveals = Vec::new();
 
         for i in 1..txs.len() {
           let (redeem_script, partial_script) = &scripts[i - 1];
@@ -304,11 +406,35 @@ impl Inscribe {
           }
           reveal_txid = last_txid;
 
-          let signed_tx_bytes = bitcoin::consensus::encode::serialize(&reveal_tx);
-          client
-            .send_raw_transaction(&signed_tx_bytes)
-            .context(format!("Failed to send transaction {}", i))?;
+          reveals.push(RevealTx {
+            index: i - 1,
+            txid: reveal_txid,
+            raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&reveal_tx)),
+            broadcast: false,
+            confirmed: false,
+          });
         }
+
+        let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
+        fs::create_dir_all(&jobs_dir)?;
+        let job_file = jobs_dir.join(format!("{}.json", commit));
+
+        let file_path = self.file.as_ref().unwrap();
+        let mut job = RevealJob {
+          file_name: file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+          content_type: Media::content_type_for_path(file_path).unwrap_or("application/octet-stream").to_string(),
+          file_size: fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
+          commit_txid: commit,
+          inscription_id,
+          destination: reveal_tx_destination.clone(),
+          total_fees: fees,
+          batch_size: MEMPOOL_CHAIN_LIMIT,
+          created_at: Utc::now(),
+          reveals,
+        };
+
+        job.broadcast_batch(client);
+        job.save(&job_file)?;
 
         print_json(Output {
           commit,
@@ -317,7 +443,9 @@ impl Inscribe {
           destination: reveal_tx_destination,
           fees,
         })?;
-      };
+
+        log::info!("Reveal broadcast job created at: {}", job_file.display());
+      }
     }
 
     Ok(())
@@ -722,7 +850,7 @@ mod tests {
       batch: None,
     };
 
-    let (commit_tx, reveal_chains, fees): (Transaction, Vec<Vec<RevealTx>>, u64) = 
+    let (commit_tx, reveal_chains, fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
       create_batch_inscription_transactions(
         inscriptions,
         destinations,
@@ -774,7 +902,7 @@ mod tests {
       batch: None,
     };
 
-    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<RevealTx>>, u64) = 
+    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
       create_batch_inscription_transactions(
         inscriptions,
         destinations,
@@ -818,7 +946,7 @@ mod tests {
       batch: None,
     };
 
-    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<RevealTx>>, u64) = 
+    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
       create_batch_inscription_transactions(
         inscriptions,
         destinations,
