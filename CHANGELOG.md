@@ -13,6 +13,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - `wallet broadcast` command for manual job processing ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
 - Batch directory structure for collection inscriptions with sliding window (max 100 active jobs) ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
 - Dry-run works without requiring wallet balance ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
+- `wallet list` command to show all wallets ([`c2bddb2`](https://github.com/mvdnbrk/ord-pepecoin/commit/c2bddb2b))
 - Allow cross-inscription references via CSP (e.g. `<script src='/content/...'>`) ([#34](https://github.com/mvdnbrk/ord-pepecoin/pull/34))
 - Align media types with upstream: `Code(Language)`, `Font`, `Markdown`, `Model`, `Image(ImageRendering)` ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
 - Preview templates for code (highlight.js), fonts, markdown, and 3D models ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
