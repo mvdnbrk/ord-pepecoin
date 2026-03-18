@@ -20,6 +20,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Configurable `savepoint_interval`, `max_savepoints`, `commit_interval`, `pepecoin_rpc_limit` ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
 
 ### Fixed
+- Filter wallet balance, UTXOs and transactions by wallet addresses ([#37](https://github.com/mvdnbrk/ord-pepecoin/pull/37))
 - `index compact` failing when persistent savepoints exist ([`bd792cb`](https://github.com/mvdnbrk/ord-pepecoin/commit/bd792cbe))
 - Flaky server tests with index update retry ([#31](https://github.com/mvdnbrk/ord-pepecoin/pull/31))
 
