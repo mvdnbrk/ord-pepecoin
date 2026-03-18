@@ -40,7 +40,6 @@ struct DryRunOutput {
   fees: u64,
   reveal_count: usize,
   batch_count: usize,
-  batch_size: usize,
 }
 
 #[derive(Debug, Parser)]
@@ -182,7 +181,6 @@ impl Inscribe {
           total_fees: u64,
           reveal_count: usize,
           batch_count: usize,
-          batch_size: usize,
         }
 
         let output = BatchDryRunOutput {
@@ -191,7 +189,7 @@ impl Inscribe {
           total_fees: fees,
           reveal_count: total_reveal_count,
           batch_count,
-          batch_size: MEMPOOL_CHAIN_LIMIT,
+
         };
 
         serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
@@ -272,7 +270,7 @@ impl Inscribe {
             inscription_id,
             destination: destinations[i].clone(),
             total_fees: fees,
-            batch_size: MEMPOOL_CHAIN_LIMIT,
+  
             created_at: Utc::now(),
             reveals: current_reveals,
           });
@@ -348,7 +346,7 @@ impl Inscribe {
           fees,
           reveal_count,
           batch_count,
-          batch_size: MEMPOOL_CHAIN_LIMIT,
+
         };
 
         serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
@@ -428,7 +426,7 @@ impl Inscribe {
           inscription_id,
           destination: reveal_tx_destination.clone(),
           total_fees: fees,
-          batch_size: MEMPOOL_CHAIN_LIMIT,
+
           created_at: Utc::now(),
           reveals,
         };

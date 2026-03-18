@@ -33,7 +33,6 @@ pub(crate) struct RevealJob {
   pub(crate) inscription_id: InscriptionId,
   pub(crate) destination: Address,
   pub(crate) total_fees: u64,
-  pub(crate) batch_size: usize,
   pub(crate) created_at: DateTime<Utc>,
   pub(crate) reveals: Vec<RevealTx>,
 }
@@ -45,7 +44,7 @@ impl RevealJob {
 
   pub(crate) fn broadcast_batch(&mut self, client: &Client) -> bool {
     let mut changed = false;
-    for reveal in self.reveals.iter_mut().filter(|r| !r.broadcast).take(self.batch_size) {
+    for reveal in self.reveals.iter_mut().filter(|r| !r.broadcast).take(MEMPOOL_CHAIN_LIMIT) {
       match client.call::<Txid>("sendrawtransaction", &[serde_json::to_value(&reveal.raw_hex).unwrap()]) {
         Ok(_) => {
           reveal.broadcast = true;
@@ -268,7 +267,6 @@ mod tests {
       inscription_id,
       destination,
       total_fees: 1000,
-      batch_size: 23,
       created_at: Utc::now(),
       reveals: vec![RevealTx {
         index: 0,
