@@ -39,7 +39,7 @@ struct DryRunOutput {
   destination: Address,
   fees: u64,
   reveal_count: usize,
-  batch_count: usize,
+  broadcast_rounds: usize,
 }
 
 #[derive(Debug, Parser)]
@@ -164,7 +164,7 @@ impl Inscribe {
           });
         }
 
-        let batch_count = (total_reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+        let broadcast_rounds = (total_reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
 
         let dry_dir = wallet.settings().data_dir()
           .join("wallets")
@@ -180,7 +180,7 @@ impl Inscribe {
           inscriptions: Vec<InscriptionOutput>,
           total_fees: u64,
           reveal_count: usize,
-          batch_count: usize,
+          broadcast_rounds: usize,
         }
 
         let output = BatchDryRunOutput {
@@ -188,7 +188,7 @@ impl Inscribe {
           inscriptions: inscription_outputs,
           total_fees: fees,
           reveal_count: total_reveal_count,
-          batch_count,
+          broadcast_rounds,
 
         };
 
@@ -328,7 +328,7 @@ impl Inscribe {
 
       if self.dry_run {
         let inscription_id = txs[1].txid().into();
-        let batch_count = (reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+        let broadcast_rounds = (reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
 
         let dry_dir = wallet.settings().data_dir()
           .join("wallets")
@@ -345,7 +345,7 @@ impl Inscribe {
           destination: reveal_tx_destination,
           fees,
           reveal_count,
-          batch_count,
+          broadcast_rounds,
 
         };
 
