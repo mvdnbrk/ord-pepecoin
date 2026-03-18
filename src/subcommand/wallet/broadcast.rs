@@ -15,6 +15,9 @@ impl Broadcast {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RevealJob {
+  pub(crate) file_name: String,
+  pub(crate) content_type: String,
+  pub(crate) file_size: u64,
   pub(crate) commit_txid: Txid,
   pub(crate) inscription_id: InscriptionId,
   pub(crate) destination: Address,
@@ -152,6 +155,9 @@ mod tests {
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     let job = RevealJob {
+      file_name: "test.png".to_string(),
+      content_type: "image/png".to_string(),
+      file_size: 520,
       commit_txid,
       inscription_id,
       destination,

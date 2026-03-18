@@ -273,7 +273,11 @@ impl Inscribe {
 
         fs::create_dir_all(job_file.parent().unwrap())?;
 
+        let batch_path = self.batch.as_ref().unwrap();
         let mut job = RevealJob {
+          file_name: batch_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+          content_type: "application/yaml".to_string(),
+          file_size: fs::metadata(batch_path).map(|m| m.len()).unwrap_or(0),
           commit_txid,
           inscription_id: inscription_outputs[0].inscription,
           destination: inscription_outputs[0].destination.clone(),
@@ -435,7 +439,11 @@ impl Inscribe {
 
         fs::create_dir_all(job_file.parent().unwrap())?;
 
+        let file_path = self.file.as_ref().unwrap();
         let mut job = RevealJob {
+          file_name: file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+          content_type: Media::content_type_for_path(file_path).unwrap_or("application/octet-stream").to_string(),
+          file_size: fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
           commit_txid: commit,
           inscription_id,
           destination: reveal_tx_destination.clone(),
