@@ -9,6 +9,7 @@ pub mod balance;
 pub(crate) mod batch;
 pub mod broadcast;
 pub mod create;
+pub(crate) mod job;
 pub(crate) mod inscribe;
 pub mod inscriptions;
 pub mod outputs;

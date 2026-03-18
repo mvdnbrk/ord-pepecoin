@@ -174,7 +174,7 @@ impl Server {
 
           // Process reveal broadcast jobs every 60 seconds
           if last_job_check.elapsed() >= Duration::from_secs(60) {
-            if let Err(error) = super::wallet::broadcast::process_pending_jobs(&settings_clone) {
+            if let Err(error) = super::wallet::job::process_pending_jobs(&settings_clone) {
               log::warn!("Failed to process reveal jobs: {error}");
             }
             last_job_check = std::time::Instant::now();

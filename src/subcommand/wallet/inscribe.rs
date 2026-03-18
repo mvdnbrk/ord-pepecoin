@@ -19,10 +19,8 @@ use {
     },
     BatchOutput, InscriptionOutput,
   },
-  super::broadcast::{RevealJob, RevealTx},
+  super::job::{RevealJob, RevealEntry, MEMPOOL_CHAIN_LIMIT},
 };
-
-const MEMPOOL_CHAIN_LIMIT: usize = 23;
 
 #[derive(Serialize)]
 struct Output {
@@ -247,7 +245,7 @@ impl Inscribe {
             tx.input[0].script_sig = script_sig.into_script();
             last_txid = tx.txid();
 
-            all_reveals.push(RevealTx {
+            all_reveals.push(RevealEntry {
               index: all_reveals.len(),
               txid: tx.txid(),
               raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
@@ -265,13 +263,9 @@ impl Inscribe {
           });
         }
 
-        let job_file = wallet.settings().data_dir()
-          .join("wallets")
-          .join(wallet.name())
-          .join("jobs")
-          .join(format!("{}.json", commit_txid));
-
-        fs::create_dir_all(job_file.parent().unwrap())?;
+        let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
+        fs::create_dir_all(&jobs_dir)?;
+        let job_file = jobs_dir.join(format!("{}.json", commit_txid));
 
         let batch_path = self.batch.as_ref().unwrap();
         let mut job = RevealJob {
@@ -287,26 +281,8 @@ impl Inscribe {
           reveals: all_reveals,
         };
 
-        // Broadcast first batch
-        for reveal in job.reveals.iter_mut().take(MEMPOOL_CHAIN_LIMIT) {
-          match client.call::<Txid>("sendrawtransaction", &[serde_json::to_value(&reveal.raw_hex)?]) {
-            Ok(_) => {
-              reveal.broadcast = true;
-            }
-            Err(e) => {
-              let error_msg = e.to_string();
-              if error_msg.contains("-26") && error_msg.contains("too-long-mempool-chain") {
-                break;
-              } else if error_msg.contains("-27") || error_msg.contains("Transaction already in mempool") {
-                reveal.broadcast = true;
-              } else {
-                return Err(e.into());
-              }
-            }
-          }
-        }
-
-        serde_json::to_writer_pretty(fs::File::create(&job_file)?, &job)?;
+        job.broadcast_batch(client);
+        job.save(&job_file)?;
 
         print_json(BatchOutput {
           commit: commit_txid,
@@ -422,7 +398,7 @@ impl Inscribe {
           }
           reveal_txid = last_txid;
 
-          reveals.push(RevealTx {
+          reveals.push(RevealEntry {
             index: i - 1,
             txid: reveal_txid,
             raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&reveal_tx)),
@@ -431,13 +407,9 @@ impl Inscribe {
           });
         }
 
-        let job_file = wallet.settings().data_dir()
-          .join("wallets")
-          .join(wallet.name())
-          .join("jobs")
-          .join(format!("{}.json", commit));
-
-        fs::create_dir_all(job_file.parent().unwrap())?;
+        let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
+        fs::create_dir_all(&jobs_dir)?;
+        let job_file = jobs_dir.join(format!("{}.json", commit));
 
         let file_path = self.file.as_ref().unwrap();
         let mut job = RevealJob {
@@ -453,26 +425,8 @@ impl Inscribe {
           reveals,
         };
 
-        // Broadcast first batch
-        for reveal in job.reveals.iter_mut().take(MEMPOOL_CHAIN_LIMIT) {
-          match client.call::<Txid>("sendrawtransaction", &[serde_json::to_value(&reveal.raw_hex)?]) {
-            Ok(_) => {
-              reveal.broadcast = true;
-            }
-            Err(e) => {
-              let error_msg = e.to_string();
-              if error_msg.contains("-26") && error_msg.contains("too-long-mempool-chain") {
-                break;
-              } else if error_msg.contains("-27") || error_msg.contains("Transaction already in mempool") {
-                reveal.broadcast = true;
-              } else {
-                return Err(e.into());
-              }
-            }
-          }
-        }
-
-        serde_json::to_writer_pretty(fs::File::create(&job_file)?, &job)?;
+        job.broadcast_batch(client);
+        job.save(&job_file)?;
 
         print_json(Output {
           commit,
