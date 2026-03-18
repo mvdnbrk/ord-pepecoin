@@ -82,7 +82,77 @@ pub(crate) struct Inscribe {
   pub(crate) batch: Option<PathBuf>,
 }
 
-const BATCH_COMMIT_CHUNK_SIZE: usize = 2000;
+pub(crate) const BATCH_COMMIT_CHUNK_SIZE: usize = 2000;
+
+struct SignedReveal {
+  reveals: Vec<RevealTx>,
+  inscription_id: InscriptionId,
+  last_txid: Txid,
+}
+
+/// Sign a chain of reveal transactions, returning signed RevealTx entries.
+///
+/// Each reveal tx in the chain spends the previous one's output.
+/// The first reveal spends `parent_outpoint`.
+fn sign_reveal_chain(
+  chain: Vec<super::batch::plan::RevealTx>,
+  parent_outpoint: OutPoint,
+  privkey: &PrivateKey,
+  secp: &Secp256k1<secp256k1::All>,
+) -> Result<SignedReveal> {
+  let mut last_txid = parent_outpoint.txid;
+  let mut reveals = Vec::new();
+
+  for (j, reveal) in chain.into_iter().enumerate() {
+    let mut tx = reveal.tx;
+    tx.input[0].previous_output = if j == 0 {
+      parent_outpoint
+    } else {
+      OutPoint { txid: last_txid, vout: 0 }
+    };
+
+    let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
+    let msg = secp256k1::Message::from_slice(&sighash[..])?;
+    let sig = secp.sign_ecdsa(&msg, &privkey.inner);
+
+    let mut sig_bytes = sig.serialize_der().to_vec();
+    sig_bytes.push(EcdsaSighashType::All as u8);
+
+    let mut script_sig = script::Builder::new();
+    for instruction in reveal.partial_script.instructions() {
+      match instruction {
+        Ok(script::Instruction::PushBytes(data)) => {
+          script_sig = script_sig.push_slice(data);
+        }
+        Ok(script::Instruction::Op(op)) => {
+          script_sig = script_sig.push_opcode(op);
+        }
+        _ => {}
+      }
+    }
+    script_sig = script_sig.push_slice(&sig_bytes);
+    script_sig = script_sig.push_slice(reveal.redeem_script.as_bytes());
+
+    tx.input[0].script_sig = script_sig.into_script();
+    last_txid = tx.txid();
+
+    reveals.push(RevealTx {
+      index: j,
+      txid: last_txid,
+      raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
+      broadcast: false,
+      confirmed: false,
+    });
+  }
+
+  let inscription_id = InscriptionId { txid: reveals[0].txid, index: 0 };
+
+  Ok(SignedReveal {
+    reveals,
+    inscription_id,
+    last_txid,
+  })
+}
 
 impl Inscribe {
   pub(crate) fn validate_files(&self) -> Result {
@@ -272,64 +342,18 @@ impl Inscribe {
         let secp = Secp256k1::new();
         let mut inscription_outputs = Vec::new();
 
-        for (_chunk_idx, (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees)) in all_chunk_results.into_iter().enumerate() {
+        for (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees) in all_chunk_results {
           let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
           let commit_txid = signed_commit_tx.txid();
           let commit_raw_hex = hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
 
           for (i, chain) in reveal_chains.into_iter().enumerate() {
-            let mut last_txid = commit_txid;
-            let mut signed_chain = Vec::new();
-            let mut current_reveals = Vec::new();
+            let parent = OutPoint { txid: commit_txid, vout: i as u32 };
+            let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
 
-            for (j, reveal) in chain.into_iter().enumerate() {
-              let mut tx = reveal.tx;
-              if j == 0 {
-                tx.input[0].previous_output = OutPoint { txid: commit_txid, vout: i as u32 };
-              } else {
-                tx.input[0].previous_output = OutPoint { txid: last_txid, vout: 0 };
-              }
-
-              let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
-              let msg = secp256k1::Message::from_slice(&sighash[..])?;
-              let sig = secp.sign_ecdsa(&msg, &privkey.inner);
-
-              let mut sig_bytes = sig.serialize_der().to_vec();
-              sig_bytes.push(EcdsaSighashType::All as u8);
-
-              let mut script_sig = script::Builder::new();
-              for instruction in reveal.partial_script.instructions() {
-                match instruction {
-                  Ok(script::Instruction::PushBytes(data)) => {
-                    script_sig = script_sig.push_slice(data);
-                  }
-                  Ok(script::Instruction::Op(op)) => {
-                    script_sig = script_sig.push_opcode(op);
-                  }
-                  _ => {}
-                }
-              }
-              script_sig = script_sig.push_slice(&sig_bytes);
-              script_sig = script_sig.push_slice(reveal.redeem_script.as_bytes());
-
-              tx.input[0].script_sig = script_sig.into_script();
-              last_txid = tx.txid();
-
-              current_reveals.push(RevealTx {
-                index: j,
-                txid: tx.txid(),
-                raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
-                broadcast: false,
-                confirmed: false,
-              });
-
-              signed_chain.push(tx);
-            }
-
-            let inscription_id = InscriptionId { txid: signed_chain[0].txid(), index: 0 };
             inscription_outputs.push(InscriptionOutput {
-              inscription: inscription_id,
-              reveal: signed_chain.last().unwrap().txid(),
+              inscription: signed.inscription_id,
+              reveal: signed.last_txid,
               destination: chunk_destinations[i].clone(),
             });
 
@@ -343,11 +367,11 @@ impl Inscribe {
               commit_raw_hex: commit_raw_hex.clone(),
               commit_broadcast: false,
               commit_confirmed: false,
-              inscription_id,
+              inscription_id: signed.inscription_id,
               destination: chunk_destinations[i].clone(),
               total_fees: fees,
               created_at: Utc::now(),
-              reveals: current_reveals,
+              reveals: signed.reveals,
             });
           }
         }
@@ -442,66 +466,23 @@ impl Inscribe {
       } else {
         let signed_commit_tx = LocalSigner::sign_transaction(&wallet, txs[0].clone())?;
         let commit_raw_hex = hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
-        let mut last_txid = signed_commit_tx.txid();
-        let commit = last_txid;
+        let commit = signed_commit_tx.txid();
 
-        // Broadcast commit immediately for single-file path (preserves behavior)
         client
           .send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_commit_tx))
           .context("Failed to send commit transaction")?;
 
         let secp = Secp256k1::new();
-        let mut reveal_txid = Txid::all_zeros();
-        let mut inscription_id = InscriptionId { txid: Txid::all_zeros(), index: 0 };
-        let mut reveals = Vec::new();
+        let chain: Vec<super::batch::plan::RevealTx> = txs[1..].iter().zip(scripts.iter())
+          .map(|(tx, (redeem_script, partial_script))| super::batch::plan::RevealTx {
+            tx: tx.clone(),
+            redeem_script: redeem_script.clone(),
+            partial_script: partial_script.clone(),
+          })
+          .collect();
 
-        for i in 1..txs.len() {
-          let (redeem_script, partial_script) = &scripts[i - 1];
-
-          let mut reveal_tx = txs[i].clone();
-          reveal_tx.input[0].previous_output.txid = last_txid;
-
-          // Compute P2SH sighash and sign locally
-          let sighash = reveal_tx.signature_hash(0, redeem_script, EcdsaSighashType::All as u32);
-          let msg = secp256k1::Message::from_slice(&sighash[..])?;
-          let sig = secp.sign_ecdsa(&msg, &privkey.inner);
-
-          // Build DER signature with sighash type byte
-          let mut sig_bytes = sig.serialize_der().to_vec();
-          sig_bytes.push(EcdsaSighashType::All as u8);
-
-          // Build scriptSig: <inscription_data> <signature> <redeem_script>
-          let mut script_sig = script::Builder::new();
-          for instruction in partial_script.instructions() {
-            match instruction {
-              Ok(script::Instruction::PushBytes(data)) => {
-                script_sig = script_sig.push_slice(data);
-              }
-              Ok(script::Instruction::Op(op)) => {
-                script_sig = script_sig.push_opcode(op);
-              }
-              _ => {}
-            }
-          }
-          script_sig = script_sig.push_slice(&sig_bytes);
-          script_sig = script_sig.push_slice(redeem_script.as_bytes());
-
-          reveal_tx.input[0].script_sig = script_sig.into_script();
-          last_txid = reveal_tx.txid();
-          
-          if i == 1 {
-            inscription_id = last_txid.into();
-          }
-          reveal_txid = last_txid;
-
-          reveals.push(RevealTx {
-            index: i - 1,
-            txid: reveal_txid,
-            raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&reveal_tx)),
-            broadcast: false,
-            confirmed: false,
-          });
-        }
+        let parent = OutPoint { txid: commit, vout: 0 };
+        let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
 
         let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
         fs::create_dir_all(&jobs_dir)?;
@@ -516,12 +497,11 @@ impl Inscribe {
           commit_raw_hex,
           commit_broadcast: true,
           commit_confirmed: false,
-          inscription_id,
+          inscription_id: signed.inscription_id,
           destination: reveal_tx_destination.clone(),
           total_fees: fees,
-
           created_at: Utc::now(),
-          reveals,
+          reveals: signed.reveals,
         };
 
         job.broadcast_batch(client);
@@ -529,13 +509,11 @@ impl Inscribe {
 
         print_json(Output {
           commit,
-          reveal: reveal_txid,
-          inscription: inscription_id,
+          reveal: signed.last_txid,
+          inscription: signed.inscription_id,
           destination: reveal_tx_destination,
           fees,
         })?;
-
-        log::info!("Reveal broadcast job created at: {}", job_file.display());
       }
     }
 

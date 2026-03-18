@@ -389,4 +389,142 @@ mod tests {
     assert_eq!(deserialized.reveals[0].broadcast, true);
     assert_eq!(deserialized.file_name, "test.png");
   }
+
+  fn make_job(commit_txid: Txid, num_reveals: usize, broadcast: bool, confirmed: bool) -> RevealJob {
+    let inscription_id = InscriptionId { txid: commit_txid, index: 0 };
+    let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
+
+    RevealJob {
+      file_name: "test.png".to_string(),
+      content_type: "image/png".to_string(),
+      file_size: 520,
+      commit_txid,
+      commit_raw_hex: "0100000000".to_string(),
+      commit_broadcast: broadcast,
+      commit_confirmed: confirmed,
+      inscription_id,
+      destination,
+      total_fees: 1000,
+      created_at: Utc::now(),
+      reveals: (0..num_reveals)
+        .map(|i| RevealTx {
+          index: i,
+          txid: commit_txid,
+          raw_hex: format!("01000000{:02x}", i),
+          broadcast,
+          confirmed,
+        })
+        .collect(),
+    }
+  }
+
+  #[test]
+  fn all_confirmed_when_commit_and_reveals_confirmed() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let job = make_job(txid, 3, true, true);
+    assert!(job.all_confirmed());
+  }
+
+  #[test]
+  fn not_all_confirmed_when_commit_unconfirmed() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let mut job = make_job(txid, 3, true, true);
+    job.commit_confirmed = false;
+    assert!(!job.all_confirmed());
+  }
+
+  #[test]
+  fn not_all_confirmed_when_reveal_unconfirmed() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let mut job = make_job(txid, 3, true, true);
+    job.reveals[1].confirmed = false;
+    assert!(!job.all_confirmed());
+  }
+
+  #[test]
+  fn has_pending_when_commit_not_broadcast() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let job = make_job(txid, 3, false, false);
+    assert!(job.has_pending());
+  }
+
+  #[test]
+  fn has_pending_when_reveals_not_broadcast() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let mut job = make_job(txid, 3, true, false);
+    job.reveals[2].broadcast = false;
+    assert!(job.has_pending());
+  }
+
+  #[test]
+  fn no_pending_when_all_broadcast() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let job = make_job(txid, 3, true, false);
+    assert!(!job.has_pending());
+  }
+
+  #[test]
+  fn status_reports_counts() {
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let mut job = make_job(txid, 5, true, false);
+    job.reveals[0].confirmed = true;
+    job.reveals[1].confirmed = true;
+    job.reveals[3].broadcast = false;
+    job.reveals[4].broadcast = false;
+
+    let status = job.status(Some("my-batch".to_string()));
+    assert_eq!(status.reveals_total, 5);
+    assert_eq!(status.reveals_confirmed, 2);
+    assert_eq!(status.reveals_broadcast, 3);
+    assert!(!status.completed);
+    assert_eq!(status.batch_name, Some("my-batch".to_string()));
+  }
+
+  #[test]
+  fn batch_complete_when_no_json_files() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("complete")).unwrap();
+    fs::write(dir.path().join("batch.yaml"), "test").unwrap();
+    assert!(is_batch_complete(dir.path()));
+  }
+
+  #[test]
+  fn batch_not_complete_with_json_files() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("job.json"), "{}").unwrap();
+    assert!(!is_batch_complete(dir.path()));
+  }
+
+  #[test]
+  fn job_save_and_load() {
+    let dir = tempfile::tempdir().unwrap();
+    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let job = make_job(txid, 2, true, false);
+
+    let path = dir.path().join("test.json");
+    job.save(&path).unwrap();
+
+    let loaded: RevealJob = serde_json::from_reader(fs::File::open(&path).unwrap()).unwrap();
+    assert_eq!(loaded.commit_txid, txid);
+    assert_eq!(loaded.reveals.len(), 2);
+    assert_eq!(loaded.file_name, "test.png");
+  }
+
+  #[test]
+  fn sanitize_batch_name_replaces_special_chars() {
+    assert_eq!(sanitize_batch_name("my collection!@#"), "my_collection___");
+    assert_eq!(sanitize_batch_name("test-batch_01"), "test-batch_01");
+    assert_eq!(sanitize_batch_name("a/b\\c"), "a_b_c");
+  }
+
+  #[test]
+  fn chunk_count_calculation() {
+    let chunk_size = 2000;
+    assert_eq!((1 + chunk_size - 1) / chunk_size, 1);
+    assert_eq!((2000 + chunk_size - 1) / chunk_size, 1);
+    assert_eq!((2001 + chunk_size - 1) / chunk_size, 2);
+    assert_eq!((4000 + chunk_size - 1) / chunk_size, 2);
+    assert_eq!((4001 + chunk_size - 1) / chunk_size, 3);
+    assert_eq!((10000 + chunk_size - 1) / chunk_size, 5);
+  }
 }
