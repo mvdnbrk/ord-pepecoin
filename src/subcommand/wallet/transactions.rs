@@ -19,6 +19,10 @@ impl Transactions {
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     let mut output = Vec::new();
     let mut seen = HashSet::new();
+
+    let addresses = wallet.addresses()?;
+    let address_set: HashSet<Address> = addresses.into_iter().collect();
+
     for tx in wallet
       .bitcoin_client()
       .list_transactions(
@@ -28,7 +32,12 @@ impl Transactions {
         None,
       )?
     {
-      if seen.insert(tx.info.txid) {
+      let belongs_to_wallet = match &tx.detail.address {
+        Some(address) => address_set.contains(address),
+        None => false,
+      };
+
+      if belongs_to_wallet && seen.insert(tx.info.txid) {
         output.push(Output {
           transaction: tx.info.txid,
           confirmations: tx.info.confirmations,

@@ -106,23 +106,6 @@ impl Wallet {
 
     let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
 
-    match bitcoin_client.call::<serde_json::Value>("loadwallet", &[serde_json::to_value(wallet_name)?]) {
-      Ok(_) => {}
-      Err(e) => {
-        let error_str = e.to_string();
-        if error_str.contains("-35") {
-          // wallet already loaded
-        } else if error_str.contains("-18") {
-          // wallet not found — auto-create for existing ordpep wallets
-          log::info!("Core wallet `{wallet_name}` not found, creating...");
-          Self::create_core_wallet(settings, wallet_name, true)?;
-          let _ = bitcoin_client.call::<serde_json::Value>("loadwallet", &[serde_json::to_value(wallet_name)?]);
-        } else {
-          log::warn!("failed to load wallet `{wallet_name}`: {e}");
-        }
-      }
-    }
-
     let database = Self::open_database(settings, wallet_name)?;
 
     let ord_client = OrdClient::builder()
@@ -155,6 +138,9 @@ impl Wallet {
       }
     }
 
+    let addresses = Self::addresses_from_database(&database, settings.chain())?;
+    let address_scripts: HashSet<Script> = addresses.iter().map(|a| a.script_pubkey()).collect();
+
     #[derive(Deserialize)]
     struct UnspentEntry {
       txid: Txid,
@@ -172,6 +158,11 @@ impl Wallet {
     for utxo in unspent {
       let script_pubkey = Script::from_str(&utxo.script_pub_key)
         .context("failed to parse scriptPubKey")?;
+      
+      if !address_scripts.contains(&script_pubkey) {
+        continue;
+      }
+
       let outpoint = OutPoint::new(utxo.txid, utxo.vout);
       let amount = Amount::from_btc(utxo.amount)
         .map_err(|e| anyhow!("invalid amount: {e}"))?;
@@ -194,6 +185,9 @@ impl Wallet {
       let outpoint = OutPoint::new(outpoint.txid, outpoint.vout);
       let tx = bitcoin_client.get_raw_transaction(&outpoint.txid)?;
       if let Some(txout) = tx.output.get(outpoint.vout as usize) {
+        if !address_scripts.contains(&txout.script_pubkey) {
+          continue;
+        }
         utxos.insert(outpoint, txout.clone());
         locked_utxos.insert(outpoint, txout.clone());
       }
@@ -287,39 +281,18 @@ impl Wallet {
     Ok(addresses)
   }
 
-  pub(crate) fn create_core_wallet(settings: &Settings, wallet_name: &str, rescan: bool) -> Result {
-    let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
-
-    // Try to create a named wallet. Pepecoin Core 1.1.0 doesn't support
-    // the /wallet/<name> HTTP endpoint for multi-wallet RPC routing, so we
-    // always fall back to using the default RPC client for importaddress.
-    match bitcoin_client.call::<serde_json::Value>(
-      "createwallet",
-      &[
-        serde_json::to_value(wallet_name)?,
-        serde_json::to_value(true)?, // disable_private_keys
-      ],
-    ) {
-      Ok(_) => log::info!("Created Pepecoin Core wallet `{wallet_name}`."),
-      Err(e) => {
-        if e.to_string().contains("-4") {
-          log::warn!("Pepecoin Core wallet `{wallet_name}` already exists.");
-          return Ok(());
-        }
-        log::warn!("Pepecoin Core does not support `createwallet`: {e}. Falling back to default wallet.");
-      }
-    }
-
-    Self::import_addresses(&bitcoin_client, settings, wallet_name, rescan)
+  pub(crate) fn addresses(&self) -> Result<Vec<Address>> {
+    Self::addresses_from_database(&self.database, self.chain())
   }
 
-  fn import_addresses(client: &Client, settings: &Settings, wallet_name: &str, rescan: bool) -> Result {
+  pub(crate) fn import_addresses(settings: &Settings, wallet_name: &str, rescan: bool) -> Result {
+    let bitcoin_client = settings.pepecoin_rpc_client_for_wallet_command()?;
     let database = Self::open_database(settings, wallet_name)?;
     let addresses = Self::addresses_from_database(&database, settings.chain())?;
 
     for (i, address) in addresses.iter().enumerate() {
       let is_last = i == addresses.len() - 1;
-      match client.call::<serde_json::Value>(
+      match bitcoin_client.call::<serde_json::Value>(
         "importaddress",
         &[
           serde_json::to_value(address.to_string())?,

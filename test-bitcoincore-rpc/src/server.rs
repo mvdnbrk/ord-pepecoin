@@ -666,78 +666,112 @@ impl Api for Server {
     _include_watchonly: Option<bool>,
   ) -> Result<Vec<ListTransactionResult>, jsonrpc_core::Error> {
     let state = self.state();
-    let mut txs = Vec::new();
+    let mut results = Vec::new();
 
-    let is_wallet_tx = |tx: &Transaction| {
+    let mut process_tx = |tx: &Transaction| {
         if tx.is_coin_base() {
-            return false;
+            return;
         }
-        for output in &tx.output {
+        
+        // Check outputs
+        for (vout, output) in tx.output.iter().enumerate() {
             if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
                 if state.address_pubkeys.contains_key(&address) {
-                    return true;
+                    results.push(ListTransactionResult {
+                        info: WalletTxInfo {
+                            confirmations: state.get_confirmations(tx),
+                            blockhash: None,
+                            blockindex: None,
+                            blocktime: None,
+                            blockheight: None,
+                            txid: tx.txid(),
+                            time: 0,
+                            timereceived: 0,
+                            bip125_replaceable: Bip125Replaceable::Unknown,
+                            wallet_conflicts: Vec::new(),
+                        },
+                        detail: GetTransactionResultDetail {
+                            address: Some(address),
+                            category: GetTransactionResultDetailCategory::Receive,
+                            amount: SignedAmount::from_sat(output.value as i64),
+                            label: None,
+                            vout: vout as u32,
+                            fee: Some(SignedAmount::from_sat(0)),
+                            abandoned: None,
+                        },
+                        trusted: None,
+                        comment: None,
+                    });
                 }
             }
         }
+
+        // Check inputs (for sends)
+        let mut sent_amount = 0;
+        let mut is_send = false;
+        let mut first_address = None;
+
         for input in &tx.input {
             if let Some(prev_tx) = state.transactions.get(&input.previous_output.txid) {
                 if let Some(output) = prev_tx.output.get(input.previous_output.vout as usize) {
                     if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
                         if state.address_pubkeys.contains_key(&address) {
-                            return true;
+                            sent_amount += output.value;
+                            is_send = true;
+                            if first_address.is_none() {
+                                first_address = Some(address);
+                            }
                         }
                     }
                 }
             }
         }
-        false
+
+        if is_send {
+            // For send entries, Core usually shows the first non-wallet output address
+            let destination = tx.output.iter()
+                .find_map(|o| Address::from_script(&o.script_pubkey, self.network).ok())
+                .filter(|a| !state.address_pubkeys.contains_key(a));
+
+            results.push(ListTransactionResult {
+                info: WalletTxInfo {
+                    confirmations: state.get_confirmations(tx),
+                    blockhash: None,
+                    blockindex: None,
+                    blocktime: None,
+                    blockheight: None,
+                    txid: tx.txid(),
+                    time: 0,
+                    timereceived: 0,
+                    bip125_replaceable: Bip125Replaceable::Unknown,
+                    wallet_conflicts: Vec::new(),
+                },
+                detail: GetTransactionResultDetail {
+                    address: destination,
+                    category: GetTransactionResultDetailCategory::Send,
+                    amount: SignedAmount::from_sat(-(sent_amount as i64)),
+                    label: None,
+                    vout: 0,
+                    fee: Some(SignedAmount::from_sat(0)), // Simplified
+                    abandoned: None,
+                },
+                trusted: None,
+                comment: None,
+            });
+        }
     };
 
     for block_hash in state.hashes.iter().rev() {
         let block = &state.blocks[block_hash];
         for tx in block.txdata.iter().rev() {
-            if is_wallet_tx(tx) {
-                txs.push(tx);
-            }
+            process_tx(tx);
         }
     }
     for tx in state.mempool.iter().rev() {
-        if is_wallet_tx(tx) {
-            txs.push(tx);
-        }
+        process_tx(tx);
     }
 
-    Ok(
-      txs
-        .into_iter()
-        .take(count.unwrap_or(u16::MAX).into())
-        .map(|tx| ListTransactionResult {
-          info: WalletTxInfo {
-            confirmations: state.get_confirmations(tx),
-            blockhash: None,
-            blockindex: None,
-            blocktime: None,
-            blockheight: None,
-            txid: tx.txid(),
-            time: 0,
-            timereceived: 0,
-            bip125_replaceable: Bip125Replaceable::Unknown,
-            wallet_conflicts: Vec::new(),
-          },
-          detail: GetTransactionResultDetail {
-            address: None,
-            category: GetTransactionResultDetailCategory::Immature,
-            amount: SignedAmount::from_sat(0),
-            label: None,
-            vout: 0,
-            fee: Some(SignedAmount::from_sat(0)),
-            abandoned: None,
-          },
-          trusted: None,
-          comment: None,
-        })
-        .collect(),
-    )
+    Ok(results.into_iter().take(count.unwrap_or(u16::MAX).into()).collect())
   }
 
   fn lock_unspent(
