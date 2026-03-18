@@ -309,14 +309,20 @@ impl Wallet {
 
     for (i, address) in addresses.iter().enumerate() {
       let is_last = i == addresses.len() - 1;
-      client.call::<serde_json::Value>(
+      match client.call::<serde_json::Value>(
         "importaddress",
         &[
           serde_json::to_value(address.to_string())?,
           serde_json::to_value("")?,
           serde_json::to_value(rescan && is_last)?,
         ],
-      )?;
+      ) {
+        Ok(_) => {}
+        Err(e) if e.to_string().contains("-4") => {
+          // address already imported, skip
+        }
+        Err(e) => return Err(e.into()),
+      }
     }
 
     Ok(())
