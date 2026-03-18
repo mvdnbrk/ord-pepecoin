@@ -12,6 +12,7 @@ pub mod create;
 pub(crate) mod job;
 pub(crate) mod inscribe;
 pub mod inscriptions;
+pub mod list;
 pub mod outputs;
 pub mod receive;
 mod restore;
@@ -46,6 +47,8 @@ pub(crate) enum WalletSubcommand {
   Inscribe(inscribe::Inscribe),
   #[clap(about = "List wallet inscriptions")]
   Inscriptions,
+  #[clap(about = "List all wallets")]
+  List,
   #[clap(about = "Generate receive address")]
   Receive,
   #[clap(about = "Restore wallet")]
@@ -93,6 +96,7 @@ impl WalletCommand {
         }
       }
       WalletSubcommand::Create(create) => create.run(settings, &wallet_name),
+      WalletSubcommand::List => list::run(settings),
       WalletSubcommand::Restore(restore) => restore.run(settings, &wallet_name),
       WalletSubcommand::Broadcast(broadcast) => broadcast.run(settings, &wallet_name),
     }
