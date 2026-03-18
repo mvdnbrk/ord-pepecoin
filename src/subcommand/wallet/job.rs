@@ -6,6 +6,21 @@ use {
 
 pub(crate) const MEMPOOL_CHAIN_LIMIT: usize = 23;
 
+#[derive(Debug, Serialize)]
+pub(crate) struct JobStatus {
+  pub(crate) file_name: String,
+  pub(crate) content_type: String,
+  pub(crate) file_size: u64,
+  pub(crate) commit_txid: Txid,
+  pub(crate) inscription_id: InscriptionId,
+  pub(crate) destination: Address,
+  pub(crate) total_fees: u64,
+  pub(crate) reveals_confirmed: usize,
+  pub(crate) reveals_broadcast: usize,
+  pub(crate) reveals_total: usize,
+  pub(crate) completed: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RevealJob {
   pub(crate) file_name: String,
@@ -102,6 +117,22 @@ impl RevealJob {
   pub(crate) fn has_pending(&self) -> bool {
     self.reveals.iter().any(|r| !r.broadcast)
   }
+
+  pub(crate) fn status(&self) -> JobStatus {
+    JobStatus {
+      file_name: self.file_name.clone(),
+      content_type: self.content_type.clone(),
+      file_size: self.file_size,
+      commit_txid: self.commit_txid,
+      inscription_id: self.inscription_id,
+      destination: self.destination.clone(),
+      total_fees: self.total_fees,
+      reveals_confirmed: self.confirmed_count(),
+      reveals_broadcast: self.reveals.iter().filter(|r| r.broadcast).count(),
+      reveals_total: self.reveals.len(),
+      completed: self.all_confirmed(),
+    }
+  }
 }
 
 pub(crate) fn process_pending_jobs(settings: &Settings) -> Result {
@@ -115,20 +146,21 @@ pub(crate) fn process_pending_jobs(settings: &Settings) -> Result {
       let wallet_name = entry.file_name().to_string_lossy().to_string();
       let jobs_dir = entry.path().join("jobs");
       if jobs_dir.exists() {
-        process_reveal_jobs(settings, &wallet_name)?;
+        let _ = process_reveal_jobs(settings, &wallet_name)?;
       }
     }
   }
   Ok(())
 }
 
-pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Result {
+pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Result<Vec<JobStatus>> {
   let jobs_dir = RevealJob::jobs_dir(settings, wallet_name);
   if !jobs_dir.exists() {
-    return Ok(());
+    return Ok(Vec::new());
   }
 
   let client = settings.pepecoin_rpc_client_for_wallet_command()?;
+  let mut statuses = Vec::new();
 
   for entry in fs::read_dir(&jobs_dir)? {
     let entry = entry?;
@@ -156,12 +188,12 @@ pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Res
       fs::create_dir_all(&complete_dir)?;
       fs::rename(&path, complete_dir.join(path.file_name().unwrap()))?;
       log::info!("Job {} completed", job.commit_txid);
-    } else {
-      log::info!("Job {}: {}/{} reveals confirmed", job.commit_txid, job.confirmed_count(), job.reveals.len());
     }
+
+    statuses.push(job.status());
   }
 
-  Ok(())
+  Ok(statuses)
 }
 
 #[cfg(test)]
