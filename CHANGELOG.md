@@ -8,6 +8,11 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ## [Unreleased]
 
 ### Added
+- Batched reveal broadcast for large inscriptions exceeding mempool chain limit ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
+- Job file persistence for reveal broadcasts with automatic server-side processing every 60s ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
+- `wallet broadcast` command for manual job processing ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
+- Batch directory structure for collection inscriptions with sliding window (max 100 active jobs) ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
+- Dry-run works without requiring wallet balance ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
 - Allow cross-inscription references via CSP (e.g. `<script src='/content/...'>`) ([#34](https://github.com/mvdnbrk/ord-pepecoin/pull/34))
 - Align media types with upstream: `Code(Language)`, `Font`, `Markdown`, `Model`, `Image(ImageRendering)` ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
 - Preview templates for code (highlight.js), fonts, markdown, and 3D models ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
