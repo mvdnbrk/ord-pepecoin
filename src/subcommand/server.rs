@@ -160,19 +160,32 @@ impl Server {
     let runtime = settings.runtime()?;
     runtime.block_on(async {
       let clone = index.clone();
-      let index_thread = thread::spawn(move || loop {
-        if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
-          log::info!("Index thread shutting down gracefully");
-          break;
-        }
-        if let Err(error) = clone.update() {
-          log::warn!("{error}");
-        }
-        for _ in 0..50 {
+      let settings_clone = settings.clone();
+      let index_thread = thread::spawn(move || {
+        let mut last_job_check = std::time::Instant::now();
+        loop {
           if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
+            log::info!("Index thread shutting down gracefully");
             break;
           }
-          thread::sleep(Duration::from_millis(100));
+          if let Err(error) = clone.update() {
+            log::warn!("{error}");
+          }
+
+          // Process reveal broadcast jobs every 60 seconds
+          if last_job_check.elapsed() >= Duration::from_secs(60) {
+            if let Err(error) = super::wallet::broadcast::process_pending_jobs(&settings_clone) {
+              log::warn!("Failed to process reveal jobs: {error}");
+            }
+            last_job_check = std::time::Instant::now();
+          }
+
+          for _ in 0..50 {
+            if INTERRUPTS.load(atomic::Ordering::Relaxed) > 0 {
+              break;
+            }
+            thread::sleep(Duration::from_millis(100));
+          }
         }
       });
 

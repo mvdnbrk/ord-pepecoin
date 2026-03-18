@@ -7,6 +7,7 @@ use {
 pub mod addresses;
 pub mod balance;
 pub(crate) mod batch;
+pub mod broadcast;
 pub mod create;
 pub(crate) mod inscribe;
 pub mod inscriptions;
@@ -36,6 +37,8 @@ pub(crate) enum WalletSubcommand {
   Addresses,
   #[clap(about = "Get wallet balance")]
   Balance,
+  #[clap(about = "Broadcast reveal transactions")]
+  Broadcast(broadcast::Broadcast),
   #[clap(about = "Create new wallet")]
   Create(create::Create),
   #[clap(about = "Create inscription")]
@@ -90,6 +93,7 @@ impl WalletCommand {
       }
       WalletSubcommand::Create(create) => create.run(settings, &wallet_name),
       WalletSubcommand::Restore(restore) => restore.run(settings, &wallet_name),
+      WalletSubcommand::Broadcast(broadcast) => broadcast.run(settings, &wallet_name),
     }
   }
 }
