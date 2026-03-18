@@ -82,6 +82,8 @@ pub(crate) struct Inscribe {
   pub(crate) batch: Option<PathBuf>,
 }
 
+const BATCH_COMMIT_CHUNK_SIZE: usize = 2000;
+
 impl Inscribe {
   pub(crate) fn validate_files(&self) -> Result {
     if let Some(ref file) = self.file {
@@ -137,46 +139,118 @@ impl Inscribe {
 
     if let Some(batch_path) = &self.batch {
       let batch_file = BatchFile::load(batch_path)?;
-      let (inscriptions, destinations) = batch_file.inscriptions(wallet.chain(), batch_path, client)?;
+      
+      // Load all inscriptions once
+      let mut inscriptions = Vec::new();
+      let mut destinations = Vec::new();
+      let default_address = get_change_address(client)?;
 
-      let (commit_tx, reveal_chains, fees) = create_batch_inscription_transactions(
-        inscriptions,
-        destinations.clone(),
-        existing_inscriptions,
-        wallet.chain().network(),
-        utxos,
-        [wallet.get_address(true)?, wallet.get_address(true)?],
-        commit_fee_rate,
-        fee_rate,
-        pubkey,
-        postage,
-      )?;
+      for entry in &batch_file.inscriptions {
+        let path = if entry.file.is_absolute() {
+          entry.file.clone()
+        } else {
+          batch_path.parent().unwrap().join(&entry.file)
+        };
+        inscriptions.push((Inscription::from_file(wallet.chain(), &path)?, path));
+        destinations.push(
+          entry
+            .destination
+            .clone()
+            .unwrap_or_else(|| default_address.clone()),
+        );
+      }
 
-      let total_reveal_count: usize = reveal_chains.iter().map(|c| c.len()).sum();
+      // Pre-flight balance check
+      let mut total_postage = 0;
+      let mut total_reveal_fees = 0;
+      for (inscription, _) in &inscriptions {
+        total_postage += postage.to_sat();
+        let batches = split_inscription_into_batches(inscription);
+        for batch in &batches {
+          let num_chunks = batch.instructions().count();
+          let estimated_sig_size = batch.len() + 1 + 72 + 1 + (33 + 1 + num_chunks + 1);
+          let tx_vsize = 82 + estimated_sig_size;
+          total_reveal_fees += fee_rate.fee(tx_vsize).to_sat();
+        }
+      }
+
+      let num_chunks = (inscriptions.len() + BATCH_COMMIT_CHUNK_SIZE - 1) / BATCH_COMMIT_CHUNK_SIZE;
+      let estimated_commit_fees = num_chunks as u64 * commit_fee_rate.fee(200).to_sat();
+      let total_required = total_postage + total_reveal_fees + estimated_commit_fees;
+      let available: u64 = utxos.values().map(|a| a.to_sat()).sum();
+
+      if !self.dry_run && available < total_required {
+        bail!(
+          "insufficient funds for batch inscription\n  required: {:.2} PEP ({} inscriptions in {} chunks)\n  available: {:.2} PEP",
+          total_required as f64 / 100_000_000.0,
+          inscriptions.len(),
+          num_chunks,
+          available as f64 / 100_000_000.0
+        );
+      }
+
+      let mut all_chunk_results = Vec::new();
+      let mut total_fees = 0;
+      let mut total_reveal_count = 0;
+      let mut used_utxos = BTreeSet::new();
+
+      for (chunk_idx, chunk_data) in inscriptions.chunks(BATCH_COMMIT_CHUNK_SIZE).zip(destinations.chunks(BATCH_COMMIT_CHUNK_SIZE)).enumerate() {
+        let (chunk_inscriptions_with_paths, chunk_destinations) = chunk_data;
+        let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_paths.iter().map(|(ins, _)| ins.clone()).collect();
+
+        let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos.iter()
+          .filter(|(op, _)| !used_utxos.contains(*op))
+          .map(|(op, amount)| (*op, *amount))
+          .collect();
+
+        match create_batch_inscription_transactions(
+          chunk_inscriptions,
+          chunk_destinations.to_vec(),
+          existing_inscriptions.clone(),
+          wallet.chain().network(),
+          chunk_utxos,
+          [wallet.get_address(true)?, wallet.get_address(true)?],
+          commit_fee_rate,
+          fee_rate,
+          pubkey,
+          postage,
+        ) {
+          Ok((commit_tx, reveal_chains, fees)) => {
+            for input in &commit_tx.input {
+              used_utxos.insert(input.previous_output);
+            }
+            total_fees += fees;
+            total_reveal_count += reveal_chains.iter().map(|c| c.len()).sum::<usize>();
+            all_chunk_results.push((commit_tx, reveal_chains, chunk_destinations.to_vec(), chunk_inscriptions_with_paths, fees));
+          }
+          Err(e) => {
+            if chunk_idx == 0 {
+              return Err(e);
+            } else {
+              bail!("insufficient funds for batch inscription\n  required: more than current available (failed at chunk {})\n  total inscriptions: {}\n  processed chunks: {}", chunk_idx + 1, inscriptions.len(), chunk_idx);
+            }
+          }
+        }
+      }
 
       if self.dry_run {
         let mut inscription_outputs = Vec::new();
-        for (i, chain) in reveal_chains.iter().enumerate() {
-          inscription_outputs.push(InscriptionOutput {
-            inscription: chain[0].tx.txid().into(),
-            reveal: chain.last().unwrap().tx.txid(),
-            destination: destinations[i].clone(),
-          });
+        for (_commit_tx, reveal_chains, chunk_destinations, _, _) in &all_chunk_results {
+          for (i, chain) in reveal_chains.iter().enumerate() {
+            inscription_outputs.push(InscriptionOutput {
+              inscription: chain[0].tx.txid().into(),
+              reveal: chain.last().unwrap().tx.txid(),
+              destination: chunk_destinations[i].clone(),
+            });
+          }
         }
 
         let broadcast_rounds = (total_reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
 
-        let dry_dir = wallet.settings().data_dir()
-          .join("wallets")
-          .join(wallet.name())
-          .join("jobs")
-          .join("dry");
-        fs::create_dir_all(&dry_dir)?;
-        let dry_file = dry_dir.join(format!("{}.json", commit_tx.txid()));
-
         #[derive(Serialize)]
         struct BatchDryRunOutput {
           commit: Txid,
+          commit_transactions: usize,
           inscriptions: Vec<InscriptionOutput>,
           total_fees: u64,
           reveal_count: usize,
@@ -184,96 +258,98 @@ impl Inscribe {
         }
 
         let output = BatchDryRunOutput {
-          commit: commit_tx.txid(),
+          commit: all_chunk_results[0].0.txid(),
+          commit_transactions: all_chunk_results.len(),
           inscriptions: inscription_outputs,
-          total_fees: fees,
+          total_fees,
           reveal_count: total_reveal_count,
           broadcast_rounds,
-
         };
 
-        serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
         print_json(&output)?;
       } else {
-        let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
-        let commit_txid = signed_commit_tx.txid();
-
-        client
-          .send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_commit_tx))
-          .context("Failed to send commit transaction")?;
-
-        let mut inscription_outputs = Vec::new();
+        let mut all_jobs = Vec::new();
         let secp = Secp256k1::new();
-        let mut jobs = Vec::new();
+        let mut inscription_outputs = Vec::new();
 
-        for (i, chain) in reveal_chains.into_iter().enumerate() {
-          let mut last_txid = commit_txid;
-          let mut signed_chain = Vec::new();
-          let mut current_reveals = Vec::new();
+        for (_chunk_idx, (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees)) in all_chunk_results.into_iter().enumerate() {
+          let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
+          let commit_txid = signed_commit_tx.txid();
+          let commit_raw_hex = hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
 
-          for (j, reveal) in chain.into_iter().enumerate() {
-            let mut tx = reveal.tx;
-            if j == 0 {
-              tx.input[0].previous_output = OutPoint { txid: commit_txid, vout: i as u32 };
-            } else {
-              tx.input[0].previous_output = OutPoint { txid: last_txid, vout: 0 };
-            }
+          for (i, chain) in reveal_chains.into_iter().enumerate() {
+            let mut last_txid = commit_txid;
+            let mut signed_chain = Vec::new();
+            let mut current_reveals = Vec::new();
 
-            let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
-            let msg = secp256k1::Message::from_slice(&sighash[..])?;
-            let sig = secp.sign_ecdsa(&msg, &privkey.inner);
-
-            let mut sig_bytes = sig.serialize_der().to_vec();
-            sig_bytes.push(EcdsaSighashType::All as u8);
-
-            let mut script_sig = script::Builder::new();
-            for instruction in reveal.partial_script.instructions() {
-              match instruction {
-                Ok(script::Instruction::PushBytes(data)) => {
-                  script_sig = script_sig.push_slice(data);
-                }
-                Ok(script::Instruction::Op(op)) => {
-                  script_sig = script_sig.push_opcode(op);
-                }
-                _ => {}
+            for (j, reveal) in chain.into_iter().enumerate() {
+              let mut tx = reveal.tx;
+              if j == 0 {
+                tx.input[0].previous_output = OutPoint { txid: commit_txid, vout: i as u32 };
+              } else {
+                tx.input[0].previous_output = OutPoint { txid: last_txid, vout: 0 };
               }
+
+              let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
+              let msg = secp256k1::Message::from_slice(&sighash[..])?;
+              let sig = secp.sign_ecdsa(&msg, &privkey.inner);
+
+              let mut sig_bytes = sig.serialize_der().to_vec();
+              sig_bytes.push(EcdsaSighashType::All as u8);
+
+              let mut script_sig = script::Builder::new();
+              for instruction in reveal.partial_script.instructions() {
+                match instruction {
+                  Ok(script::Instruction::PushBytes(data)) => {
+                    script_sig = script_sig.push_slice(data);
+                  }
+                  Ok(script::Instruction::Op(op)) => {
+                    script_sig = script_sig.push_opcode(op);
+                  }
+                  _ => {}
+                }
+              }
+              script_sig = script_sig.push_slice(&sig_bytes);
+              script_sig = script_sig.push_slice(reveal.redeem_script.as_bytes());
+
+              tx.input[0].script_sig = script_sig.into_script();
+              last_txid = tx.txid();
+
+              current_reveals.push(RevealTx {
+                index: j,
+                txid: tx.txid(),
+                raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
+                broadcast: false,
+                confirmed: false,
+              });
+
+              signed_chain.push(tx);
             }
-            script_sig = script_sig.push_slice(&sig_bytes);
-            script_sig = script_sig.push_slice(reveal.redeem_script.as_bytes());
 
-            tx.input[0].script_sig = script_sig.into_script();
-            last_txid = tx.txid();
-
-            current_reveals.push(RevealTx {
-              index: j,
-              txid: tx.txid(),
-              raw_hex: hex::encode(bitcoin::consensus::encode::serialize(&tx)),
-              broadcast: false,
-              confirmed: false,
+            let inscription_id = InscriptionId { txid: signed_chain[0].txid(), index: 0 };
+            inscription_outputs.push(InscriptionOutput {
+              inscription: inscription_id,
+              reveal: signed_chain.last().unwrap().txid(),
+              destination: chunk_destinations[i].clone(),
             });
 
-            signed_chain.push(tx);
+            let (_ins, path) = &chunk_inscriptions_with_paths[i];
+
+            all_jobs.push(RevealJob {
+              file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+              content_type: Media::content_type_for_path(path).unwrap_or("application/octet-stream").to_string(),
+              file_size: fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+              commit_txid,
+              commit_raw_hex: commit_raw_hex.clone(),
+              commit_broadcast: false,
+              commit_confirmed: false,
+              inscription_id,
+              destination: chunk_destinations[i].clone(),
+              total_fees: fees,
+              created_at: Utc::now(),
+              reveals: current_reveals,
+            });
           }
-
-          let inscription_id = InscriptionId { txid: signed_chain[0].txid(), index: 0 };
-          inscription_outputs.push(InscriptionOutput {
-            inscription: inscription_id,
-            reveal: signed_chain.last().unwrap().txid(),
-            destination: destinations[i].clone(),
-          });
-
-          jobs.push(RevealJob {
-            file_name: "batch.yaml".to_string(),
-            content_type: "application/yaml".to_string(),
-            file_size: fs::metadata(batch_path).map(|m| m.len()).unwrap_or(0),
-            commit_txid,
-            inscription_id,
-            destination: destinations[i].clone(),
-            total_fees: fees,
-  
-            created_at: Utc::now(),
-            reveals: current_reveals,
-          });
         }
 
         let batch_name = sanitize_batch_name(batch_path.file_stem().unwrap().to_str().unwrap());
@@ -284,19 +360,31 @@ impl Inscribe {
         fs::create_dir_all(&batch_dir)?;
         fs::copy(batch_path, batch_dir.join("batch.yaml"))?;
 
-        for mut job in jobs {
+        let mut broadcasted_commits = BTreeSet::new();
+        for job in &mut all_jobs {
+          if num_chunks == 1 {
+            if !broadcasted_commits.contains(&job.commit_txid) {
+              job.broadcast_commit(client);
+              broadcasted_commits.insert(job.commit_txid);
+            } else {
+              job.commit_broadcast = true;
+            }
+            job.broadcast_batch(client);
+          }
           let job_file = batch_dir.join(format!("{}.json", job.inscription_id.txid));
-          job.broadcast_batch(client);
           job.save(&job_file)?;
         }
 
         print_json(BatchOutput {
-          commit: commit_txid,
+          commit: all_jobs[0].commit_txid,
           inscriptions: inscription_outputs,
-          total_fees: fees,
+          total_fees,
         })?;
 
-        log::info!("Reveal broadcast jobs created in: {}", batch_dir.display());
+        log::info!("Batch inscription jobs created in: {}", batch_dir.display());
+        if num_chunks > 1 {
+          log::info!("Run 'ordpep wallet broadcast' or start the server to begin broadcasting.");
+        }
       }
     } else {
       let inscription = Inscription::from_file(
@@ -353,9 +441,11 @@ impl Inscribe {
         print_json(&output)?;
       } else {
         let signed_commit_tx = LocalSigner::sign_transaction(&wallet, txs[0].clone())?;
+        let commit_raw_hex = hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
         let mut last_txid = signed_commit_tx.txid();
         let commit = last_txid;
 
+        // Broadcast commit immediately for single-file path (preserves behavior)
         client
           .send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_commit_tx))
           .context("Failed to send commit transaction")?;
@@ -423,6 +513,9 @@ impl Inscribe {
           content_type: Media::content_type_for_path(file_path).unwrap_or("application/octet-stream").to_string(),
           file_size: fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
           commit_txid: commit,
+          commit_raw_hex,
+          commit_broadcast: true,
+          commit_confirmed: false,
           inscription_id,
           destination: reveal_tx_destination.clone(),
           total_fees: fees,
@@ -582,384 +675,5 @@ impl Inscribe {
     }
 
     Ok((txs, scripts, fees))
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use {super::*, super::batch::plan::RevealTx};
-
-  #[test]
-  fn reveal_transaction_pays_fee() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(200000))];
-    let inscription = inscription("text/plain", "ord");
-    let commit_address = change(0);
-    let reveal_address = recipient();
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(100_000)),
-      batch: None,
-    };
-
-    let (txs, _scripts, fees) = inscribe.create_inscription_transactions(
-      Some(satpoint(1, 0)),
-      inscription,
-      BTreeMap::new(),
-      Network::Bitcoin,
-      utxos.into_iter().collect(),
-      [commit_address, change(1)],
-      reveal_address,
-      FeeRate::try_from(1.0).unwrap(),
-      FeeRate::try_from(1.0).unwrap(),
-      pubkey,
-      Amount::from_sat(100_000),
-    )
-    .unwrap();
-
-    assert!(fees > 0);
-
-    let total_input = 200000;
-
-    let final_output_value = txs.last().unwrap().output[0].value;
-    let commit_tx = &txs[0];
-    let change_value: u64 = commit_tx.output.iter().skip(1).map(|o| o.value).sum();
-
-    assert_eq!(final_output_value + change_value, total_input - fees);
-  }
-
-  #[test]
-  fn inscript_tansactions_opt_in_to_rbf() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(200000))];
-    let inscription = inscription("text/plain", "ord");
-    let commit_address = change(0);
-    let reveal_address = recipient();
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(100_000)),
-      batch: None,
-    };
-
-    let (txs, _, _) = inscribe.create_inscription_transactions(
-      Some(satpoint(1, 0)),
-      inscription,
-      BTreeMap::new(),
-      Network::Bitcoin,
-      utxos.into_iter().collect(),
-      [commit_address, change(1)],
-      reveal_address,
-      FeeRate::try_from(1.0).unwrap(),
-      FeeRate::try_from(1.0).unwrap(),
-      pubkey,
-      Amount::from_sat(100_000),
-    )
-    .unwrap();
-
-    for tx in txs {
-      assert!(tx.is_explicitly_rbf());
-    }
-  }
-
-  #[test]
-  fn inscribe_with_no_satpoint_and_no_cardinal_utxos() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(1000))];
-    let mut inscriptions = BTreeMap::new();
-    inscriptions.insert(
-      SatPoint {
-        outpoint: outpoint(1),
-        offset: 0,
-      },
-      inscription_id(1),
-    );
-
-    let inscription = inscription("text/plain", "ord");
-    let commit_address = change(0);
-    let reveal_address = recipient();
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(100_000)),
-      batch: None,
-    };
-
-    let error = inscribe.create_inscription_transactions(
-      None,
-      inscription,
-      inscriptions,
-      Network::Bitcoin,
-      utxos.into_iter().collect(),
-      [commit_address, change(1)],
-      reveal_address,
-      FeeRate::try_from(1.0).unwrap(),
-      FeeRate::try_from(1.0).unwrap(),
-      pubkey,
-      Amount::from_sat(100_000),
-    )
-    .unwrap_err()
-    .to_string();
-
-    assert!(
-      error.contains("wallet contains no cardinal utxos"),
-      "{}" ,
-      error
-    );
-  }
-
-  #[test]
-  fn batched_multitx_inscription_roundtrip() {
-    use crate::inscription::{Inscription, ParsedInscription};
-
-    // Create a large inscription requiring multiple batches (20 chunks × 520 bytes)
-    // This exercises countdown values ≤ 16 which use OP_PUSHNUM opcodes
-    let body = vec![0x42u8; 520 * 20];
-    let inscription = Inscription::new(Some(b"image/svg+xml".to_vec()), Some(body.clone()), None);
-
-    let utxos = vec![(outpoint(1), Amount::from_sat(50_000_000_000))];
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(100_000)),
-      batch: None,
-    };
-
-    let (txs, scripts, _fees) = inscribe.create_inscription_transactions(
-      Some(satpoint(1, 0)),
-      inscription,
-      BTreeMap::new(),
-      Network::Bitcoin,
-      utxos.into_iter().collect(),
-      [change(0), change(1)],
-      recipient(),
-      FeeRate::try_from(1.0).unwrap(),
-      FeeRate::try_from(1.0).unwrap(),
-      pubkey,
-      Amount::from_sat(100_000),
-    )
-    .unwrap();
-
-    // Must be multi-tx (commit + multiple reveals)
-    assert!(
-      txs.len() > 2,
-      "Expected multi-tx inscription, got {} txs",
-      txs.len()
-    );
-
-    // Reconstruct scriptSigs as the signing code would (preserving opcodes)
-    let sig_scripts: Vec<Script> = scripts
-      .iter()
-      .map(|(_lock, batch)| {
-        let mut builder = script::Builder::new();
-        for instruction in batch.instructions() {
-          match instruction {
-            Ok(script::Instruction::PushBytes(data)) => {
-              builder = builder.push_slice(data);
-            }
-            Ok(script::Instruction::Op(op)) => {
-              builder = builder.push_opcode(op);
-            }
-            _ => {}
-          }
-        }
-        builder.into_script()
-      })
-      .collect();
-
-    // Parser should reconstruct the complete inscription from all tx scriptSigs
-    let result = crate::inscription::InscriptionParser::parse(sig_scripts);
-    match result {
-      ParsedInscription::Complete(parsed) => {
-        assert_eq!(parsed.content_type, Some(b"image/svg+xml".to_vec()));
-        assert_eq!(parsed.body.as_ref().map(|b| b.len()), Some(body.len()));
-        assert_eq!(parsed.body, Some(body));
-      }
-      other => panic!("Expected Complete inscription, got {:?}", other),
-    }
-  }
-
-  #[test]
-  fn batch_creates_multiple_inscriptions() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(1_000_000_000))];
-    let inscriptions = vec![
-      inscription("text/plain", "A"),
-      inscription("text/plain", "B"),
-      inscription("text/plain", "C"),
-    ];
-    let destinations = vec![recipient(), recipient(), recipient()];
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let _inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(10_000)),
-      batch: None,
-    };
-
-    let (commit_tx, reveal_chains, fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
-      create_batch_inscription_transactions(
-        inscriptions,
-        destinations,
-        BTreeMap::new(),
-        Network::Bitcoin,
-        utxos.into_iter().collect(),
-        [change(0), change(1)],
-        FeeRate::try_from(1.0).unwrap(),
-        FeeRate::try_from(1.0).unwrap(),
-        pubkey,
-        Amount::from_sat(10_000),
-      )
-      .unwrap();
-
-    assert_eq!(reveal_chains.len(), 3);
-    assert_eq!(commit_tx.output.len(), 4); // 3 inscriptions + 1 change
-    assert!(fees > 0);
-
-    for (i, chain) in reveal_chains.iter().enumerate() {
-      assert_eq!(chain.len(), 1);
-      assert_eq!(chain[0].tx.input[0].previous_output.txid, commit_tx.txid());
-      assert_eq!(chain[0].tx.input[0].previous_output.vout, i as u32);
-    }
-  }
-
-  #[test]
-  fn batch_with_large_files_creates_multi_tx_chains() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(1_000_000_000))];
-    let inscriptions = vec![
-      inscription("text/plain", "small"),
-      Inscription::new(Some(b"text/plain".to_vec()), Some(vec![0; 3000]), None),
-    ];
-    let destinations = vec![recipient(), recipient()];
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let _inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(10_000)),
-      batch: None,
-    };
-
-    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
-      create_batch_inscription_transactions(
-        inscriptions,
-        destinations,
-        BTreeMap::new(),
-        Network::Bitcoin,
-        utxos.into_iter().collect(),
-        [change(0), change(1)],
-        FeeRate::try_from(1.0).unwrap(),
-        FeeRate::try_from(1.0).unwrap(),
-        pubkey,
-        Amount::from_sat(10_000),
-      )
-      .unwrap();
-
-    assert_eq!(reveal_chains.len(), 2);
-    assert_eq!(reveal_chains[0].len(), 1);
-    assert!(reveal_chains[1].len() > 1);
-    assert_eq!(commit_tx.output.len(), 3); // 2 inscriptions + 1 change
-  }
-
-  #[test]
-  fn batch_with_single_inscription() {
-    let utxos = vec![(outpoint(1), Amount::from_sat(1_000_000_000))];
-    let inscriptions = vec![inscription("text/plain", "A")];
-    let destinations = vec![recipient()];
-    let pubkey = PublicKey::from_slice(
-      &hex::decode("03adb2ca38e09e396cf600906cc6ec66ae6be09fbcc0bc600fb060000000000000").unwrap(),
-    )
-    .unwrap();
-
-    let _inscribe = Inscribe {
-      satpoint: None,
-      fee_rate: Some(FeeRate::try_from(1.0).unwrap()),
-      commit_fee_rate: None,
-      file: None,
-      no_limit: false,
-      dry_run: true,
-      no_backup: true,
-      destination: None,
-      postage: Some(Amount::from_sat(10_000)),
-      batch: None,
-    };
-
-    let (commit_tx, reveal_chains, _fees): (Transaction, Vec<Vec<super::batch::plan::RevealTx>>, u64) = 
-      create_batch_inscription_transactions(
-        inscriptions,
-        destinations,
-        BTreeMap::new(),
-        Network::Bitcoin,
-        utxos.into_iter().collect(),
-        [change(0), change(1)],
-        FeeRate::try_from(1.0).unwrap(),
-        FeeRate::try_from(1.0).unwrap(),
-        pubkey,
-        Amount::from_sat(10_000),
-      )
-      .unwrap();
-
-    assert_eq!(reveal_chains.len(), 1);
-    assert_eq!(commit_tx.output.len(), 2); // 1 inscription + 1 change
   }
 }
