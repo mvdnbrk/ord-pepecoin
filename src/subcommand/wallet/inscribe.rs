@@ -117,11 +117,20 @@ impl Inscribe {
 
     let postage = self.postage.unwrap_or(wallet.chain().default_postage());
 
-    let utxos = wallet
+    let mut utxos = wallet
       .utxos()
       .iter()
       .map(|(outpoint, txout)| (*outpoint, Amount::from_sat(txout.value)))
       .collect::<BTreeMap<OutPoint, Amount>>();
+
+    // Add a large fake UTXO for dry-run so transaction building succeeds
+    // regardless of wallet balance.
+    if self.dry_run {
+      utxos.insert(
+        OutPoint::null(),
+        Amount::from_sat(1_000_000_000_000),
+      );
+    }
 
     let existing_inscriptions = wallet
       .inscriptions()
