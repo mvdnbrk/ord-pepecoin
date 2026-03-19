@@ -1,5 +1,6 @@
 .DS_Store
 /.ai
+/.claude
 /.idea
 /index.redb
 /ordpep.log
