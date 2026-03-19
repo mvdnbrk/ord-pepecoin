@@ -1391,102 +1391,367 @@ mod tests {
     }
   }
 
-  #[test]
-  fn parent_child() {
-    let context = Context::builder().build();
-    context.mine_blocks(1);
-
-    let parent_inscription = inscription("text/plain", "parent");
-    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
-      inputs: &[(1, 0, 0)],
-      script_sig: parent_inscription.to_p2sh_unlock(),
-      ..Default::default()
-    });
-    let parent_id = InscriptionId::from(parent_txid);
-
-    context.mine_blocks(1);
-
-    let mut tags = BTreeMap::new();
-    tags.insert("parent".to_string(), vec![parent_id.store().to_vec()]);
-
-    let child_inscription = Inscription::new(
-      Some("text/plain".as_bytes().to_vec()),
-      Some("child".as_bytes().to_vec()),
-      tags,
-    );
-
-    context.rpc_server.broadcast_tx(TransactionTemplate {
-      inputs: &[(2, 1, 0)], // spend parent (at 2,1,0)
-      script_sig: child_inscription.to_p2sh_unlock(),
-      ..Default::default()
-    });
-
-    context.mine_blocks(1);
-
-    let parent_number: u32 = 0;
-    let child_number: u32 = 1;
-
+  // Helper to read parent numbers for a given child inscription number
+  fn get_parent_numbers(context: &Context, child: u32) -> Vec<u32> {
     let rtx = context.index.database.begin_read().unwrap();
-    let number_to_parents = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS).unwrap();
-    let parent_to_children = rtx.open_multimap_table(PARENT_TO_CHILDREN).unwrap();
+    let table = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS).unwrap();
+    table
+      .get(&child)
+      .unwrap()
+      .map(|guard| guard.unwrap().value())
+      .collect()
+  }
 
-    assert_eq!(
-      number_to_parents
-        .get(&child_number)
-        .unwrap()
-        .map(|guard| guard.unwrap().value())
-        .collect::<Vec<_>>(),
-      vec![parent_number]
-    );
-
-    assert_eq!(
-      parent_to_children
-        .get(&parent_number)
-        .unwrap()
-        .map(|guard| guard.unwrap().value())
-        .collect::<Vec<_>>(),
-      vec![child_number]
-    );
+  // Helper to read child numbers for a given parent inscription number
+  fn get_child_numbers(context: &Context, parent: u32) -> Vec<u32> {
+    let rtx = context.index.database.begin_read().unwrap();
+    let table = rtx.open_multimap_table(PARENT_TO_CHILDREN).unwrap();
+    table
+      .get(&parent)
+      .unwrap()
+      .map(|guard| guard.unwrap().value())
+      .collect()
   }
 
   #[test]
-  fn parent_child_invalid_spend() {
+  fn inscription_with_parent_tag_and_parent_has_parent_entry() {
     let context = Context::builder().build();
     context.mine_blocks(1);
 
-    let parent_inscription = inscription("text/plain", "parent");
     let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
       inputs: &[(1, 0, 0)],
-      script_sig: parent_inscription.to_p2sh_unlock(),
+      script_sig: inscription("text/plain", "parent").to_p2sh_unlock(),
       ..Default::default()
     });
-    let parent_id = InscriptionId::from(parent_txid);
 
     context.mine_blocks(1);
 
+    let parent_id = InscriptionId::from(parent_txid);
     let mut tags = BTreeMap::new();
     tags.insert("parent".to_string(), vec![parent_id.store().to_vec()]);
 
-    let child_inscription = Inscription::new(
-      Some("text/plain".as_bytes().to_vec()),
-      Some("child".as_bytes().to_vec()),
-      tags,
-    );
-
     context.rpc_server.broadcast_tx(TransactionTemplate {
-      inputs: &[(2, 0, 0)], // DOES NOT spend parent
-      script_sig: child_inscription.to_p2sh_unlock(),
+      inputs: &[(2, 1, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
       ..Default::default()
     });
 
     context.mine_blocks(1);
 
-    let child_number: u32 = 1;
+    assert_eq!(get_parent_numbers(&context, 1), vec![0]);
+    assert_eq!(get_child_numbers(&context, 0), vec![1]);
+  }
 
-    let rtx = context.index.database.begin_read().unwrap();
-    let number_to_parents = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS).unwrap();
+  #[test]
+  fn inscription_with_parent_tag_without_parent_has_no_parent_entry() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
 
-    assert!(number_to_parents.get(&child_number).unwrap().next().is_none());
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id = InscriptionId::from(parent_txid);
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![parent_id.store().to_vec()]);
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)], // does NOT spend parent
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 1), Vec::<u32>::new());
+  }
+
+  #[test]
+  fn inscription_with_two_parent_tags_and_parents_has_parent_entries() {
+    let context = Context::builder().build();
+    context.mine_blocks(2);
+
+    let parent_txid_a = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent a").to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_txid_b = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)],
+      script_sig: inscription("text/plain", "parent b").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id_a = InscriptionId::from(parent_txid_a);
+    let parent_id_b = InscriptionId::from(parent_txid_b);
+    let mut tags = BTreeMap::new();
+    tags.insert(
+      "parent".to_string(),
+      vec![parent_id_a.store().to_vec(), parent_id_b.store().to_vec()],
+    );
+
+    // Spend both parents: parent_a is at (3,1,0), parent_b is at (3,2,0)
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(3, 1, 0), (3, 2, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 2), vec![0, 1]);
+    assert_eq!(get_child_numbers(&context, 0), vec![2]);
+    assert_eq!(get_child_numbers(&context, 1), vec![2]);
+  }
+
+  #[test]
+  fn inscription_with_repeated_parent_tags_has_singular_parent_entry() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id = InscriptionId::from(parent_txid);
+    let mut tags = BTreeMap::new();
+    // Same parent tagged twice
+    tags.insert(
+      "parent".to_string(),
+      vec![parent_id.store().to_vec(), parent_id.store().to_vec()],
+    );
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 1, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    // redb multimap deduplicates: same parent should appear only once
+    assert_eq!(get_parent_numbers(&context, 1), vec![0]);
+    assert_eq!(get_child_numbers(&context, 0), vec![1]);
+  }
+
+  #[test]
+  fn inscription_with_three_parent_tags_and_two_parents_has_two_parent_entries() {
+    let context = Context::builder().build();
+    context.mine_blocks(3);
+
+    let parent_txid_a = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent a").to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_txid_b = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)],
+      script_sig: inscription("text/plain", "parent b").to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_txid_c = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(3, 0, 0)],
+      script_sig: inscription("text/plain", "parent c").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id_a = InscriptionId::from(parent_txid_a);
+    let parent_id_b = InscriptionId::from(parent_txid_b);
+    let parent_id_c = InscriptionId::from(parent_txid_c);
+    let mut tags = BTreeMap::new();
+    tags.insert(
+      "parent".to_string(),
+      vec![
+        parent_id_a.store().to_vec(),
+        parent_id_b.store().to_vec(),
+        parent_id_c.store().to_vec(),
+      ],
+    );
+
+    // Spend parent_a (4,1,0) and parent_c (4,3,0), but NOT parent_b
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(4, 1, 0), (4, 3, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 3), vec![0, 2]);
+    assert_eq!(get_child_numbers(&context, 0), vec![3]);
+    assert_eq!(get_child_numbers(&context, 1), Vec::<u32>::new());
+    assert_eq!(get_child_numbers(&context, 2), vec![3]);
+  }
+
+  #[test]
+  fn inscription_with_valid_and_malformed_parent_tags_only_lists_valid_entries() {
+    let context = Context::builder().build();
+    context.mine_blocks(2);
+
+    let parent_txid_a = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent a").to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_txid_b = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)],
+      script_sig: inscription("text/plain", "parent b").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id_a = InscriptionId::from(parent_txid_a);
+    let parent_id_b = InscriptionId::from(parent_txid_b);
+
+    // parent_b's ID with an extra byte appended (37 bytes, malformed)
+    let mut malformed_b = parent_id_b.store().to_vec();
+    malformed_b.push(0);
+
+    let mut tags = BTreeMap::new();
+    tags.insert(
+      "parent".to_string(),
+      vec![
+        parent_id_a.store().to_vec(),
+        malformed_b,
+        parent_id_b.store().to_vec(),
+      ],
+    );
+
+    // Spend both parents
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(3, 1, 0), (3, 2, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    // Only parent_a and parent_b (valid 36-byte IDs) should be linked
+    assert_eq!(get_parent_numbers(&context, 2), vec![0, 1]);
+    assert_eq!(get_child_numbers(&context, 0), vec![2]);
+    assert_eq!(get_child_numbers(&context, 1), vec![2]);
+  }
+
+  #[test]
+  fn inscription_with_invalid_parent_tag_and_parent_has_no_parent_entry() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "parent").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_id = InscriptionId::from(parent_txid);
+
+    // Parent ID with extra byte (37 bytes, invalid)
+    let mut malformed = parent_id.store().to_vec();
+    malformed.push(0);
+
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![malformed]);
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 1, 0)], // spends parent, but tag is malformed
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 1), Vec::<u32>::new());
+  }
+
+  #[test]
+  fn inscription_with_nonexistent_parent_has_no_parent_entry() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    // Valid 36-byte ID but no such inscription exists
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![vec![0u8; 36]]);
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: Inscription::new(
+        Some("text/plain".as_bytes().to_vec()),
+        Some("child".as_bytes().to_vec()),
+        tags,
+      )
+      .to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 0), Vec::<u32>::new());
+  }
+
+  #[test]
+  fn inscription_without_parent_tag_has_no_parent_entry() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: inscription("text/plain", "hello").to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    assert_eq!(get_parent_numbers(&context, 0), Vec::<u32>::new());
   }
 
   #[test]
