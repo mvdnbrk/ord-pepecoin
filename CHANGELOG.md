@@ -7,7 +7,10 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.9.0) - 2026-03-19
+
 ### Added
+- Batch chunking for large collections with deferred commit broadcasting ([#41](https://github.com/mvdnbrk/ord-pepecoin/pull/41))
 - Batched reveal broadcast for large inscriptions exceeding mempool chain limit ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
 - Job file persistence for reveal broadcasts with automatic server-side processing every 60s ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
 - `wallet broadcast` command for manual job processing ([#36](https://github.com/mvdnbrk/ord-pepecoin/pull/36))
@@ -19,15 +22,18 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 - Preview templates for code (highlight.js), fonts, markdown, and 3D models ([#29](https://github.com/mvdnbrk/ord-pepecoin/pull/29))
 - Unified `Settings` struct with `ORDPEP_*` env var support ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
 - Configurable `savepoint_interval`, `max_savepoints`, `commit_interval`, `pepecoin_rpc_limit` ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
+- PRC-721 extended inscription envelope specification ([docs/prc-721.md](docs/prc-721.md))
 
 ### Fixed
 - Filter wallet balance, UTXOs and transactions by wallet addresses ([#37](https://github.com/mvdnbrk/ord-pepecoin/pull/37))
 - `index compact` failing when persistent savepoints exist ([`bd792cb`](https://github.com/mvdnbrk/ord-pepecoin/commit/bd792cbe))
 - Flaky server tests with index update retry ([#31](https://github.com/mvdnbrk/ord-pepecoin/pull/31))
+- Leftover Shibescribe references in help text ([`9fa6f1c`](https://github.com/mvdnbrk/ord-pepecoin/commit/9fa6f1cf))
 
 ### Changed
 - Refactor `CommandBuilder` with `.wallet()` builder pattern for test wallet flags ([#30](https://github.com/mvdnbrk/ord-pepecoin/pull/30))
 - Default `max_savepoints` bumped from 2 to 3 for safer reorg recovery ([#32](https://github.com/mvdnbrk/ord-pepecoin/pull/32))
+- Extract `sign_reveal_chain` and add job unit tests ([`63131ec`](https://github.com/mvdnbrk/ord-pepecoin/commit/63131ec2))
 
 ## [0.8.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.8.0) - 2026-03-17
 
