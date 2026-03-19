@@ -44,7 +44,7 @@ struct DryRunOutput {
 
 #[derive(Debug, Parser)]
 pub(crate) struct Inscribe {
-  #[clap(long, help = "Shibescribe <SATPOINT>")]
+  #[clap(long, help = "Inscribe <SATPOINT>")]
   pub(crate) satpoint: Option<SatPoint>,
   #[clap(
     long,
@@ -57,7 +57,7 @@ pub(crate) struct Inscribe {
   )]
   pub(crate) commit_fee_rate: Option<FeeRate>,
   #[clap(
-    help = "Shibescribe sat with contents of <FILE>",
+    help = "Inscribe sat with contents of <FILE>",
     required_unless_present = "batch"
   )]
   pub(crate) file: Option<PathBuf>,
