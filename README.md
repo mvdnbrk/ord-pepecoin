@@ -3,7 +3,7 @@
 [![CI](https://github.com/mvdnbrk/ord-pepecoin/actions/workflows/ci.yaml/badge.svg)](https://github.com/mvdnbrk/ord-pepecoin/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/mvdnbrk/ord-pepecoin)](https://github.com/mvdnbrk/ord-pepecoin/releases/latest)
 
-Ordinal indexer and block explorer for **Pepecoin**, forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin) (based on [ordinals/ord](https://github.com/ordinals/ord) v0.5.1).
+Ordinal indexer and block explorer for **Pepecoin**. Originally forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin) (based on [ordinals/ord](https://github.com/ordinals/ord) v0.5.1), but extensively rewritten with modernized dependencies (redb 3.x, axum 0.8, reqwest 0.12), a standalone wallet with local key management, batch inscription support, and the [PRC-721](docs/prc-721.md) extended inscription envelope specification.
 
 The indexer and explorer support all inscription content types. While PRC-20 inscriptions are indexed, specialized PRC-20 balance tracking is not supported.
 
