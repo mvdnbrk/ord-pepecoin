@@ -423,6 +423,8 @@ impl Updater {
     let mut statistic_to_count = wtx.open_table(STATISTIC_TO_COUNT)?;
     let mut address_to_inscription_ids = wtx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
     let mut id_to_address = wtx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
+    let mut number_to_parents = wtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+    let mut parent_to_children = wtx.open_multimap_table(PARENT_TO_CHILDREN)?;
 
     let mut lost_sats = statistic_to_count
       .get(&Statistic::LostSats.key())?
@@ -446,6 +448,8 @@ impl Updater {
       value_cache,
       &mut address_to_inscription_ids,
       &mut id_to_address,
+      &mut number_to_parents,
+      &mut parent_to_children,
       index.chain.network(),
     )?;
 

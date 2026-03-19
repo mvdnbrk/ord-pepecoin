@@ -60,6 +60,8 @@ define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
 define_multimap_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
+define_multimap_table! { INSCRIPTION_NUMBER_TO_PARENTS, u32, u32 }
+define_multimap_table! { PARENT_TO_CHILDREN, u32, u32 }
 
 const SCHEMA_VERSION: u64 = 6;
 
@@ -159,6 +161,15 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 }
 
 impl Index {
+  // Create new tables in an existing database without requiring a full reindex.
+  fn migrate(database: &Database) -> Result {
+    let tx = database.begin_write()?;
+    tx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+    tx.open_multimap_table(PARENT_TO_CHILDREN)?;
+    tx.commit()?;
+    Ok(())
+  }
+
   pub fn open(settings: &Settings) -> Result<Self> {
     let rpc_url = settings.rpc_url();
     let auth = settings.auth()?;
@@ -215,6 +226,8 @@ impl Index {
         }
       }
 
+      Self::migrate(&database)?;
+
       database
     } else {
       let database = Database::builder()
@@ -238,6 +251,8 @@ impl Index {
         tx.open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?;
         tx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
         tx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
+        tx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+        tx.open_multimap_table(PARENT_TO_CHILDREN)?;
 
         tx.open_table(STATISTIC_TO_COUNT)?
           .insert(&Statistic::Schema.key(), &SCHEMA_VERSION)?;
@@ -733,7 +748,7 @@ impl Index {
           }
         }
 
-        let parsed_inscription = Inscription::from_transactions(txs);
+        let parsed_inscription = Inscription::from_transactions(&txs);
 
         match parsed_inscription {
           ParsedInscription::None => return Ok(None),
@@ -944,7 +959,7 @@ impl Index {
           ranges
             .into_iter()
             .map(|(start, end)| (u64::try_from(start).unwrap(), u64::try_from(end).unwrap()))
-            .collect(),
+            .collect::<Vec<_>>(),
         )
       } else {
         None
@@ -966,8 +981,9 @@ impl Index {
 
     if outpoint == OutPoint::null() {
       let mut value = 0;
-      if let Some(ref ranges) = sat_ranges {
-        for &(start, end) in ranges {
+      if let Some(ranges) = sat_ranges.as_ref() {
+        for i in 0..ranges.len() {
+          let (start, end) = ranges[i];
           value += end - start;
         }
       }
@@ -1269,10 +1285,7 @@ impl Index {
 
 #[cfg(test)]
 mod tests {
-  use {
-    super::*,
-    bitcoin::secp256k1::rand::{self, RngCore},
-  };
+  use super::*;
 
   struct ContextBuilder {
     args: Vec<OsString>,
@@ -1376,6 +1389,104 @@ mod tests {
         Context::builder().arg("--index-sats").build(),
       ]
     }
+  }
+
+  #[test]
+  fn parent_child() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_inscription = inscription("text/plain", "parent");
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: parent_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_id = InscriptionId::from(parent_txid);
+
+    context.mine_blocks(1);
+
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![parent_id.store().to_vec()]);
+
+    let child_inscription = Inscription::new(
+      Some("text/plain".as_bytes().to_vec()),
+      Some("child".as_bytes().to_vec()),
+      tags,
+    );
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 1, 0)], // spend parent (at 2,1,0)
+      script_sig: child_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let parent_number: u32 = 0;
+    let child_number: u32 = 1;
+
+    let rtx = context.index.database.begin_read().unwrap();
+    let number_to_parents = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS).unwrap();
+    let parent_to_children = rtx.open_multimap_table(PARENT_TO_CHILDREN).unwrap();
+
+    assert_eq!(
+      number_to_parents
+        .get(&child_number)
+        .unwrap()
+        .map(|guard| guard.unwrap().value())
+        .collect::<Vec<_>>(),
+      vec![parent_number]
+    );
+
+    assert_eq!(
+      parent_to_children
+        .get(&parent_number)
+        .unwrap()
+        .map(|guard| guard.unwrap().value())
+        .collect::<Vec<_>>(),
+      vec![child_number]
+    );
+  }
+
+  #[test]
+  fn parent_child_invalid_spend() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_inscription = inscription("text/plain", "parent");
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: parent_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_id = InscriptionId::from(parent_txid);
+
+    context.mine_blocks(1);
+
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![parent_id.store().to_vec()]);
+
+    let child_inscription = Inscription::new(
+      Some("text/plain".as_bytes().to_vec()),
+      Some("child".as_bytes().to_vec()),
+      tags,
+    );
+
+    context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)], // DOES NOT spend parent
+      script_sig: child_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let child_number: u32 = 1;
+
+    let rtx = context.index.database.begin_read().unwrap();
+    let number_to_parents = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS).unwrap();
+
+    assert!(number_to_parents.get(&child_number).unwrap().next().is_none());
   }
 
   #[test]

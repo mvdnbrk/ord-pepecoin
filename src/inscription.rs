@@ -4,7 +4,10 @@ use {
     blockdata::{opcodes, script},
     Script,
   },
-  std::str,
+  std::{
+    collections::BTreeMap,
+    str,
+  },
 };
 
 const PROTOCOL_ID: &[u8] = b"ord";
@@ -13,7 +16,7 @@ const PROTOCOL_ID: &[u8] = b"ord";
 pub(crate) struct Inscription {
   pub(crate) body: Option<Vec<u8>>,
   pub(crate) content_type: Option<Vec<u8>>,
-  pub(crate) parent: Option<Vec<u8>>,
+  pub(crate) tags: BTreeMap<String, Vec<Vec<u8>>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -25,11 +28,19 @@ pub(crate) enum ParsedInscription {
 
 impl Inscription {
   #[cfg(test)]
-  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>, parent: Option<Vec<u8>>) -> Self {
-    Self { content_type, body, parent }
+  pub(crate) fn new(
+    content_type: Option<Vec<u8>>,
+    body: Option<Vec<u8>>,
+    tags: BTreeMap<String, Vec<Vec<u8>>>,
+  ) -> Self {
+    Self {
+      content_type,
+      body,
+      tags,
+    }
   }
 
-  pub(crate) fn from_transactions(txs: Vec<Transaction>) -> ParsedInscription {
+  pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
     for i in 0..txs.len() {
       if txs[i].input.is_empty() {
@@ -57,7 +68,7 @@ impl Inscription {
     Ok(Self {
       body: Some(body),
       content_type: Some(content_type.into()),
-      parent: None,
+      tags: BTreeMap::new(),
     })
   }
 
@@ -74,8 +85,7 @@ impl Inscription {
   }
 
   pub(crate) fn get_inscription_script(&self) -> Script {
-    let mut builder = script::Builder::new()
-      .push_slice(PROTOCOL_ID);
+    let mut builder = script::Builder::new().push_slice(PROTOCOL_ID);
 
     let empty = Vec::new();
     let body = self.body.as_ref().unwrap_or(&empty);
@@ -87,14 +97,16 @@ impl Inscription {
       builder = builder.push_slice(content_type);
     }
 
-    if let Some(parent) = &self.parent {
-      builder = builder.push_opcode(opcodes::all::OP_PUSHNUM_3);
-      builder = builder.push_slice(parent);
-    }
-
     for (i, chunk) in chunks.iter().enumerate() {
       builder = Self::push_number(builder, (chunks.len() - i - 1) as u64);
       builder = builder.push_slice(chunk);
+    }
+
+    for (key, values) in &self.tags {
+      for value in values {
+        builder = builder.push_slice(key.as_bytes());
+        builder = builder.push_slice(value);
+      }
     }
 
     builder.into_script()
@@ -201,17 +213,23 @@ impl InscriptionParser {
     push_datas = &push_datas[3..];
 
     if npieces == 0 {
+      let mut tags = BTreeMap::new();
+      while push_datas.len() >= 2 {
+        if let Ok(key) = str::from_utf8(&push_datas[0]) {
+          tags
+            .entry(key.to_string())
+            .or_insert_with(Vec::new)
+            .push(push_datas[1].clone());
+        }
+        push_datas = &push_datas[2..];
+      }
+
       return ParsedInscription::Complete(Inscription {
         content_type: Some(content_type),
         body: None,
-        parent: None,
+        tags,
       });
     }
-
-    // TODO: Add tag parsing for parent/child (Tag 3) once we define a format
-    // that doesn't collide with body countdown numbers. Currently, an inscription
-    // with exactly 4 chunks has countdown starting at 3, which collides with Tag 3.
-    let parent: Option<Vec<u8>> = None;
 
     // read body
 
@@ -224,10 +242,21 @@ impl InscriptionParser {
       // loop over chunks
       loop {
         if npieces == 0 {
+          let mut tags = BTreeMap::new();
+          while push_datas.len() >= 2 {
+            if let Ok(key) = str::from_utf8(&push_datas[0]) {
+              tags
+                .entry(key.to_string())
+                .or_insert_with(Vec::new)
+                .push(push_datas[1].clone());
+            }
+            push_datas = &push_datas[2..];
+          }
+
           let inscription = Inscription {
             content_type: Some(content_type),
             body: Some(body),
-            parent,
+            tags,
           };
 
           return ParsedInscription::Complete(inscription);
@@ -720,7 +749,7 @@ mod tests {
       ParsedInscription::Complete(Inscription {
         content_type: Some(b"woof".to_vec()),
         body: None,
-        parent: None,
+        tags: BTreeMap::new(),
       }),
     );
   }
@@ -740,9 +769,79 @@ mod tests {
     script.push(b"woof woof");
     script.push(&[14]);
     script.push(b"woof woof woof");
+
+    let mut tags = BTreeMap::new();
+    tags.insert("woof woof".to_string(), vec![b"woof woof woof".to_vec()]);
+
     assert_eq!(
       InscriptionParser::parse(vec![Script::from(script.concat())]),
-      ParsedInscription::Complete(inscription("text/plain;charset=utf-8", "woof"))
+      ParsedInscription::Complete(Inscription {
+        content_type: Some(b"text/plain;charset=utf-8".to_vec()),
+        body: Some(b"woof".to_vec()),
+        tags,
+      })
+    );
+  }
+
+  #[test]
+  fn parent_tag() {
+    let mut script: Vec<&[u8]> = Vec::new();
+    script.push(&[3]);
+    script.push(b"ord");
+    script.push(&[81]);
+    script.push(&[24]);
+    script.push(b"text/plain;charset=utf-8");
+    script.push(&[0]);
+    script.push(&[4]);
+    script.push(b"woof");
+    script.push(&[6]);
+    script.push(b"parent");
+    script.push(&[36]);
+    script.push(&[1; 36]);
+
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![vec![1; 36]]);
+
+    assert_eq!(
+      InscriptionParser::parse(vec![Script::from(script.concat())]),
+      ParsedInscription::Complete(Inscription {
+        content_type: Some(b"text/plain;charset=utf-8".to_vec()),
+        body: Some(b"woof".to_vec()),
+        tags,
+      }),
+    );
+  }
+
+  #[test]
+  fn multiple_parent_tags() {
+    let mut script: Vec<&[u8]> = Vec::new();
+    script.push(&[3]);
+    script.push(b"ord");
+    script.push(&[81]);
+    script.push(&[24]);
+    script.push(b"text/plain;charset=utf-8");
+    script.push(&[0]);
+    script.push(&[4]);
+    script.push(b"woof");
+    script.push(&[6]);
+    script.push(b"parent");
+    script.push(&[36]);
+    script.push(&[1; 36]);
+    script.push(&[6]);
+    script.push(b"parent");
+    script.push(&[36]);
+    script.push(&[2; 36]);
+
+    let mut tags = BTreeMap::new();
+    tags.insert("parent".to_string(), vec![vec![1; 36], vec![2; 36]]);
+
+    assert_eq!(
+      InscriptionParser::parse(vec![Script::from(script.concat())]),
+      ParsedInscription::Complete(Inscription {
+        content_type: Some(b"text/plain;charset=utf-8".to_vec()),
+        body: Some(b"woof".to_vec()),
+        tags,
+      }),
     );
   }
 
@@ -844,7 +943,7 @@ mod tests {
     };
 
     assert_eq!(
-      Inscription::from_transactions(vec![tx]),
+      Inscription::from_transactions(&vec![tx]),
       ParsedInscription::Complete(inscription("text/plain;charset=utf-8", "woof")),
     );
   }
@@ -882,61 +981,8 @@ mod tests {
     };
 
     assert_eq!(
-      Inscription::from_transactions(vec![tx]),
+      Inscription::from_transactions(&vec![tx]),
       ParsedInscription::None
     );
   }
-
-  /*
-  #[test]
-  fn reveal_script_chunks_data() {
-    assert_eq!(
-      inscription("foo", [])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      7
-    );
-
-    assert_eq!(
-      inscription("foo", [0; 1])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      8
-    );
-
-    assert_eq!(
-      inscription("foo", [0; 520])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      8
-    );
-
-    assert_eq!(
-      inscription("foo", [0; 521])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      9
-    );
-
-    assert_eq!(
-      inscription("foo", [0; 1040])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      9
-    );
-
-    assert_eq!(
-      inscription("foo", [0; 1041])
-        .append_reveal_script(script::Builder::new())
-        .instructions()
-        .count(),
-      10
-    );
-  }
-  */
 }

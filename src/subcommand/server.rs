@@ -30,7 +30,12 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
-  std::{cmp::Ordering, net::SocketAddr, str, sync::mpsc::Sender},
+  std::{
+    cmp::Ordering,
+    net::SocketAddr,
+    str,
+    sync::mpsc::Sender,
+  },
   tokio_stream::StreamExt,
   tower_http::{
     compression::CompressionLayer,
@@ -1384,7 +1389,7 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-  use {super::*, reqwest::Url, std::net::TcpListener};
+  use {super::*, reqwest::Url, std::{collections::BTreeMap, net::TcpListener}};
 
   fn update_index_with_retry(index: &Index) {
     let mut attempt = 0;
@@ -2464,7 +2469,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
       Server::content_response(Inscription::new(
         Some("text/plain".as_bytes().to_vec()),
         None,
-        None
+        BTreeMap::new()
       )),
       None
     );
@@ -2475,7 +2480,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
     let (headers, body) = Server::content_response(Inscription::new(
       Some("text/plain".as_bytes().to_vec()),
       Some(vec![1, 2, 3]),
-      None,
+      BTreeMap::new(),
     ))
     .unwrap();
 
@@ -2486,7 +2491,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
   #[test]
   fn content_response_no_content_type() {
     let (headers, body) =
-      Server::content_response(Inscription::new(None, Some(Vec::new()), None)).unwrap();
+      Server::content_response(Inscription::new(None, Some(Vec::new()), BTreeMap::new())).unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());
@@ -2815,7 +2820,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
         script_sig: Inscription {
           content_type: Some("foo/bar".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()
@@ -2844,7 +2849,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
         script_sig: Inscription {
           content_type: Some("image/png".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()
