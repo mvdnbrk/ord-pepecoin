@@ -18,9 +18,7 @@ use {
     deserialize_from_str::DeserializeFromStr,
     epoch::Epoch,
     height::Height,
-    inscription::Inscription,
-    inscription_id::InscriptionId,
-    media::Media,
+    inscriptions::{Inscription, InscriptionId, Media, ParsedInscription, ParseError},
     options::Options,
     outgoing::Outgoing,
     representation::Representation,
@@ -100,9 +98,7 @@ mod epoch;
 mod fee_rate;
 mod height;
 pub mod index;
-mod inscription;
-mod inscription_id;
-mod media;
+mod inscriptions;
 mod object;
 pub mod options;
 mod outgoing;

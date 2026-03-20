@@ -1,4 +1,4 @@
-use {super::*, crate::inscription::ParsedInscription, redb::MultimapTable};
+use {super::*, redb::MultimapTable};
 
 pub(super) struct Flotsam {
   pub(crate) inscription_id: InscriptionId,

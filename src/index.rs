@@ -1,5 +1,4 @@
 use crate::api::OutputInfo;
-use crate::inscription::ParsedInscription;
 use std::io::Cursor;
 
 use {
@@ -944,7 +943,7 @@ impl Index {
           ranges
             .into_iter()
             .map(|(start, end)| (u64::try_from(start).unwrap(), u64::try_from(end).unwrap()))
-            .collect(),
+            .collect::<Vec<(u64, u64)>>(),
         )
       } else {
         None

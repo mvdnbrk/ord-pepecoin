@@ -1,4 +1,4 @@
-use {super::*, crate::media::{ImageRendering, Language}};
+use {super::*, crate::inscriptions::{ImageRendering, Language}};
 
 #[derive(boilerplate::Boilerplate)]
 pub(crate) struct PreviewAudioHtml {
