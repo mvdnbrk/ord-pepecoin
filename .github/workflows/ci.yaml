@@ -29,7 +29,7 @@ jobs:
     - name: Install Rust Toolchain Components
       uses: dtolnay/rust-toolchain@stable
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@v3
 
     - name: Test
       run: cargo test --all
