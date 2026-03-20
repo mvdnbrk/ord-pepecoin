@@ -180,7 +180,7 @@ impl Settings {
           inscriptions
             .split_whitespace()
             .map(|inscription_id| inscription_id.parse::<InscriptionId>())
-            .collect::<Result<HashSet<InscriptionId>, inscription_id::ParseError>>()
+            .collect::<Result<HashSet<InscriptionId>, ParseError>>()
         })
         .transpose()
         .with_context(|| {
