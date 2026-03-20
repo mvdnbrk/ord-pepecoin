@@ -25,7 +25,7 @@ jobs:
       with:
         components: clippy, rustfmt
 
-    - uses: Swatinem/rust-cache@v3
+    - uses: Swatinem/rust-cache@v2
 
     - name: Clippy
       run: cargo clippy --all --all-targets -- -A clippy::cast_lossless -A clippy::cast_possible_truncation -A clippy::cast_possible_wrap -A clippy::cast_sign_loss -A clippy::useless_conversion
@@ -48,7 +48,7 @@ jobs:
     - name: Install Rust Toolchain Components
       uses: dtolnay/rust-toolchain@stable
 
-    - uses: Swatinem/rust-cache@v3
+    - uses: Swatinem/rust-cache@v2
 
     - name: Test
       run: cargo test --all
