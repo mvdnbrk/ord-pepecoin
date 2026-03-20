@@ -131,7 +131,7 @@ impl Entry for SatRange {
 
     let range = u64::from_le_bytes([b16, b17, b18, b19, b20, b21, b22, b23]);
 
-    (start, start + range as u128)
+    (start, start + u128::from(range))
   }
 
   fn store(self) -> Self::Value {

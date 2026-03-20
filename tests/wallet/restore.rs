@@ -2,7 +2,7 @@ use {
   super::*,
   clap::Parser as ClapParser,
   ord::options::Options,
-  redb::{ReadableDatabase, ReadableTable, TableDefinition},
+  redb::{ReadableDatabase, TableDefinition},
   std::collections::BTreeMap,
 };
 

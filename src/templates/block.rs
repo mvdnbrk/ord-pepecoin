@@ -46,7 +46,13 @@ mod tests {
   #[test]
   fn html() {
     assert_regex_match!(
-      BlockHtml::new(Chain::Mainnet.genesis_block(), Height(0), Height(0), 0, Vec::new()),
+      BlockHtml::new(
+        Chain::Mainnet.genesis_block(),
+        Height(0),
+        Height(0),
+        0,
+        Vec::new()
+      ),
       "
         <h1>Block 0</h1>
         <dl>
@@ -75,7 +81,13 @@ mod tests {
   #[test]
   fn next_active_when_not_last() {
     assert_regex_match!(
-      BlockHtml::new(Chain::Mainnet.genesis_block(), Height(0), Height(1), 0, Vec::new()),
+      BlockHtml::new(
+        Chain::Mainnet.genesis_block(),
+        Height(0),
+        Height(1),
+        0,
+        Vec::new()
+      ),
       r"<h1>Block 0</h1>.*prev\s*<a class=next href=/block/1>next</a>.*"
     );
   }
@@ -83,7 +95,13 @@ mod tests {
   #[test]
   fn prev_active_when_not_first() {
     assert_regex_match!(
-      BlockHtml::new(Chain::Mainnet.genesis_block(), Height(1), Height(1), 0, Vec::new()),
+      BlockHtml::new(
+        Chain::Mainnet.genesis_block(),
+        Height(1),
+        Height(1),
+        0,
+        Vec::new()
+      ),
       r"<h1>Block 1</h1>.*<a class=prev href=/block/0>prev</a>\s*next.*",
     );
   }

@@ -18,7 +18,7 @@ use {
     deserialize_from_str::DeserializeFromStr,
     epoch::Epoch,
     height::Height,
-    inscriptions::{Inscription, InscriptionId, Media, ParsedInscription, ParseError},
+    inscriptions::{Inscription, InscriptionId, Media, ParseError, ParsedInscription},
     options::Options,
     outgoing::Outgoing,
     representation::Representation,
@@ -67,7 +67,12 @@ use {
 };
 
 pub use crate::{
-  fee_rate::FeeRate, index::{Index, List}, object::Object, rarity::Rarity, sat::Sat, sat_point::SatPoint,
+  fee_rate::FeeRate,
+  index::{Index, List},
+  object::Object,
+  rarity::Rarity,
+  sat::Sat,
+  sat_point::SatPoint,
   subcommand::wallet::transaction_builder::TransactionBuilder,
 };
 
@@ -131,7 +136,7 @@ pub fn parse_ord_server_args(args: &str) -> (Settings, subcommand::server::Serve
     Ok(arguments) => {
       let settings = Settings::load(arguments.options).unwrap();
       match arguments.subcommand {
-        subcommand::Subcommand::Server(server) => (settings, server),
+        subcommand::Subcommand::Server(server) => (settings, *server),
         subcommand => panic!("unexpected subcommand: {subcommand:?}"),
       }
     }

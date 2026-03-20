@@ -145,22 +145,13 @@ pub trait Api {
   ) -> Result<bitcoin::Address, jsonrpc_core::Error>;
 
   #[rpc(name = "getaddressinfo")]
-  fn get_address_info(
-    &self,
-    address: String,
-  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+  fn get_address_info(&self, address: String) -> Result<serde_json::Value, jsonrpc_core::Error>;
 
   #[rpc(name = "validateaddress")]
-  fn validate_address(
-    &self,
-    address: String,
-  ) -> Result<serde_json::Value, jsonrpc_core::Error>;
+  fn validate_address(&self, address: String) -> Result<serde_json::Value, jsonrpc_core::Error>;
 
   #[rpc(name = "dumpprivkey")]
-  fn dump_private_key(
-    &self,
-    address: Address,
-  ) -> Result<String, jsonrpc_core::Error>;
+  fn dump_private_key(&self, address: Address) -> Result<String, jsonrpc_core::Error>;
 
   #[rpc(name = "importprivkey")]
   fn import_private_key(

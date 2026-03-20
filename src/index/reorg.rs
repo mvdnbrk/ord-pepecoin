@@ -1,4 +1,4 @@
-use {super::*, super::updater::BlockData};
+use {super::updater::BlockData, super::*};
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Error {
@@ -37,8 +37,8 @@ impl Reorg {
       return Ok(());
     }
 
-    let savepoint_interval = index.settings.savepoint_interval() as u32;
-    let max_savepoints = index.settings.max_savepoints() as u32;
+    let savepoint_interval = u32::try_from(index.settings.savepoint_interval()).unwrap();
+    let max_savepoints = u32::try_from(index.settings.max_savepoints()).unwrap();
     let max_recoverable_reorg_depth =
       (max_savepoints - 1) * savepoint_interval + height % savepoint_interval;
 
@@ -86,7 +86,10 @@ impl Reorg {
       .map(|(height, _hash)| height.value())
       .unwrap_or(0);
 
-    log::info!("successfully rolled back database to height {}", read_height);
+    log::info!(
+      "successfully rolled back database to height {}",
+      read_height
+    );
 
     Ok(())
   }
@@ -111,7 +114,8 @@ impl Reorg {
 
     let result = (height < savepoint_interval
       || height.saturating_sub(last_savepoint_height) >= savepoint_interval)
-      && chain_height.saturating_sub(height) <= savepoint_interval * index.settings.max_savepoints() as u64 + 1;
+      && chain_height.saturating_sub(height)
+        <= savepoint_interval * index.settings.max_savepoints() as u64 + 1;
 
     Ok(result)
   }

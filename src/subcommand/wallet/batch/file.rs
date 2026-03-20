@@ -13,8 +13,8 @@ pub(crate) struct BatchEntry {
 
 impl BatchFile {
   pub(crate) fn load(path: &Path) -> Result<Self> {
-    let batch_file: BatchFile = serde_yaml::from_reader(File::open(path)?)
-      .context("failed to parse batch file")?;
+    let batch_file: BatchFile =
+      serde_yaml::from_reader(File::open(path)?).context("failed to parse batch file")?;
 
     if batch_file.inscriptions.is_empty() {
       bail!("batch file contains no inscriptions");

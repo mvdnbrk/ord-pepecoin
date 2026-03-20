@@ -65,9 +65,9 @@ mod tests {
       OutPoint::from_str("1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691:5")
         .unwrap();
     let ranges = vec![
-      (50 * COIN_VALUE as u128, 55 * COIN_VALUE as u128),
-      (10 as u128, 100 as u128),
-      (1050000000000000 as u128, 1150000000000000 as u128),
+      (50 * u128::from(COIN_VALUE), 55 * u128::from(COIN_VALUE)),
+      (10_u128, 100_u128),
+      (1050000000000000_u128, 1150000000000000_u128),
     ];
     assert_eq!(
       list(outpoint, ranges),
@@ -75,7 +75,7 @@ mod tests {
         (
           OutPoint::from_str("1a91e3dace36e2be3bf030a65679fe821aa1d6ef92e7c9902eb318182c355691:5")
             .unwrap(),
-          50 * COIN_VALUE as u128,
+          50 * u128::from(COIN_VALUE),
           5 * COIN_VALUE,
           Rarity::Uncommon,
         ),

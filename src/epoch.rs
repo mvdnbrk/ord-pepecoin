@@ -4,8 +4,9 @@ use super::*;
 pub(crate) struct Epoch(pub(crate) u64);
 
 impl Epoch {
+  #[allow(clippy::cast_lossless)]
   pub(crate) const STARTING_SATS: [Sat; 8] = [
-    Sat(0 * COIN_VALUE as u128),
+    Sat(0),
     Sat(100000000000 * COIN_VALUE as u128),
     Sat(122500000000 * COIN_VALUE as u128),
     Sat(136250000000 * COIN_VALUE as u128),

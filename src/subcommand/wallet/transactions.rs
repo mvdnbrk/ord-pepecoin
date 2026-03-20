@@ -1,7 +1,4 @@
-use {
-  super::*,
-  crate::wallet::Wallet,
-};
+use {super::*, crate::wallet::Wallet};
 
 #[derive(Debug, Parser)]
 pub(crate) struct Transactions {
@@ -23,15 +20,12 @@ impl Transactions {
     let addresses = wallet.addresses()?;
     let address_set: HashSet<Address> = addresses.into_iter().collect();
 
-    for tx in wallet
-      .bitcoin_client()
-      .list_transactions(
-        None,
-        Some(self.limit.unwrap_or(u16::MAX).into()),
-        None,
-        None,
-      )?
-    {
+    for tx in wallet.bitcoin_client().list_transactions(
+      None,
+      Some(self.limit.unwrap_or(u16::MAX).into()),
+      None,
+      None,
+    )? {
       let belongs_to_wallet = match &tx.detail.address {
         Some(address) => address_set.contains(address),
         None => false,

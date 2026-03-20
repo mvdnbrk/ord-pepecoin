@@ -440,7 +440,6 @@ impl TransactionBuilder {
       version: 1,
       lock_time: PackedLockTime::ZERO,
       input: (0..inputs)
-        .into_iter()
         .map(|_| TxIn {
           previous_output: OutPoint::null(),
           script_sig: script::Builder::new()
@@ -1058,10 +1057,7 @@ mod tests {
         version: 1,
         lock_time: PackedLockTime::ZERO,
         input: vec![tx_in(outpoint(1))],
-        output: vec![
-          tx_out(100_000, recipient()),
-          tx_out(644_000, change(1))
-        ],
+        output: vec![tx_out(100_000, recipient()), tx_out(644_000, change(1))],
       })
     )
   }
@@ -1418,7 +1414,7 @@ mod tests {
         [change(0), change(1)],
         FeeRate::try_from(1000.0).unwrap(),
         Amount::from_sat(100_000)
-        ),
+      ),
       Ok(Transaction {
         version: 1,
         lock_time: PackedLockTime::ZERO,

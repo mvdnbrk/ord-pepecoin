@@ -15,11 +15,11 @@ use {
   },
   axum::{
     body::Body,
+    extract::DefaultBodyLimit,
     extract::{Extension, Path, Query},
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
-    extract::DefaultBodyLimit,
     Json, Router,
   },
   axum_server::Handle,
@@ -124,8 +124,8 @@ pub struct Server {
   #[clap(
     long,
     help = "Request ACME TLS certificate for <ACME_DOMAIN>. This ordpep instance must be reachable at <ACME_DOMAIN>:443 to respond to Let's Encrypt ACME challenges."
-    )]
-    pub(crate) acme_domain: Vec<String>,
+  )]
+  pub(crate) acme_domain: Vec<String>,
   #[clap(
     long,
     help = "Listen on <HTTP_PORT> for incoming HTTP requests. [default: 80]."
@@ -213,10 +213,19 @@ impl Server {
         .route("/input/{block}/{transaction}/{input}", get(Self::input))
         .route("/inscription/{inscription_id}", get(Self::inscription))
         .route("/inscriptions", get(Self::inscriptions))
-        .route("/inscriptions", post(Self::inscriptions_json).layer(body_limit))
+        .route(
+          "/inscriptions",
+          post(Self::inscriptions_json).layer(body_limit),
+        )
         .route("/inscriptions/{from}", get(Self::inscriptions_from))
-        .route("/inscriptions/block/{height}", get(Self::inscriptions_in_block))
-        .route("/inscriptions/block/{height}/{page}", get(Self::inscriptions_in_block_paginated))
+        .route(
+          "/inscriptions/block/{height}",
+          get(Self::inscriptions_in_block),
+        )
+        .route(
+          "/inscriptions/block/{height}/{page}",
+          get(Self::inscriptions_in_block_paginated),
+        )
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
@@ -252,7 +261,14 @@ impl Server {
       match (http_port, self.https_port()) {
         (Some(http_port), None) => {
           self
-            .spawn(router, handle, http_port, SpawnConfig::Http, &address, http_port_tx)?
+            .spawn(
+              router,
+              handle,
+              http_port,
+              SpawnConfig::Http,
+              &address,
+              http_port_tx,
+            )?
             .await??
         }
         (None, Some(https_port)) => {
@@ -279,7 +295,14 @@ impl Server {
           };
 
           let (http_result, https_result) = tokio::join!(
-            self.spawn(router.clone(), handle.clone(), http_port, http_spawn_config, &address, http_port_tx)?,
+            self.spawn(
+              router.clone(),
+              handle.clone(),
+              http_port,
+              http_spawn_config,
+              &address,
+              http_port_tx
+            )?,
             self.spawn(
               router,
               handle,
@@ -295,7 +318,9 @@ impl Server {
       }
 
       log::info!("Waiting for index thread to finish...");
-      index_thread.join().unwrap_or_else(|e| log::error!("Index thread panicked: {:?}", e));
+      index_thread
+        .join()
+        .unwrap_or_else(|e| log::error!("Index thread panicked: {:?}", e));
       log::info!("Index thread finished, shutting down");
 
       Ok(())
@@ -383,9 +408,11 @@ impl Server {
 
   fn http_port(&self, settings: &Settings) -> Option<u16> {
     if self.http || self.http_port.is_some() || (self.https_port.is_none() && !self.https) {
-      Some(self.http_port.unwrap_or_else(|| {
-        settings.http_port.unwrap_or(80)
-      }))
+      Some(
+        self
+          .http_port
+          .unwrap_or_else(|| settings.http_port.unwrap_or(80)),
+      )
     } else {
       None
     }
@@ -393,7 +420,10 @@ impl Server {
 
   fn listen_address(&self, settings: &Settings) -> String {
     self.address.clone().unwrap_or_else(|| {
-      settings.rpc_url().parse::<Url>().ok()
+      settings
+        .rpc_url()
+        .parse::<Url>()
+        .ok()
         .and_then(|url| url.host_str().map(|h| h.to_string()))
         .unwrap_or_else(|| "0.0.0.0".to_string())
     })
@@ -559,7 +589,11 @@ impl Server {
       let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
       inscriptions.push(api::Inscription {
-        address: page_config.chain.address_from_script(&output.script_pubkey).map(|a| a.to_string()).ok(),
+        address: page_config
+          .chain
+          .address_from_script(&output.script_pubkey)
+          .map(|a| a.to_string())
+          .ok(),
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
         fee: entry.fee,
@@ -570,7 +604,7 @@ impl Server {
         previous,
         sat: entry.sat,
         satpoint,
-        timestamp: entry.timestamp as i64,
+        timestamp: i64::from(entry.timestamp),
         value: Some(output.value),
       });
     }
@@ -596,11 +630,7 @@ impl Server {
     Ok(Json(outputs))
   }
 
-  fn get_output_json(
-    index: Arc<Index>,
-    chain: Chain,
-    outpoint: OutPoint,
-  ) -> Result<api::Output> {
+  fn get_output_json(index: Arc<Index>, chain: Chain, outpoint: OutPoint) -> Result<api::Output> {
     let Some(info) = index.get_output_info(outpoint)? else {
       return Ok(api::Output {
         address: None,
@@ -723,32 +753,36 @@ impl Server {
           .get_block_by_hash(hash)?
           .ok_or_not_found(|| format!("block {hash}"))?;
 
-        (block, info.height as u32)
+        (block, u32::try_from(info.height).unwrap())
       }
     };
 
     if accept_json.0 {
       let inscriptions = index.get_inscriptions_in_block(height)?;
 
-      let info = index.block_header_info(block.header.block_hash())?
+      let info = index
+        .block_header_info(block.header.block_hash())?
         .ok_or_not_found(|| format!("block {}", block.header.block_hash()))?;
 
-      Ok(Json(api::Block {
-        hash: block.header.block_hash(),
-        target: block.header.target().to_string(),
-        best_block: true,
-        height,
-        chainweight: None,
-        mediantime: block.header.time as i64,
-        nonce: block.header.nonce,
-        bits: format!("{:x}", block.header.bits),
-        difficulty: info.difficulty,
-        chainwork: hex::encode(info.chainwork),
-        confirmations: info.confirmations as i32,
-        previousblockhash: info.previous_block_hash,
-        nextblockhash: info.next_block_hash,
-        inscriptions,
-      }).into_response())
+      Ok(
+        Json(api::Block {
+          hash: block.header.block_hash(),
+          target: block.header.target().to_string(),
+          best_block: true,
+          height,
+          chainweight: None,
+          mediantime: i64::from(block.header.time),
+          nonce: block.header.nonce,
+          bits: format!("{:x}", block.header.bits),
+          difficulty: info.difficulty,
+          chainwork: hex::encode(info.chainwork),
+          confirmations: info.confirmations,
+          previousblockhash: info.previous_block_hash,
+          nextblockhash: info.next_block_hash,
+          inscriptions,
+        })
+        .into_response(),
+      )
     } else {
       let (featured_inscriptions, inscription_count) =
         index.get_highest_paying_inscriptions_in_block(height, 8)?;
@@ -760,8 +794,8 @@ impl Server {
           inscription_count,
           featured_inscriptions,
         )
-          .page(page_config, index.has_sat_index()?)
-          .into_response(),
+        .page(page_config, index.has_sat_index()?)
+        .into_response(),
       )
     }
   }
@@ -1067,7 +1101,7 @@ impl Server {
       .get_inscription_by_id(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
 
-    return match inscription.media() {
+    match inscription.media() {
       Media::Audio => Ok(PreviewAudioHtml { inscription_id }.into_response()),
       Media::Code(language) => Ok(
         (
@@ -1145,7 +1179,7 @@ impl Server {
       }
       Media::Unknown => Ok(PreviewUnknownHtml.into_response()),
       Media::Video => Ok(PreviewVideoHtml { inscription_id }.into_response()),
-    };
+    }
   }
 
   async fn inscription(
@@ -1194,23 +1228,29 @@ impl Server {
     let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
     if accept_json.0 {
-      Ok(Json(api::Inscription {
-        address: page_config.chain.address_from_script(&output.script_pubkey).map(|address| address.to_string()).ok(),
-        content_length: inscription.body().map(|body: &[u8]| body.len()),
-        content_type: inscription.content_type().map(|s: &str| s.to_string()),
-        fee: entry.fee,
-        height: entry.height,
-        id: inscription_id,
-        next,
-        number: entry.number,
-        previous,
-        sat: entry.sat,
-        satpoint,
-        timestamp: entry.timestamp as i64,
-        value: Some(output.value),
-      }).into_response())
+      Ok(
+        Json(api::Inscription {
+          address: page_config
+            .chain
+            .address_from_script(&output.script_pubkey)
+            .map(|address| address.to_string())
+            .ok(),
+          content_length: inscription.body().map(|body: &[u8]| body.len()),
+          content_type: inscription.content_type().map(|s: &str| s.to_string()),
+          fee: entry.fee,
+          height: entry.height,
+          id: inscription_id,
+          next,
+          number: entry.number,
+          previous,
+          sat: entry.sat,
+          satpoint,
+          timestamp: i64::from(entry.timestamp),
+          value: Some(output.value),
+        })
+        .into_response(),
+      )
     } else {
-
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
@@ -1464,18 +1504,21 @@ mod tests {
         port,
         server_args.join(" "),
       ));
-let settings = Settings::merge(options, BTreeMap::new()).unwrap();
-let index = Arc::new(Index::open(&settings).unwrap());
-let ord_server_handle = Handle::new();
-let (_tx, _rx) = std::sync::mpsc::channel::<()>();
+      let settings = Settings::merge(options, BTreeMap::new()).unwrap();
+      let index = Arc::new(Index::open(&settings).unwrap());
+      let ord_server_handle = Handle::new();
+      let (_tx, _rx) = std::sync::mpsc::channel::<()>();
 
-{
-  let index = index.clone();
-  let ord_server_handle = ord_server_handle.clone();
-  let settings = settings.clone();
-  thread::spawn(move || server.run(settings, index, ord_server_handle, None).unwrap());
-}
-
+      {
+        let index = index.clone();
+        let ord_server_handle = ord_server_handle.clone();
+        let settings = settings.clone();
+        thread::spawn(move || {
+          server
+            .run(settings, index, ord_server_handle, None)
+            .unwrap()
+        });
+      }
 
       while index.statistic(crate::index::Statistic::Commits) == 0 {
         thread::sleep(Duration::from_millis(25));
@@ -1515,7 +1558,11 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
       reqwest::blocking::get(self.join_url(path.as_ref())).unwrap()
     }
 
-    fn post(&self, path: impl AsRef<str>, body: &impl serde::Serialize) -> reqwest::blocking::Response {
+    fn post(
+      &self,
+      path: impl AsRef<str>,
+      body: &impl serde::Serialize,
+    ) -> reqwest::blocking::Response {
       if let Err(error) = self.index.update() {
         log::error!("{error}");
       }
@@ -1603,8 +1650,8 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
   fn parse_server_args(args: &str) -> (Options, Server) {
     match Arguments::try_parse_from(args.split_whitespace()) {
       Ok(arguments) => match arguments.subcommand {
-        Subcommand::Server(server) => (arguments.options, server),
-        subcommand => panic!("unexpected subcommand: {subcommand:?}"),
+        Subcommand::Server(server) => (arguments.options, *server),
+        subcommand => panic!("Unexpected subcommand: {subcommand:?}"),
       },
       Err(err) => panic!("error parsing arguments: {err}"),
     }
@@ -1619,7 +1666,12 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
 
   #[test]
   fn http_port_defaults_to_80() {
-    assert_eq!(parse_server_args("ordpep server").1.http_port(&Settings::default()), Some(80));
+    assert_eq!(
+      parse_server_args("ordpep server")
+        .1
+        .http_port(&Settings::default()),
+      Some(80)
+    );
   }
 
   #[test]
@@ -1630,9 +1682,11 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
   #[test]
   fn https_sets_https_port_to_443() {
     assert_eq!(
-      parse_server_args("ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz")
-        .1
-        .https_port(),
+      parse_server_args(
+        "ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz"
+      )
+      .1
+      .https_port(),
       Some(443)
     );
   }
@@ -1640,10 +1694,11 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
   #[test]
   fn https_disables_http() {
     assert_eq!(
-      parse_server_args("ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz")
-        .1
-        .http_port(&Settings::default())
-,
+      parse_server_args(
+        "ordpep server --https --acme-cache foo --acme-contact bar --acme-domain baz"
+      )
+      .1
+      .http_port(&Settings::default()),
       None
     );
   }
@@ -1655,8 +1710,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
         "ordpep server --https-port 433 --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(&Settings::default())
-,
+      .http_port(&Settings::default()),
       None
     );
   }
@@ -1680,8 +1734,7 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
         "ordpep server --https --http --acme-cache foo --acme-contact bar --acme-domain baz"
       )
       .1
-      .http_port(&Settings::default())
-,
+      .http_port(&Settings::default()),
       Some(80)
     );
   }
@@ -1735,10 +1788,13 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
   #[test]
   fn acme_cache_defaults_to_data_dir() {
     let arguments = Arguments::try_parse_from(["ord", "--data-dir", "foo", "server"]).unwrap();
-    let acme_cache = Server::acme_cache(None, &Settings::merge(arguments.options, BTreeMap::new()).unwrap())
-      .unwrap()
-      .display()
-      .to_string();
+    let acme_cache = Server::acme_cache(
+      None,
+      &Settings::merge(arguments.options, BTreeMap::new()).unwrap(),
+    )
+    .unwrap()
+    .display()
+    .to_string();
     assert!(
       acme_cache.contains(if cfg!(windows) {
         r"foo\acme-cache"
@@ -1754,10 +1810,13 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
     let arguments =
       Arguments::try_parse_from(["ord", "--data-dir", "foo", "server", "--acme-cache", "bar"])
         .unwrap();
-    let acme_cache = Server::acme_cache(Some(&"bar".into()), &Settings::merge(arguments.options, BTreeMap::new()).unwrap())
-      .unwrap()
-      .display()
-      .to_string();
+    let acme_cache = Server::acme_cache(
+      Some(&"bar".into()),
+      &Settings::merge(arguments.options, BTreeMap::new()).unwrap(),
+    )
+    .unwrap()
+    .display()
+    .to_string();
     assert_eq!(acme_cache, "bar")
   }
 
@@ -2911,7 +2970,10 @@ let (_tx, _rx) = std::sync::mpsc::channel::<()>();
     assert!(!outputs[0].spent);
 
     let outpoint_missing = "0000000000000000000000000000000000000000000000000000000000000000:0";
-    let response = server.post("/outputs", &vec![outpoint.to_string(), outpoint_missing.to_string()]);
+    let response = server.post(
+      "/outputs",
+      &vec![outpoint.to_string(), outpoint_missing.to_string()],
+    );
     assert_eq!(response.status(), StatusCode::OK);
 
     let outputs: Vec<api::Output> = serde_json::from_str(&response.text().unwrap()).unwrap();

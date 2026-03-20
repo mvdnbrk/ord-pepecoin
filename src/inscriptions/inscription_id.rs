@@ -6,8 +6,7 @@ pub struct InscriptionId {
   pub(crate) index: u32,
 }
 
-impl InscriptionId {
-}
+impl InscriptionId {}
 
 impl<'de> Deserialize<'de> for InscriptionId {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

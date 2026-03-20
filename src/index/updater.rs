@@ -46,8 +46,7 @@ impl Updater {
     let height = wtx
       .open_table(HEIGHT_TO_BLOCK_HASH)?
       .range(0..)?
-      .rev()
-      .next()
+      .next_back()
       .map(|result| {
         let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
         height.value() + 1
@@ -110,12 +109,7 @@ impl Updater {
 
     let mut uncommitted = 0;
     let mut value_cache = HashMap::new();
-    loop {
-      let block = match rx.recv() {
-        Ok(block) => block,
-        Err(mpsc::RecvError) => break,
-      };
-
+    while let Ok(block) = rx.recv() {
       self.index_block(
         index,
         &mut outpoint_sender,
@@ -147,8 +141,7 @@ impl Updater {
         let height = wtx
           .open_table(HEIGHT_TO_BLOCK_HASH)?
           .range(0..)?
-          .rev()
-          .next()
+          .next_back()
           .map(|result| {
             let (height, _hash) = result.expect("Error reading from HEIGHT_TO_BLOCK_HASH table");
             height.value() + 1
@@ -303,7 +296,7 @@ impl Updater {
           // There's no try_iter on tokio::sync::mpsc::Receiver like std::sync::mpsc::Receiver.
           // So we just loop until BATCH_SIZE doing try_recv until it returns None.
           let mut outpoints = vec![outpoint];
-          for _ in 0..BATCH_SIZE-1 {
+          for _ in 0..BATCH_SIZE - 1 {
             let Ok(outpoint) = outpoint_receiver.try_recv() else {
               break;
             };
@@ -326,7 +319,10 @@ impl Updater {
           };
           // Send all tx output values back in order
           for (i, tx) in txs.iter().flatten().enumerate() {
-            let Ok(_) = value_sender.send(tx.output[usize::try_from(outpoints[i].vout).unwrap()].value).await else {
+            let Ok(_) = value_sender
+              .send(tx.output[usize::try_from(outpoints[i].vout).unwrap()].value)
+              .await
+            else {
               log::error!("Value channel closed unexpectedly");
               return;
             };
@@ -352,7 +348,7 @@ impl Updater {
     // If value_receiver still has values something went wrong with the last block
     // Could be an assert, shouldn't recover from this and commit the last block
     let Err(TryRecvError::Empty) = value_receiver.try_recv() else {
-      return Err(anyhow!("Previous block did not consume all input values")); 
+      return Err(anyhow!("Previous block did not consume all input values"));
     };
 
     let mut outpoint_to_value = wtx.open_table(OUTPOINT_TO_VALUE)?;
@@ -394,7 +390,8 @@ impl Updater {
     }
 
     let mut height_to_block_hash = wtx.open_table(HEIGHT_TO_BLOCK_HASH)?;
-    let mut height_to_last_inscription_number = wtx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
+    let mut height_to_last_inscription_number =
+      wtx.open_table(HEIGHT_TO_LAST_INSCRIPTION_NUMBER)?;
 
     let start = Instant::now();
     let mut sat_ranges_written = 0;
@@ -458,7 +455,7 @@ impl Updater {
       let h = Height(self.height);
       if h.subsidy() > 0 {
         let start = h.starting_sat();
-        coinbase_inputs.push_front((start.n(), (start + h.subsidy() as u128).n()));
+        coinbase_inputs.push_front((start.n(), (start + u128::from(h.subsidy())).n()));
         self.sat_ranges_since_flush += 1;
       }
 
@@ -501,7 +498,7 @@ impl Updater {
         coinbase_inputs.extend(input_sat_ranges);
       }
 
-      if let Some((tx, txid)) = block.txdata.get(0) {
+      if let Some((tx, txid)) = block.txdata.first() {
         self.index_transaction_sats(
           tx,
           *txid,
@@ -547,8 +544,7 @@ impl Updater {
 
     statistic_to_count.insert(&Statistic::LostSats.key(), &lost_sats)?;
 
-    height_to_last_inscription_number
-      .insert(&self.height, &inscription_updater.next_number)?;
+    height_to_last_inscription_number.insert(&self.height, &inscription_updater.next_number)?;
 
     height_to_block_hash.insert(&self.height, &block.header.block_hash().store())?;
 
@@ -606,7 +602,7 @@ impl Updater {
 
         let assigned = if count > remaining {
           self.sat_ranges_since_flush += 1;
-          let middle = range.0 + remaining as u128;
+          let middle = range.0 + u128::from(remaining);
           input_sat_ranges.push_front((middle, range.1));
           (range.0, middle)
         } else {
@@ -629,7 +625,12 @@ impl Updater {
     Ok(())
   }
 
-  fn commit(&mut self, wtx: WriteTransaction, value_cache: HashMap<OutPoint, u64>, index: &Index) -> Result {
+  fn commit(
+    &mut self,
+    wtx: WriteTransaction,
+    value_cache: HashMap<OutPoint, u64>,
+    index: &Index,
+  ) -> Result {
     log::info!(
       "Committing at block height {}, {} outputs traversed, {} in map, {} cached",
       self.height,

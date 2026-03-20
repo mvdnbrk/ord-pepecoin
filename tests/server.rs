@@ -101,7 +101,10 @@ fn inscription_appears_on_reveal_transaction_page() {
 
   test_server.assert_response_regex(
     format!("/tx/{reveal}"),
-    format!(r"(?s).*<h1>Transaction .*</h1>.*<a href=/inscription/{}i0>.*", reveal),
+    format!(
+      r"(?s).*<h1>Transaction .*</h1>.*<a href=/inscription/{}i0>.*",
+      reveal
+    ),
   );
 }
 

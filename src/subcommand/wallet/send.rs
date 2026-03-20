@@ -1,9 +1,6 @@
 use {
   super::*,
-  crate::wallet::{
-    signer::LocalSigner,
-    Wallet,
-  },
+  crate::wallet::{signer::LocalSigner, Wallet},
 };
 
 #[derive(Debug, Parser)]
@@ -66,7 +63,9 @@ impl Send {
       return self.send_max(&wallet, client);
     }
 
-    let outgoing = self.outgoing.ok_or_else(|| anyhow!("must specify an amount, inscription ID, or satpoint (or use --max)"))?;
+    let outgoing = self.outgoing.ok_or_else(|| {
+      anyhow!("must specify an amount, inscription ID, or satpoint (or use --max)")
+    })?;
 
     let satpoint = match outgoing {
       Outgoing::SatPoint(satpoint) => {
@@ -89,7 +88,9 @@ impl Send {
           .map(|satpoint| satpoint.outpoint)
           .collect::<HashSet<OutPoint>>();
 
-        let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+        let fee_rate = self
+          .fee_rate
+          .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
         let change_address = wallet.get_address(true)?;
 
         // Select cardinal (non-inscribed) UTXOs
@@ -123,7 +124,8 @@ impl Send {
         let estimated_vsize = selected.len() * 148 + 2 * 34 + 10;
         let fee = fee_rate.fee(estimated_vsize);
 
-        let total_needed = amount.checked_add(fee)
+        let total_needed = amount
+          .checked_add(fee)
           .ok_or_else(|| anyhow!("overflow calculating total amount + fee"))?;
 
         // Re-select if we need more for fees
@@ -144,7 +146,8 @@ impl Send {
           }
         }
 
-        let change_amount = selected_amount.checked_sub(total_needed)
+        let change_amount = selected_amount
+          .checked_sub(total_needed)
           .ok_or_else(|| anyhow!("insufficient funds for fee"))?;
 
         let mut tx_outputs = vec![TxOut {
@@ -176,7 +179,8 @@ impl Send {
         };
 
         let signed_tx = sign_transaction(&wallet, unsigned_transaction)?;
-        let txid = client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
+        let txid =
+          client.send_raw_transaction(&bitcoin::consensus::encode::serialize(&signed_tx))?;
 
         print_json(Output { transaction: txid })?;
         return Ok(());
@@ -185,7 +189,9 @@ impl Send {
 
     let change = [wallet.get_address(true)?, wallet.get_address(true)?];
 
-    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+    let fee_rate = self
+      .fee_rate
+      .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
     let min = wallet.chain().min_fee_rate();
     if fee_rate < FeeRate::try_from(min).unwrap() {
@@ -196,8 +202,16 @@ impl Send {
 
     let unsigned_transaction = TransactionBuilder::build_transaction_with_postage(
       satpoint,
-      wallet.inscriptions().iter().map(|(sp, ids)| (*sp, ids[0])).collect(),
-      wallet.utxos().iter().map(|(op, txo)| (*op, Amount::from_sat(txo.value))).collect(),
+      wallet
+        .inscriptions()
+        .iter()
+        .map(|(sp, ids)| (*sp, ids[0]))
+        .collect(),
+      wallet
+        .utxos()
+        .iter()
+        .map(|(op, txo)| (*op, Amount::from_sat(txo.value)))
+        .collect(),
       self.address,
       change,
       fee_rate,
@@ -220,7 +234,9 @@ impl Send {
       .map(|satpoint| satpoint.outpoint)
       .collect::<HashSet<OutPoint>>();
 
-    let fee_rate = self.fee_rate.unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+    let fee_rate = self
+      .fee_rate
+      .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
 
     // Select ALL cardinal (non-inscribed) UTXOs
     let cardinal_utxos: Vec<(OutPoint, Amount)> = wallet
@@ -240,16 +256,28 @@ impl Send {
     let estimated_vsize = cardinal_utxos.len() * 148 + 34 + 10;
     let fee = fee_rate.fee(estimated_vsize);
 
-    let send_amount = total_amount.checked_sub(fee)
-      .ok_or_else(|| anyhow!("cardinal balance ({}) is less than the estimated fee ({})", total_amount, fee))?;
+    let send_amount = total_amount.checked_sub(fee).ok_or_else(|| {
+      anyhow!(
+        "cardinal balance ({}) is less than the estimated fee ({})",
+        total_amount,
+        fee
+      )
+    })?;
 
     if send_amount.to_sat() == 0 {
-      bail!("cardinal balance ({}) is too small to cover fees", total_amount);
+      bail!(
+        "cardinal balance ({}) is too small to cover fees",
+        total_amount
+      );
     }
 
     let dust_limit = self.address.script_pubkey().dust_value();
     if send_amount < dust_limit {
-      bail!("send amount ({}) after fees is below dust limit ({})", send_amount, dust_limit);
+      bail!(
+        "send amount ({}) after fees is below dust limit ({})",
+        send_amount,
+        dust_limit
+      );
     }
 
     let unsigned_transaction = Transaction {

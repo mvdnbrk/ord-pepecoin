@@ -24,7 +24,6 @@ use {
     time::Duration,
   },
   tempfile::TempDir,
-  test_bitcoincore_rpc::Sent,
 };
 
 macro_rules! assert_regex_match {
@@ -89,7 +88,10 @@ struct Create {
   mnemonic: Mnemonic,
 }
 
-fn create_wallet_with_data_dir(rpc_server: &test_bitcoincore_rpc::Handle, data_dir: Option<PathBuf>) {
+fn create_wallet_with_data_dir(
+  rpc_server: &test_bitcoincore_rpc::Handle,
+  data_dir: Option<PathBuf>,
+) {
   create_wallet_with_options(rpc_server, data_dir, None)
 }
 
@@ -107,11 +109,10 @@ fn create_wallet_with_options(
   if let Some(ref data_dir) = data_dir {
     builder = builder.data_dir(data_dir.clone());
   }
-  let Create { mnemonic } = builder
-    .rpc_server(rpc_server)
-    .output::<Create>();
+  let Create { mnemonic } = builder.rpc_server(rpc_server).output::<Create>();
 
-  let master_private_key = ExtendedPrivKey::new_master(rpc_server.network_enum(), &mnemonic.to_seed("")).unwrap();
+  let master_private_key =
+    ExtendedPrivKey::new_master(rpc_server.network_enum(), &mnemonic.to_seed("")).unwrap();
   let secp = Secp256k1::new();
 
   // m/44'/3434'/0'/0/0
@@ -122,7 +123,9 @@ fn create_wallet_with_options(
     .child(ChildNumber::Normal { index: 0 })
     .child(ChildNumber::Normal { index: 0 });
 
-  let child_key = master_private_key.derive_priv(&secp, &derivation_path).unwrap();
+  let child_key = master_private_key
+    .derive_priv(&secp, &derivation_path)
+    .unwrap();
   let privkey = PrivateKey::new(child_key.private_key, rpc_server.network_enum());
   let address = Address::p2pkh(&privkey.public_key(&secp), privkey.network);
 

@@ -44,7 +44,11 @@ pub(crate) struct RevealJob {
 
 impl RevealJob {
   pub(crate) fn jobs_dir(settings: &Settings, wallet_name: &str) -> PathBuf {
-    settings.data_dir().join("wallets").join(wallet_name).join("jobs")
+    settings
+      .data_dir()
+      .join("wallets")
+      .join(wallet_name)
+      .join("jobs")
   }
 
   pub(crate) fn broadcast_commit(&mut self, client: &Client) -> bool {
@@ -52,7 +56,10 @@ impl RevealJob {
       return false;
     }
 
-    match client.call::<Txid>("sendrawtransaction", &[serde_json::to_value(&self.commit_raw_hex).unwrap()]) {
+    match client.call::<Txid>(
+      "sendrawtransaction",
+      &[serde_json::to_value(&self.commit_raw_hex).unwrap()],
+    ) {
       Ok(_) => {
         self.commit_broadcast = true;
         true
@@ -77,7 +84,10 @@ impl RevealJob {
 
     match client.call::<serde_json::Value>(
       "getrawtransaction",
-      &[serde_json::to_value(self.commit_txid).unwrap(), serde_json::to_value(true).unwrap()],
+      &[
+        serde_json::to_value(self.commit_txid).unwrap(),
+        serde_json::to_value(true).unwrap(),
+      ],
     ) {
       Ok(tx_info) => {
         if let Some(confirmations) = tx_info["confirmations"].as_u64() {
@@ -88,7 +98,11 @@ impl RevealJob {
         }
       }
       Err(e) => {
-        log::warn!("Failed to check confirmation for commit {}: {}", self.commit_txid, e);
+        log::warn!(
+          "Failed to check confirmation for commit {}: {}",
+          self.commit_txid,
+          e
+        );
       }
     }
     false
@@ -100,8 +114,16 @@ impl RevealJob {
     }
 
     let mut changed = false;
-    for reveal in self.reveals.iter_mut().filter(|r| !r.broadcast).take(MEMPOOL_CHAIN_LIMIT) {
-      match client.call::<Txid>("sendrawtransaction", &[serde_json::to_value(&reveal.raw_hex).unwrap()]) {
+    for reveal in self
+      .reveals
+      .iter_mut()
+      .filter(|r| !r.broadcast)
+      .take(MEMPOOL_CHAIN_LIMIT)
+    {
+      match client.call::<Txid>(
+        "sendrawtransaction",
+        &[serde_json::to_value(&reveal.raw_hex).unwrap()],
+      ) {
         Ok(_) => {
           reveal.broadcast = true;
           changed = true;
@@ -110,7 +132,9 @@ impl RevealJob {
           let error_msg = e.to_string();
           if error_msg.contains("-26") && error_msg.contains("too-long-mempool-chain") {
             break;
-          } else if error_msg.contains("-27") || error_msg.contains("Transaction already in mempool") {
+          } else if error_msg.contains("-27")
+            || error_msg.contains("Transaction already in mempool")
+          {
             reveal.broadcast = true;
             changed = true;
           } else {
@@ -125,10 +149,17 @@ impl RevealJob {
 
   pub(crate) fn check_confirmations(&mut self, client: &Client) -> bool {
     let mut changed = self.check_commit_confirmation(client);
-    for reveal in self.reveals.iter_mut().filter(|r| r.broadcast && !r.confirmed) {
+    for reveal in self
+      .reveals
+      .iter_mut()
+      .filter(|r| r.broadcast && !r.confirmed)
+    {
       match client.call::<serde_json::Value>(
         "getrawtransaction",
-        &[serde_json::to_value(reveal.txid).unwrap(), serde_json::to_value(true).unwrap()],
+        &[
+          serde_json::to_value(reveal.txid).unwrap(),
+          serde_json::to_value(true).unwrap(),
+        ],
       ) {
         Ok(tx_info) => {
           if let Some(confirmations) = tx_info["confirmations"].as_u64() {
@@ -139,7 +170,11 @@ impl RevealJob {
           }
         }
         Err(e) => {
-          log::warn!("Failed to check confirmation for reveal {}: {}", reveal.txid, e);
+          log::warn!(
+            "Failed to check confirmation for reveal {}: {}",
+            reveal.txid,
+            e
+          );
         }
       }
     }
@@ -151,7 +186,12 @@ impl RevealJob {
   }
 
   pub(crate) fn all_broadcast_confirmed(&self) -> bool {
-    self.commit_confirmed && self.reveals.iter().filter(|r| r.broadcast).all(|r| r.confirmed)
+    self.commit_confirmed
+      && self
+        .reveals
+        .iter()
+        .filter(|r| r.broadcast)
+        .all(|r| r.confirmed)
   }
 
   pub(crate) fn has_pending(&self) -> bool {
@@ -195,8 +235,15 @@ pub(crate) struct RevealTx {
 }
 
 pub(crate) fn sanitize_batch_name(name: &str) -> String {
-  name.chars()
-    .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+  name
+    .chars()
+    .map(|c| {
+      if c.is_alphanumeric() || c == '-' || c == '_' {
+        c
+      } else {
+        '_'
+      }
+    })
     .collect()
 }
 
@@ -218,8 +265,15 @@ pub(crate) fn process_pending_jobs(settings: &Settings) -> Result {
   Ok(())
 }
 
-pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Result<Vec<JobStatus>> {
-  let jobs_dir = settings.data_dir().join("wallets").join(wallet_name).join("jobs");
+pub(crate) fn process_reveal_jobs(
+  settings: &Settings,
+  wallet_name: &str,
+) -> Result<Vec<JobStatus>> {
+  let jobs_dir = settings
+    .data_dir()
+    .join("wallets")
+    .join(wallet_name)
+    .join("jobs");
   if !jobs_dir.exists() {
     return Ok(Vec::new());
   }
@@ -228,7 +282,12 @@ pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Res
   let mut statuses = Vec::new();
 
   // 1. Process flat files (single inscriptions)
-  statuses.extend(process_job_files(&client, &jobs_dir, &jobs_dir.join("complete"), None)?);
+  statuses.extend(process_job_files(
+    &client,
+    &jobs_dir,
+    &jobs_dir.join("complete"),
+    None,
+  )?);
 
   // 2. Process batch directories
   for entry in fs::read_dir(&jobs_dir)? {
@@ -236,14 +295,22 @@ pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Res
     let path = entry.path();
     if path.is_dir() && entry.file_name() != "complete" {
       let batch_name = entry.file_name().to_string_lossy().to_string();
-      statuses.extend(process_job_files(&client, &path, &path.join("complete"), Some(batch_name))?);
-      
+      statuses.extend(process_job_files(
+        &client,
+        &path,
+        &path.join("complete"),
+        Some(batch_name),
+      )?);
+
       // Check if batch is complete
       if is_batch_complete(&path) {
         let complete_dir = jobs_dir.join("complete");
         fs::create_dir_all(&complete_dir)?;
         fs::rename(&path, complete_dir.join(entry.file_name()))?;
-        log::info!("Batch {} completed and moved to complete/", entry.file_name().to_string_lossy());
+        log::info!(
+          "Batch {} completed and moved to complete/",
+          entry.file_name().to_string_lossy()
+        );
       }
     }
   }
@@ -251,7 +318,12 @@ pub(crate) fn process_reveal_jobs(settings: &Settings, wallet_name: &str) -> Res
   Ok(statuses)
 }
 
-fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_name: Option<String>) -> Result<Vec<JobStatus>> {
+fn process_job_files(
+  client: &Client,
+  dir: &Path,
+  complete_dir: &Path,
+  batch_name: Option<String>,
+) -> Result<Vec<JobStatus>> {
   let mut active_count = 0;
   let mut statuses = Vec::new();
   let is_batch = batch_name.is_some();
@@ -268,7 +340,7 @@ fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_nam
 
   for entry in entries {
     let path = entry.path();
-    
+
     let mut job: RevealJob = serde_json::from_reader(fs::File::open(&path)?)?;
 
     if is_batch {
@@ -279,7 +351,7 @@ fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_nam
           continue;
         }
       } else if active_count >= 1 {
-        // We already processed some jobs but don't have an active_txid? 
+        // We already processed some jobs but don't have an active_txid?
         // This shouldn't happen with the logic below, but just in case.
         statuses.push(job.status(batch_name.clone()));
         continue;
@@ -300,16 +372,16 @@ fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_nam
 
     let mut changed = job.check_confirmations(client);
 
-    if !job.commit_broadcast {
-      if job.broadcast_commit(client) {
-        changed = true;
-      }
+    if !job.commit_broadcast && job.broadcast_commit(client) {
+      changed = true;
     }
 
-    if job.commit_broadcast && job.all_broadcast_confirmed() && job.has_pending() {
-      if job.broadcast_batch(client) {
-        changed = true;
-      }
+    if job.commit_broadcast
+      && job.all_broadcast_confirmed()
+      && job.has_pending()
+      && job.broadcast_batch(client)
+    {
+      changed = true;
     }
 
     if changed {
@@ -321,7 +393,7 @@ fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_nam
       fs::create_dir_all(complete_dir)?;
       fs::rename(&path, complete_dir.join(path.file_name().unwrap()))?;
       log::info!("Job {} completed", job.commit_txid);
-      
+
       // If this was a batch job, we can now allow the next one in the next run.
       // For this run, we just mark it as complete in statuses.
       if is_batch {
@@ -336,12 +408,10 @@ fn process_job_files(client: &Client, dir: &Path, complete_dir: &Path, batch_nam
 
 fn is_batch_complete(batch_dir: &Path) -> bool {
   if let Ok(entries) = fs::read_dir(batch_dir) {
-    for entry in entries {
-      if let Ok(entry) = entry {
-        let path = entry.path();
-        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
-          return false;
-        }
+    for entry in entries.flatten() {
+      let path = entry.path();
+      if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+        return false;
       }
     }
   }
@@ -355,8 +425,12 @@ mod tests {
 
   #[test]
   fn serialization() {
-    let commit_txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
-    let inscription_id = InscriptionId { txid: commit_txid, index: 0 };
+    let commit_txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let inscription_id = InscriptionId {
+      txid: commit_txid,
+      index: 0,
+    };
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     let job = RevealJob {
@@ -390,8 +464,16 @@ mod tests {
     assert_eq!(deserialized.file_name, "test.png");
   }
 
-  fn make_job(commit_txid: Txid, num_reveals: usize, broadcast: bool, confirmed: bool) -> RevealJob {
-    let inscription_id = InscriptionId { txid: commit_txid, index: 0 };
+  fn make_job(
+    commit_txid: Txid,
+    num_reveals: usize,
+    broadcast: bool,
+    confirmed: bool,
+  ) -> RevealJob {
+    let inscription_id = InscriptionId {
+      txid: commit_txid,
+      index: 0,
+    };
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     RevealJob {
@@ -420,14 +502,16 @@ mod tests {
 
   #[test]
   fn all_confirmed_when_commit_and_reveals_confirmed() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let job = make_job(txid, 3, true, true);
     assert!(job.all_confirmed());
   }
 
   #[test]
   fn not_all_confirmed_when_commit_unconfirmed() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let mut job = make_job(txid, 3, true, true);
     job.commit_confirmed = false;
     assert!(!job.all_confirmed());
@@ -435,7 +519,8 @@ mod tests {
 
   #[test]
   fn not_all_confirmed_when_reveal_unconfirmed() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let mut job = make_job(txid, 3, true, true);
     job.reveals[1].confirmed = false;
     assert!(!job.all_confirmed());
@@ -443,14 +528,16 @@ mod tests {
 
   #[test]
   fn has_pending_when_commit_not_broadcast() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let job = make_job(txid, 3, false, false);
     assert!(job.has_pending());
   }
 
   #[test]
   fn has_pending_when_reveals_not_broadcast() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let mut job = make_job(txid, 3, true, false);
     job.reveals[2].broadcast = false;
     assert!(job.has_pending());
@@ -458,14 +545,16 @@ mod tests {
 
   #[test]
   fn no_pending_when_all_broadcast() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let job = make_job(txid, 3, true, false);
     assert!(!job.has_pending());
   }
 
   #[test]
   fn status_reports_counts() {
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let mut job = make_job(txid, 5, true, false);
     job.reveals[0].confirmed = true;
     job.reveals[1].confirmed = true;
@@ -498,7 +587,8 @@ mod tests {
   #[test]
   fn job_save_and_load() {
     let dir = tempfile::tempdir().unwrap();
-    let txid = Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
+    let txid =
+      Txid::from_str("0000000000000000000000000000000000000000000000000000000000000000").unwrap();
     let job = make_job(txid, 2, true, false);
 
     let path = dir.path().join("test.json");

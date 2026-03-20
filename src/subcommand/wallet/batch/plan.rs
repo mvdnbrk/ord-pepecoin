@@ -283,7 +283,7 @@ pub(crate) fn create_batch_inscription_transactions(
   for (i, chain) in reveal_chains.iter_mut().enumerate() {
     chain[0].tx.input[0].previous_output = OutPoint {
       txid: commit_txid,
-      vout: i as u32,
+      vout: u32::try_from(i).unwrap(),
     };
   }
 
@@ -300,6 +300,5 @@ pub(crate) fn calculate_fee(tx: &Transaction, utxos: &BTreeMap<OutPoint, Amount>
         .unwrap_or(0)
     })
     .sum::<u64>()
-    .checked_sub(tx.output.iter().map(|txout| txout.value).sum::<u64>())
-    .unwrap_or(0)
+    .saturating_sub(tx.output.iter().map(|txout| txout.value).sum::<u64>())
 }

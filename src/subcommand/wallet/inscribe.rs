@@ -1,16 +1,4 @@
 use {
-  super::*,
-  crate::wallet::{
-    signer::LocalSigner,
-    Wallet,
-  },
-  bitcoin::{
-    blockdata::script,
-    secp256k1::{self, Secp256k1},
-    util::key::{PrivateKey, PublicKey},
-    EcdsaSighashType, PackedLockTime, Witness,
-  },
-  std::collections::BTreeSet,
   super::batch::{
     file::BatchFile,
     plan::{
@@ -19,7 +7,16 @@ use {
     },
     BatchOutput, InscriptionOutput,
   },
-  super::job::{RevealJob, RevealTx, sanitize_batch_name, MEMPOOL_CHAIN_LIMIT},
+  super::job::{sanitize_batch_name, RevealJob, RevealTx, MEMPOOL_CHAIN_LIMIT},
+  super::*,
+  crate::wallet::{signer::LocalSigner, Wallet},
+  bitcoin::{
+    blockdata::script,
+    secp256k1::{self, Secp256k1},
+    util::key::{PrivateKey, PublicKey},
+    EcdsaSighashType, PackedLockTime, Witness,
+  },
+  std::collections::BTreeSet,
 };
 
 #[derive(Serialize)]
@@ -46,10 +43,7 @@ struct DryRunOutput {
 pub(crate) struct Inscribe {
   #[clap(long, help = "Inscribe <SATPOINT>")]
   pub(crate) satpoint: Option<SatPoint>,
-  #[clap(
-    long,
-    help = "Use fee rate of <FEE_RATE> sats/vB. [default: 1000.0]"
-  )]
+  #[clap(long, help = "Use fee rate of <FEE_RATE> sats/vB. [default: 1000.0]")]
   pub(crate) fee_rate: Option<FeeRate>,
   #[clap(
     long,
@@ -70,7 +64,11 @@ pub(crate) struct Inscribe {
   pub(crate) dry_run: bool,
   #[clap(long, help = "Do not back up recovery key.")]
   pub(crate) no_backup: bool,
-  #[clap(long, help = "Send inscription to <DESTINATION>.", conflicts_with = "batch")]
+  #[clap(
+    long,
+    help = "Send inscription to <DESTINATION>.",
+    conflicts_with = "batch"
+  )]
   pub(crate) destination: Option<Address>,
   #[clap(long, help = "Use postage of <POSTAGE> sats. [default: 100000]")]
   pub(crate) postage: Option<Amount>,
@@ -108,7 +106,10 @@ fn sign_reveal_chain(
     tx.input[0].previous_output = if j == 0 {
       parent_outpoint
     } else {
-      OutPoint { txid: last_txid, vout: 0 }
+      OutPoint {
+        txid: last_txid,
+        vout: 0,
+      }
     };
 
     let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
@@ -145,7 +146,10 @@ fn sign_reveal_chain(
     });
   }
 
-  let inscription_id = InscriptionId { txid: reveals[0].txid, index: 0 };
+  let inscription_id = InscriptionId {
+    txid: reveals[0].txid,
+    index: 0,
+  };
 
   Ok(SignedReveal {
     reveals,
@@ -195,10 +199,7 @@ impl Inscribe {
     // Add a large fake UTXO for dry-run so transaction building succeeds
     // regardless of wallet balance.
     if self.dry_run {
-      utxos.insert(
-        OutPoint::null(),
-        Amount::from_sat(1_000_000_000_000),
-      );
+      utxos.insert(OutPoint::null(), Amount::from_sat(1_000_000_000_000));
     }
 
     let existing_inscriptions = wallet
@@ -209,7 +210,7 @@ impl Inscribe {
 
     if let Some(batch_path) = &self.batch {
       let batch_file = BatchFile::load(batch_path)?;
-      
+
       // Load all inscriptions once
       let mut inscriptions = Vec::new();
       let mut destinations = Vec::new();
@@ -244,7 +245,7 @@ impl Inscribe {
         }
       }
 
-      let num_chunks = (inscriptions.len() + BATCH_COMMIT_CHUNK_SIZE - 1) / BATCH_COMMIT_CHUNK_SIZE;
+      let num_chunks = inscriptions.len().div_ceil(BATCH_COMMIT_CHUNK_SIZE);
       let estimated_commit_fees = num_chunks as u64 * commit_fee_rate.fee(200).to_sat();
       let total_required = total_postage + total_reveal_fees + estimated_commit_fees;
       let available: u64 = utxos.values().map(|a| a.to_sat()).sum();
@@ -264,11 +265,19 @@ impl Inscribe {
       let mut total_reveal_count = 0;
       let mut used_utxos = BTreeSet::new();
 
-      for (chunk_idx, chunk_data) in inscriptions.chunks(BATCH_COMMIT_CHUNK_SIZE).zip(destinations.chunks(BATCH_COMMIT_CHUNK_SIZE)).enumerate() {
+      for (chunk_idx, chunk_data) in inscriptions
+        .chunks(BATCH_COMMIT_CHUNK_SIZE)
+        .zip(destinations.chunks(BATCH_COMMIT_CHUNK_SIZE))
+        .enumerate()
+      {
         let (chunk_inscriptions_with_paths, chunk_destinations) = chunk_data;
-        let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_paths.iter().map(|(ins, _)| ins.clone()).collect();
+        let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_paths
+          .iter()
+          .map(|(ins, _)| ins.clone())
+          .collect();
 
-        let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos.iter()
+        let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos
+          .iter()
           .filter(|(op, _)| !used_utxos.contains(*op))
           .map(|(op, amount)| (*op, *amount))
           .collect();
@@ -291,7 +300,13 @@ impl Inscribe {
             }
             total_fees += fees;
             total_reveal_count += reveal_chains.iter().map(|c| c.len()).sum::<usize>();
-            all_chunk_results.push((commit_tx, reveal_chains, chunk_destinations.to_vec(), chunk_inscriptions_with_paths, fees));
+            all_chunk_results.push((
+              commit_tx,
+              reveal_chains,
+              chunk_destinations.to_vec(),
+              chunk_inscriptions_with_paths,
+              fees,
+            ));
           }
           Err(e) => {
             if chunk_idx == 0 {
@@ -315,7 +330,7 @@ impl Inscribe {
           }
         }
 
-        let broadcast_rounds = (total_reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+        let broadcast_rounds = total_reveal_count.div_ceil(MEMPOOL_CHAIN_LIMIT);
 
         #[derive(Serialize)]
         struct BatchDryRunOutput {
@@ -342,13 +357,19 @@ impl Inscribe {
         let secp = Secp256k1::new();
         let mut inscription_outputs = Vec::new();
 
-        for (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees) in all_chunk_results {
+        for (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees) in
+          all_chunk_results
+        {
           let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
           let commit_txid = signed_commit_tx.txid();
-          let commit_raw_hex = hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
+          let commit_raw_hex =
+            hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
 
           for (i, chain) in reveal_chains.into_iter().enumerate() {
-            let parent = OutPoint { txid: commit_txid, vout: i as u32 };
+            let parent = OutPoint {
+              txid: commit_txid,
+              vout: u32::try_from(i).unwrap(),
+            };
             let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
 
             inscription_outputs.push(InscriptionOutput {
@@ -360,8 +381,14 @@ impl Inscribe {
             let (_ins, path) = &chunk_inscriptions_with_paths[i];
 
             all_jobs.push(RevealJob {
-              file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-              content_type: Media::content_type_for_path(path).unwrap_or("application/octet-stream").to_string(),
+              file_name: path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
+              content_type: Media::content_type_for_path(path)
+                .unwrap_or("application/octet-stream")
+                .to_string(),
               file_size: fs::metadata(path).map(|m| m.len()).unwrap_or(0),
               commit_txid,
               commit_raw_hex: commit_raw_hex.clone(),
@@ -411,10 +438,8 @@ impl Inscribe {
         }
       }
     } else {
-      let inscription = Inscription::from_file(
-        wallet.chain(),
-        self.file.as_ref().context("missing file")?,
-      )?;
+      let inscription =
+        Inscription::from_file(wallet.chain(), self.file.as_ref().context("missing file")?)?;
 
       let reveal_tx_destination = self
         .destination
@@ -440,9 +465,11 @@ impl Inscribe {
 
       if self.dry_run {
         let inscription_id = txs[1].txid().into();
-        let broadcast_rounds = (reveal_count + MEMPOOL_CHAIN_LIMIT - 1) / MEMPOOL_CHAIN_LIMIT;
+        let broadcast_rounds = reveal_count.div_ceil(MEMPOOL_CHAIN_LIMIT);
 
-        let dry_dir = wallet.settings().data_dir()
+        let dry_dir = wallet
+          .settings()
+          .data_dir()
           .join("wallets")
           .join(wallet.name())
           .join("jobs")
@@ -458,7 +485,6 @@ impl Inscribe {
           fees,
           reveal_count,
           broadcast_rounds,
-
         };
 
         serde_json::to_writer_pretty(fs::File::create(&dry_file)?, &output)?;
@@ -473,15 +499,22 @@ impl Inscribe {
           .context("Failed to send commit transaction")?;
 
         let secp = Secp256k1::new();
-        let chain: Vec<super::batch::plan::RevealTx> = txs[1..].iter().zip(scripts.iter())
-          .map(|(tx, (redeem_script, partial_script))| super::batch::plan::RevealTx {
-            tx: tx.clone(),
-            redeem_script: redeem_script.clone(),
-            partial_script: partial_script.clone(),
-          })
+        let chain: Vec<super::batch::plan::RevealTx> = txs[1..]
+          .iter()
+          .zip(scripts.iter())
+          .map(
+            |(tx, (redeem_script, partial_script))| super::batch::plan::RevealTx {
+              tx: tx.clone(),
+              redeem_script: redeem_script.clone(),
+              partial_script: partial_script.clone(),
+            },
+          )
           .collect();
 
-        let parent = OutPoint { txid: commit, vout: 0 };
+        let parent = OutPoint {
+          txid: commit,
+          vout: 0,
+        };
         let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
 
         let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
@@ -490,8 +523,14 @@ impl Inscribe {
 
         let file_path = self.file.as_ref().unwrap();
         let mut job = RevealJob {
-          file_name: file_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-          content_type: Media::content_type_for_path(file_path).unwrap_or("application/octet-stream").to_string(),
+          file_name: file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+          content_type: Media::content_type_for_path(file_path)
+            .unwrap_or("application/octet-stream")
+            .to_string(),
           file_size: fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
           commit_txid: commit,
           commit_raw_hex,
@@ -606,11 +645,14 @@ impl Inscribe {
     fees += calculate_fee(&unsigned_commit_tx, &utxos);
     let mut last_outpoint = OutPoint {
       txid: unsigned_commit_tx.txid(),
-      vout: unsigned_commit_tx
-        .output
-        .iter()
-        .position(|o| o.script_pubkey == first_lock_address.script_pubkey())
-        .unwrap() as u32,
+      vout: u32::try_from(
+        unsigned_commit_tx
+          .output
+          .iter()
+          .position(|o| o.script_pubkey == first_lock_address.script_pubkey())
+          .unwrap(),
+      )
+      .unwrap(),
     };
     let mut last_value = unsigned_commit_tx.output[last_outpoint.vout as usize].value;
     txs.push(unsigned_commit_tx);

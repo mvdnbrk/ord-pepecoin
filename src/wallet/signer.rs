@@ -17,7 +17,7 @@ impl LocalSigner {
   ) -> Result<Transaction> {
     let mut signed_transaction = unsigned_transaction.clone();
     let secp = Secp256k1::new();
-    
+
     for (i, input) in unsigned_transaction.input.iter().enumerate() {
       let Some(utxo) = wallet.utxos().get(&input.previous_output) else {
         bail!("UTXO not found for input {}", i);

@@ -26,7 +26,11 @@ impl Create {
 
     let mnemonic = Mnemonic::from_entropy(&entropy)?;
 
-    crate::wallet::Wallet::initialize(&settings, wallet_name, mnemonic.to_seed(self.passphrase.clone()))?;
+    crate::wallet::Wallet::initialize(
+      &settings,
+      wallet_name,
+      mnemonic.to_seed(self.passphrase.clone()),
+    )?;
 
     crate::wallet::Wallet::import_addresses(&settings, wallet_name, false)?;
 

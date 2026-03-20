@@ -57,5 +57,8 @@ fn outputs_with_ranges() {
 
   assert_eq!(output[0].output, outpoint);
   assert_eq!(output[0].amount, amount);
-  assert_eq!(output[0].sat_ranges, Some(vec!["100000000000000-100000001000000".to_string()]));
+  assert_eq!(
+    output[0].sat_ranges,
+    Some(vec!["100000000000000-100000001000000".to_string()])
+  );
 }

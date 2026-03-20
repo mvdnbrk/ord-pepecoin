@@ -35,12 +35,14 @@ fn inscriptions() {
     .output::<receive::Output>()
     .address;
 
-  let stdout = CommandBuilder::new(format!("wallet send --fee-rate 10000 {address} {inscription}"))
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .expected_exit_code(0)
-    .stdout_regex(".*")
-    .run();
+  let stdout = CommandBuilder::new(format!(
+    "wallet send --fee-rate 10000 {address} {inscription}"
+  ))
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .expected_exit_code(0)
+  .stdout_regex(".*")
+  .run();
 
   rpc_server.mine_blocks(1);
 
