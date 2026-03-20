@@ -1,14 +1,11 @@
 use {
   super::*,
   bitcoin::{
-    util::bip32::{ChildNumber, DerivationPath, ExtendedPrivKey, ExtendedPubKey},
     secp256k1::Secp256k1,
+    util::bip32::{ChildNumber, DerivationPath, ExtendedPrivKey, ExtendedPubKey},
     PrivateKey,
   },
-  redb::{
-    Database, ReadableTable,
-    TableDefinition, ReadableDatabase,
-  },
+  redb::{Database, ReadableDatabase, ReadableTable, TableDefinition},
   reqwest::blocking::Client as OrdClient,
   std::sync::Arc,
 };
@@ -86,20 +83,32 @@ impl Wallet {
           .child(ChildNumber::Hardened { index: 3434 }) // PEPECOIN_COIN_TYPE
           .child(ChildNumber::Hardened { index: 0 })
           .child(ChildNumber::Normal { index: u32::from(change) });
-        
+
         let derived_xpriv = master_private_key.derive_priv(&secp, &derivation_path)?;
         let derived_xpub = ExtendedPubKey::from_priv(&secp, &derived_xpriv);
-        
+
         let descriptor = format!("pkh({derived_xpub}/*)");
-        descriptors.insert(if change { "change" } else { "receive" }, descriptor.as_str())?;
+        descriptors.insert(
+          if change { "change" } else { "receive" },
+          descriptor.as_str(),
+        )?;
       }
     }
     tx.commit()?;
     Ok(())
   }
 
-  pub(crate) fn load(settings: &Settings, wallet_name: &str, server_url: Option<Url>, no_sync: bool) -> Result<Self> {
-    let db_path = settings.data_dir().join("wallets").join(wallet_name).join("wallet.redb");
+  pub(crate) fn load(
+    settings: &Settings,
+    wallet_name: &str,
+    server_url: Option<Url>,
+    no_sync: bool,
+  ) -> Result<Self> {
+    let db_path = settings
+      .data_dir()
+      .join("wallets")
+      .join(wallet_name)
+      .join("wallet.redb");
     if !db_path.exists() {
       bail!("wallet `{wallet_name}` does not exist, create it first with `ordpep wallet create`");
     }
@@ -111,7 +120,10 @@ impl Wallet {
     let ord_client = OrdClient::builder()
       .default_headers({
         let mut headers = http::HeaderMap::new();
-        headers.insert(http::header::ACCEPT, http::header::HeaderValue::from_static("application/json"));
+        headers.insert(
+          http::header::ACCEPT,
+          http::header::HeaderValue::from_static("application/json"),
+        );
         headers
       })
       .build()?;
@@ -128,7 +140,10 @@ impl Wallet {
         let response = ord_client.get(rpc_url.join("/blockcount")?).send()
           .context("wallet failed to retrieve block count from server. Make sure `ordpep server` is running.")?;
         if !response.status().is_success() {
-          bail!("failed to get blockcount from ordpep server: {}", response.status());
+          bail!(
+            "failed to get blockcount from ordpep server: {}",
+            response.status()
+          );
         }
         let ord_block_count: u64 = response.text()?.parse()?;
         if ord_block_count >= bitcoin_block_count {
@@ -156,20 +171,22 @@ impl Wallet {
       .context("failed to list unspent outputs")?;
 
     for utxo in unspent {
-      let script_pubkey = Script::from_str(&utxo.script_pub_key)
-        .context("failed to parse scriptPubKey")?;
-      
+      let script_pubkey =
+        Script::from_str(&utxo.script_pub_key).context("failed to parse scriptPubKey")?;
+
       if !address_scripts.contains(&script_pubkey) {
         continue;
       }
 
       let outpoint = OutPoint::new(utxo.txid, utxo.vout);
-      let amount = Amount::from_btc(utxo.amount)
-        .map_err(|e| anyhow!("invalid amount: {e}"))?;
-      utxos.insert(outpoint, TxOut {
-        value: amount.to_sat(),
-        script_pubkey,
-      });
+      let amount = Amount::from_btc(utxo.amount).map_err(|e| anyhow!("invalid amount: {e}"))?;
+      utxos.insert(
+        outpoint,
+        TxOut {
+          value: amount.to_sat(),
+          script_pubkey,
+        },
+      );
     }
 
     #[derive(Deserialize)]
@@ -195,25 +212,44 @@ impl Wallet {
 
     // Fetch output info
     let outpoints: Vec<OutPoint> = utxos.keys().cloned().collect();
-    let response = ord_client.post(rpc_url.join("/outputs")?).json(&outpoints).send()?;
+    let response = ord_client
+      .post(rpc_url.join("/outputs")?)
+      .json(&outpoints)
+      .send()?;
     if !response.status().is_success() {
-      bail!("failed to get outputs from ordpep server: {}", response.status());
+      bail!(
+        "failed to get outputs from ordpep server: {}",
+        response.status()
+      );
     }
     let response_outputs: Vec<api::Output> = response.json()?;
-    let output_info: BTreeMap<OutPoint, api::Output> = outpoints.into_iter().zip(response_outputs).collect();
+    let output_info: BTreeMap<OutPoint, api::Output> =
+      outpoints.into_iter().zip(response_outputs).collect();
 
     // Fetch inscription details
-    let inscription_ids: Vec<InscriptionId> = output_info.values().flat_map(|info| info.inscriptions.clone()).collect();
+    let inscription_ids: Vec<InscriptionId> = output_info
+      .values()
+      .flat_map(|info| info.inscriptions.clone())
+      .collect();
     let (inscriptions, inscription_info) = if !inscription_ids.is_empty() {
-      let response = ord_client.post(rpc_url.join("/inscriptions")?).json(&inscription_ids).send()?;
+      let response = ord_client
+        .post(rpc_url.join("/inscriptions")?)
+        .json(&inscription_ids)
+        .send()?;
       if !response.status().is_success() {
-        bail!("failed to get inscriptions from ordpep server: {}", response.status());
+        bail!(
+          "failed to get inscriptions from ordpep server: {}",
+          response.status()
+        );
       }
       let response_inscriptions: Vec<api::Inscription> = response.json()?;
       let mut inscriptions = BTreeMap::new();
       let mut inscription_info = BTreeMap::new();
       for info in response_inscriptions {
-        inscriptions.entry(info.satpoint).or_insert_with(Vec::new).push(info.id);
+        inscriptions
+          .entry(info.satpoint)
+          .or_insert_with(Vec::new)
+          .push(info.id);
         inscription_info.insert(info.id, info);
       }
       (inscriptions, inscription_info)
@@ -259,7 +295,7 @@ impl Wallet {
     let rtx = database.begin_read()?;
     let descriptors = rtx.open_table(DESCRIPTORS)?;
     let address_index = rtx.open_table(ADDRESS_INDEX)?;
-    
+
     let mut addresses = Vec::new();
     let secp = Secp256k1::new();
     let network = chain.network();
@@ -267,9 +303,9 @@ impl Wallet {
     for key in ["receive", "change"] {
       if let Ok(Some(desc_str)) = descriptors.get(key) {
         let last_index = address_index.get(key)?.map(|v| v.value()).unwrap_or(0);
-        
+
         if let Ok(xpub) = Self::parse_xpub_from_descriptor(desc_str.value()) {
-          for i in 0..=last_index + 20 { 
+          for i in 0..=last_index + 20 {
             let derived_xpub = xpub.derive_pub(&secp, &[ChildNumber::Normal { index: i }])?;
             let public_key = derived_xpub.to_pub();
             addresses.push(Address::p2pkh(&public_key, network));
@@ -277,7 +313,7 @@ impl Wallet {
         }
       }
     }
-    
+
     Ok(addresses)
   }
 
@@ -335,37 +371,51 @@ impl Wallet {
     if !self._has_sat_index {
       bail!("ordpep server does not have a sat index");
     }
-    Ok(self.output_info
-      .iter()
-      .filter_map(|(outpoint, info)| {
-        info.sat_ranges.as_ref().map(|ranges| {
-          (*outpoint, ranges.iter().map(|(s, e)| (*s as u128, *e as u128)).collect())
+    Ok(
+      self
+        .output_info
+        .iter()
+        .filter_map(|(outpoint, info)| {
+          info.sat_ranges.as_ref().map(|ranges| {
+            (
+              *outpoint,
+              ranges
+                .iter()
+                .map(|(s, e)| (u128::from(*s), u128::from(*e)))
+                .collect(),
+            )
+          })
         })
-      })
-      .collect())
+        .collect(),
+    )
   }
 
   pub(crate) fn get_address(&self, change: bool) -> Result<Address> {
     let tx = self.database.begin_write()?;
     let key = if change { "change" } else { "receive" };
-    
-    let index = tx.open_table(ADDRESS_INDEX)?.get(key)?.map(|v| v.value()).unwrap_or(0);
+
+    let index = tx
+      .open_table(ADDRESS_INDEX)?
+      .get(key)?
+      .map(|v| v.value())
+      .unwrap_or(0);
 
     let address = {
       let descriptors = tx.open_table(DESCRIPTORS)?;
-      let desc_str = descriptors.get(key)?
-        .ok_or_else(|| anyhow!("wallet contains no descriptors. Was it created with `ordpep wallet create`?"))?;
-      
+      let desc_str = descriptors.get(key)?.ok_or_else(|| {
+        anyhow!("wallet contains no descriptors. Was it created with `ordpep wallet create`?")
+      })?;
+
       let xpub = Self::parse_xpub_from_descriptor(desc_str.value())?;
-      
+
       let secp = Secp256k1::new();
       let derived_xpub = xpub.derive_pub(&secp, &[ChildNumber::Normal { index }])?;
       Address::p2pkh(&derived_xpub.to_pub(), self.chain().network())
     };
-    
+
     tx.open_table(ADDRESS_INDEX)?.insert(key, index + 1)?;
     tx.commit()?;
-    
+
     let _: Result<serde_json::Value, _> = self.bitcoin_client.call(
       "importaddress",
       &[
@@ -382,7 +432,7 @@ impl Wallet {
     let rtx = self.database.begin_read()?;
     let descriptors = rtx.open_table(DESCRIPTORS)?;
     let address_index = rtx.open_table(ADDRESS_INDEX)?;
-    
+
     let secp = Secp256k1::new();
     let network = self.chain().network();
 
@@ -390,9 +440,10 @@ impl Wallet {
       let key = if change { "change" } else { "receive" };
       if let Ok(Some(desc_str)) = descriptors.get(key) {
         let last_index = address_index.get(key)?.map(|v| v.value()).unwrap_or(0);
-        
+
         if let Ok(xpub) = Self::parse_xpub_from_descriptor(desc_str.value()) {
-          for i in 0..=last_index + 100 { // Search a bit further just in case
+          for i in 0..=last_index + 100 {
+            // Search a bit further just in case
             let derived_xpub = xpub.derive_pub(&secp, &[ChildNumber::Normal { index: i }])?;
             let public_key = derived_xpub.to_pub();
             let address = Address::p2pkh(&public_key, network);
@@ -403,16 +454,17 @@ impl Wallet {
         }
       }
     }
-    
+
     bail!("script_pubkey not found in wallet: {}", script_pubkey);
   }
 
   pub(crate) fn get_master_key(&self) -> Result<ExtendedPrivKey> {
     let rtx = self.database.begin_read()?;
     let metadata = rtx.open_table(METADATA)?;
-    let seed_bytes = metadata.get("seed")?
-      .ok_or_else(|| anyhow!("wallet contains no seed. Was it created with `ordpep wallet create`?"))?;
-    
+    let seed_bytes = metadata.get("seed")?.ok_or_else(|| {
+      anyhow!("wallet contains no seed. Was it created with `ordpep wallet create`?")
+    })?;
+
     let mut seed = [0u8; 64];
     seed.copy_from_slice(seed_bytes.value());
 
@@ -422,16 +474,19 @@ impl Wallet {
   pub(crate) fn get_private_key(&self, change: bool, index: u32) -> Result<PrivateKey> {
     let master_private_key = self.get_master_key()?;
     let secp = Secp256k1::new();
-    
+
     let derivation_path = DerivationPath::master()
       .child(ChildNumber::Hardened { index: 44 })
       .child(ChildNumber::Hardened { index: 3434 }) // PEPECOIN_COIN_TYPE
       .child(ChildNumber::Hardened { index: 0 })
       .child(ChildNumber::Normal { index: u32::from(change) })
       .child(ChildNumber::Normal { index });
-    
+
     let derived_xpriv = master_private_key.derive_priv(&secp, &derivation_path)?;
-    
-    Ok(PrivateKey::new(derived_xpriv.private_key, self.chain().network()))
+
+    Ok(PrivateKey::new(
+      derived_xpriv.private_key,
+      self.chain().network(),
+    ))
   }
 }

@@ -141,7 +141,7 @@ mod tests {
       rare_sats(vec![(
         outpoint(1),
         vec![
-          (51 * COIN_VALUE as u128, 100 * COIN_VALUE as u128),
+          (51 * u128::from(COIN_VALUE), 100 * u128::from(COIN_VALUE)),
           (1234, 5678)
         ],
       )]),
@@ -157,12 +157,12 @@ mod tests {
         outpoint(1),
         vec![
           (10, 80),
-          (50 * COIN_VALUE as u128, 100 * COIN_VALUE as u128)
+          (50 * u128::from(COIN_VALUE), 100 * u128::from(COIN_VALUE))
         ],
       )]),
       vec![(
         outpoint(1),
-        Sat(50 * COIN_VALUE as u128),
+        Sat(50 * u128::from(COIN_VALUE)),
         70,
         Rarity::Uncommon
       )]
@@ -191,23 +191,23 @@ mod tests {
       rare_sats(vec![
         (
           outpoint(1),
-          vec![(50 * COIN_VALUE as u128, 55 * COIN_VALUE as u128)]
+          vec![(50 * u128::from(COIN_VALUE), 55 * u128::from(COIN_VALUE))]
         ),
         (
           outpoint(2),
-          vec![(100 * COIN_VALUE as u128, 111 * COIN_VALUE as u128)],
+          vec![(100 * u128::from(COIN_VALUE), 111 * u128::from(COIN_VALUE))],
         ),
       ]),
       vec![
         (
           outpoint(1),
-          Sat(50 * COIN_VALUE as u128),
+          Sat(50 * u128::from(COIN_VALUE)),
           0,
           Rarity::Uncommon
         ),
         (
           outpoint(2),
-          Sat(100 * COIN_VALUE as u128),
+          Sat(100 * u128::from(COIN_VALUE)),
           0,
           Rarity::Uncommon
         )
@@ -319,7 +319,7 @@ mod tests {
       let outpoint = outpoint(i);
       for _ in 0..100 {
         let end = start + 50 * COIN_VALUE;
-        ranges.push((start as u128, end as u128));
+        ranges.push((u128::from(start), u128::from(end)));
         for j in 0..50 {
           results.push((outpoint, start + j * COIN_VALUE));
         }

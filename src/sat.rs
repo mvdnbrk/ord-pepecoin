@@ -11,7 +11,7 @@ impl Sat {
 
   pub(crate) fn height(self) -> Height {
     self.epoch().starting_height()
-      + u32::try_from(self.epoch_position() / self.epoch().subsidy() as u128).unwrap()
+      + u32::try_from(self.epoch_position() / u128::from(self.epoch().subsidy())).unwrap()
   }
 
   pub(crate) fn epoch(self) -> Epoch {
@@ -19,7 +19,7 @@ impl Sat {
   }
 
   pub(crate) fn third(self) -> u64 {
-    u64::try_from(self.epoch_position() % self.epoch().subsidy() as u128).unwrap()
+    u64::try_from(self.epoch_position() % u128::from(self.epoch().subsidy())).unwrap()
   }
 
   pub(crate) fn epoch_position(self) -> u128 {
@@ -36,7 +36,7 @@ impl Sat {
 
   pub(crate) fn is_common(self) -> bool {
     let epoch = self.epoch();
-    (self.0 - epoch.starting_sat().0) % epoch.subsidy() as u128 != 0
+    !(self.0 - epoch.starting_sat().0).is_multiple_of(u128::from(epoch.subsidy()))
   }
 
   fn from_decimal(decimal: &str) -> Result<Self> {
@@ -50,7 +50,7 @@ impl Sat {
       bail!("invalid block offset");
     }
 
-    Ok(height.starting_sat() + offset as u128)
+    Ok(height.starting_sat() + u128::from(offset))
   }
 }
 
@@ -107,8 +107,8 @@ mod tests {
   fn height() {
     assert_eq!(Sat(0).height(), 0);
     assert_eq!(Sat(1).height(), 0);
-    assert_eq!(Sat(Epoch(0).subsidy() as u128).height(), 1);
-    assert_eq!(Sat(Epoch(0).subsidy() as u128 * 2).height(), 2);
+    assert_eq!(Sat(u128::from(Epoch(0).subsidy())).height(), 1);
+    assert_eq!(Sat(u128::from(Epoch(0).subsidy()) * 2).height(), 2);
   }
 
   #[test]
@@ -135,13 +135,13 @@ mod tests {
     assert_eq!(Sat(0).third(), 0);
     assert_eq!(Sat(1).third(), 1);
     assert_eq!(
-      Sat(Height(0).subsidy() as u128 - 1).third(),
+      Sat(u128::from(Height(0).subsidy()) - 1).third(),
       Height(0).subsidy() - 1
     );
-    assert_eq!(Sat(Height(0).subsidy() as u128).third(), 0);
-    assert_eq!(Sat(Height(0).subsidy() as u128 + 1).third(), 1);
+    assert_eq!(Sat(u128::from(Height(0).subsidy())).third(), 0);
+    assert_eq!(Sat(u128::from(Height(0).subsidy()) + 1).third(), 1);
     assert_eq!(
-      Sat(Epoch(1).starting_sat().n() + Epoch(1).subsidy() as u128).third(),
+      Sat(Epoch(1).starting_sat().n() + u128::from(Epoch(1).subsidy())).third(),
       0
     );
   }
@@ -181,7 +181,7 @@ mod tests {
   fn from_str_decimal() {
     assert_eq!(parse("0.0").unwrap(), 0);
     assert_eq!(parse("0.1").unwrap(), 1);
-    // assert_eq!(parse("1.0").unwrap(), 50 * COIN_VALUE as u128);
+    // assert_eq!(parse("1.0").unwrap(), 50 * u128::from(COIN_VALUE));
     // assert_eq!(parse("6929999.0").unwrap(), 2099999997689999);
     // assert!(parse("0.5000000000").is_err());
     // assert!(parse("6930000.0").is_err());
@@ -197,9 +197,9 @@ mod tests {
   #[test]
   fn third() {
     assert_eq!(Sat(0).third(), 0);
-    // assert_eq!(Sat(50 * COIN_VALUE as u128 - 1).third(), 4999999999);
-    // assert_eq!(Sat(50 * COIN_VALUE as u128).third(), 0);
-    // assert_eq!(Sat(50 * COIN_VALUE as u128 + 1).third(), 1);
+    // assert_eq!(Sat(50 * u128::from(COIN_VALUE) - 1).third(), 4999999999);
+    // assert_eq!(Sat(50 * u128::from(COIN_VALUE)).third(), 0);
+    // assert_eq!(Sat(50 * u128::from(COIN_VALUE) + 1).third(), 1);
   }
 
   #[test]
@@ -210,9 +210,9 @@ mod tests {
 
     case(0);
     case(1);
-    case(50 * COIN_VALUE as u128 - 1);
-    case(50 * COIN_VALUE as u128);
-    case(50 * COIN_VALUE as u128 + 1);
+    case(50 * u128::from(COIN_VALUE) - 1);
+    case(50 * u128::from(COIN_VALUE));
+    case(50 * u128::from(COIN_VALUE) + 1);
     case(2067187500000000 - 1);
     case(2067187500000000);
     case(2067187500000000 + 1);

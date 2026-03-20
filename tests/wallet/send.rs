@@ -226,11 +226,12 @@ fn send_btc() {
 
   rpc_server.mine_blocks(1);
 
-  let output =
-    CommandBuilder::new("wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc")
-      .rpc_server(&rpc_server)
-      .ord_server(&ord_server)
-      .output::<Output>();
+  let output = CommandBuilder::new(
+    "wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc",
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .output::<Output>();
 
   // Transaction should be in the mempool
   let mempool = rpc_server.mempool();
@@ -242,7 +243,11 @@ fn send_btc() {
     .parse::<Address>()
     .unwrap()
     .script_pubkey();
-  let dest_output = mempool[0].output.iter().find(|o| o.script_pubkey == dest_script).unwrap();
+  let dest_output = mempool[0]
+    .output
+    .iter()
+    .find(|o| o.script_pubkey == dest_script)
+    .unwrap();
   assert_eq!(dest_output.value, 100_000_000);
 }
 
@@ -256,11 +261,12 @@ fn send_btc_locks_inscriptions() {
 
   let Inscribe { reveal, .. } = inscribe(&rpc_server, &ord_server);
 
-  let output =
-    CommandBuilder::new("wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc")
-      .rpc_server(&rpc_server)
-      .ord_server(&ord_server)
-      .output::<Output>();
+  let output = CommandBuilder::new(
+    "wallet send --fee-rate 10000 bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4 1btc",
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .output::<Output>();
 
   // Transaction should be in the mempool
   let mempool = rpc_server.mempool();
@@ -268,9 +274,15 @@ fn send_btc_locks_inscriptions() {
   assert_eq!(output.transaction, mempool[0].txid());
 
   // The inscription UTXO should NOT be spent as an input
-  let inscribed_outpoint = OutPoint { txid: reveal, vout: 0 };
+  let inscribed_outpoint = OutPoint {
+    txid: reveal,
+    vout: 0,
+  };
   assert!(
-    !mempool[0].input.iter().any(|i| i.previous_output == inscribed_outpoint),
+    !mempool[0]
+      .input
+      .iter()
+      .any(|i| i.previous_output == inscribed_outpoint),
     "inscription UTXO should not be spent when sending BTC"
   );
 }
@@ -323,7 +335,10 @@ fn wallet_send_with_fee_rate() {
 
   let fee_rate = fee as f64 / tx.vsize() as f64;
 
-  assert!(fee_rate >= 20000.0, "fee rate {fee_rate} should be at least 20000");
+  assert!(
+    fee_rate >= 20000.0,
+    "fee rate {fee_rate} should be at least 20000"
+  );
 }
 
 #[test]
@@ -353,21 +368,30 @@ fn send_max_sends_all_cardinal_utxos() {
 
   rpc_server.mine_blocks(3);
 
-  let output =
-    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-      .rpc_server(&rpc_server)
-      .ord_server(&ord_server)
-      .output::<Output>();
+  let output = CommandBuilder::new(
+    "wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .output::<Output>();
 
   let mempool = rpc_server.mempool();
   assert_eq!(mempool.len(), 1);
   assert_eq!(output.transaction, mempool[0].txid());
 
   // Should have exactly one output (no change)
-  assert_eq!(mempool[0].output.len(), 1, "send --max should have no change output");
+  assert_eq!(
+    mempool[0].output.len(),
+    1,
+    "send --max should have no change output"
+  );
 
   // All 3 mined UTXOs should be inputs
-  assert_eq!(mempool[0].input.len(), 3, "send --max should spend all cardinal UTXOs");
+  assert_eq!(
+    mempool[0].input.len(),
+    3,
+    "send --max should spend all cardinal UTXOs"
+  );
 }
 
 #[test]
@@ -383,20 +407,27 @@ fn send_max_does_not_spend_inscriptions() {
   // Mine another block to give us a cardinal UTXO
   rpc_server.mine_blocks(1);
 
-  let output =
-    CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-      .rpc_server(&rpc_server)
-      .ord_server(&ord_server)
-      .output::<Output>();
+  let output = CommandBuilder::new(
+    "wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .output::<Output>();
 
   let mempool = rpc_server.mempool();
   assert_eq!(mempool.len(), 1);
   assert_eq!(output.transaction, mempool[0].txid());
 
   // The inscription UTXO should NOT be spent
-  let inscribed_outpoint = OutPoint { txid: reveal, vout: 0 };
+  let inscribed_outpoint = OutPoint {
+    txid: reveal,
+    vout: 0,
+  };
   assert!(
-    !mempool[0].input.iter().any(|i| i.previous_output == inscribed_outpoint),
+    !mempool[0]
+      .input
+      .iter()
+      .any(|i| i.previous_output == inscribed_outpoint),
     "inscription UTXO must not be spent when using --max"
   );
 }
@@ -408,10 +439,12 @@ fn send_max_with_no_utxos() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
   // No UTXOs in wallet at all
-  CommandBuilder::new("wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4")
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .expected_stderr("error: wallet contains no cardinal UTXOs to send\n")
-    .expected_exit_code(1)
-    .run();
+  CommandBuilder::new(
+    "wallet send --fee-rate 10000 --max bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .expected_stderr("error: wallet contains no cardinal UTXOs to send\n")
+  .expected_exit_code(1)
+  .run();
 }

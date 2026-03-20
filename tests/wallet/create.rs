@@ -33,5 +33,8 @@ fn create_with_different_name() {
     .data_dir(tempdir.path().to_owned())
     .output::<Create>();
 
-  assert!(tempdir.path().join("wallets/inscription-wallet/wallet.redb").exists());
+  assert!(tempdir
+    .path()
+    .join("wallets/inscription-wallet/wallet.redb")
+    .exists());
 }

@@ -357,72 +357,86 @@ impl Api for Server {
     if verbose.unwrap_or(false) {
       let state = self.state();
       let in_active_chain = state.transactions.contains_key(&txid);
-      let tx = state.transactions.get(&txid).or_else(|| {
-        state.mempool.iter().find(|tx| tx.txid() == txid)
-      });
+      let tx = state
+        .transactions
+        .get(&txid)
+        .or_else(|| state.mempool.iter().find(|tx| tx.txid() == txid));
       match tx {
         Some(tx) => {
-            let blockhash = state.hashes.iter().find(|h| {
-                state.blocks.get(*h).map(|b| b.txdata.iter().any(|t| t.txid() == txid)).unwrap_or(false)
-            }).cloned().or_else(|| state.hashes.last().cloned());
+          let blockhash = state
+            .hashes
+            .iter()
+            .find(|h| {
+              state
+                .blocks
+                .get(*h)
+                .map(|b| b.txdata.iter().any(|t| t.txid() == txid))
+                .unwrap_or(false)
+            })
+            .cloned()
+            .or_else(|| state.hashes.last().cloned());
 
-            let mut json = json!({
-                "in_active_chain": in_active_chain,
-                "hex": hex::encode(serialize(tx)),
-                "txid": tx.txid().to_string(),
-                "hash": tx.wtxid().to_string(),
-                "size": tx.size(),
-                "vsize": tx.vsize(),
-                "version": tx.version,
-                "locktime": tx.lock_time.0,
-                "confirmations": if in_active_chain { 1 } else { 0 },
-                "time": 0,
-                "blocktime": 0,
-                "vin": tx.input.iter().map(|input| {
-                    if input.previous_output.is_null() {
-                        json!({
-                            "coinbase": hex::encode(input.script_sig.as_bytes()),
-                            "sequence": input.sequence
-                        })
-                    } else {
-                        json!({
-                            "txid": input.previous_output.txid.to_string(),
-                            "vout": input.previous_output.vout,
-                            "scriptSig": {
-                                "asm": "",
-                                "hex": hex::encode(input.script_sig.as_bytes())
-                            },
-                            "sequence": input.sequence
-                        })
-                    }
-                }).collect::<Vec<_>>(),
-                "vout": tx.output.iter().enumerate().map(|(i, output)| {
-                    json!({
-                        "value": output.value as f64 / 100000000.0,
-                        "n": i,
-                        "scriptPubKey": {
-                            "asm": "",
-                            "hex": hex::encode(output.script_pubkey.as_bytes()),
-                            "type": "pubkeyhash",
-                            "address": Address::from_script(&output.script_pubkey, self.network).map(|a| a.to_string()).ok()
-                        }
-                    })
-                }).collect::<Vec<_>>()
-            });
+          let mut json = json!({
+              "in_active_chain": in_active_chain,
+              "hex": hex::encode(serialize(tx)),
+              "txid": tx.txid().to_string(),
+              "hash": tx.wtxid().to_string(),
+              "size": tx.size(),
+              "vsize": tx.vsize(),
+              "version": tx.version,
+              "locktime": tx.lock_time.0,
+              "confirmations": if in_active_chain { 1 } else { 0 },
+              "time": 0,
+              "blocktime": 0,
+              "vin": tx.input.iter().map(|input| {
+                  if input.previous_output.is_null() {
+                      json!({
+                          "coinbase": hex::encode(input.script_sig.as_bytes()),
+                          "sequence": input.sequence
+                      })
+                  } else {
+                      json!({
+                          "txid": input.previous_output.txid.to_string(),
+                          "vout": input.previous_output.vout,
+                          "scriptSig": {
+                              "asm": "",
+                              "hex": hex::encode(input.script_sig.as_bytes())
+                          },
+                          "sequence": input.sequence
+                      })
+                  }
+              }).collect::<Vec<_>>(),
+              "vout": tx.output.iter().enumerate().map(|(i, output)| {
+                  json!({
+                      "value": output.value as f64 / 100000000.0,
+                      "n": i,
+                      "scriptPubKey": {
+                          "asm": "",
+                          "hex": hex::encode(output.script_pubkey.as_bytes()),
+                          "type": "pubkeyhash",
+                          "address": Address::from_script(&output.script_pubkey, self.network).map(|a| a.to_string()).ok()
+                      }
+                  })
+              }).collect::<Vec<_>>()
+          });
 
-            if let Some(blockhash) = blockhash {
-                json.as_object_mut().unwrap().insert("blockhash".to_string(), json!(blockhash.to_string()));
-            }
+          if let Some(blockhash) = blockhash {
+            json
+              .as_object_mut()
+              .unwrap()
+              .insert("blockhash".to_string(), json!(blockhash.to_string()));
+          }
 
-            Ok(json)
+          Ok(json)
         }
         None => Err(Self::not_found()),
       }
     } else {
       let state = self.state();
-      let tx = state.transactions.get(&txid).or_else(|| {
-        state.mempool.iter().find(|tx| tx.txid() == txid)
-      });
+      let tx = state
+        .transactions
+        .get(&txid)
+        .or_else(|| state.mempool.iter().find(|tx| tx.txid() == txid));
       match tx {
         Some(tx) => Ok(Value::String(hex::encode(serialize(tx)))),
         None => Err(Self::not_found()),
@@ -439,11 +453,12 @@ impl Api for Server {
     if let Ok(addr) = Address::from_str(&address) {
       let mut state = self.state();
       // Register as a watch-only address so list_transactions can find it
-      if !state.address_pubkeys.contains_key(&addr) {
-        state.address_pubkeys.insert(addr, PublicKey::from_slice(
-          &[2; 33] // dummy pubkey for watch-only
-        ).unwrap());
-      }
+      state.address_pubkeys.entry(addr).or_insert_with(|| {
+        PublicKey::from_slice(
+          &[2; 33], // dummy pubkey for watch-only
+        )
+        .unwrap()
+      });
     }
     Ok(())
   }
@@ -460,40 +475,40 @@ impl Api for Server {
 
     let mut result = Vec::new();
     for (outpoint, &amount) in &state.utxos {
-        if state.locked.contains(outpoint) {
-            continue;
-        }
+      if state.locked.contains(outpoint) {
+        continue;
+      }
 
-        let tx = &state.transactions[&outpoint.txid];
-        let output = &tx.output[outpoint.vout as usize];
-        
-        let address = Address::from_script(&output.script_pubkey, self.network).ok();
-        
-        if let Some(ref addresses) = addresses {
-          if let Some(ref address) = address {
-            if !addresses.contains(address) {
-              continue;
-            }
-          } else {
+      let tx = &state.transactions[&outpoint.txid];
+      let output = &tx.output[outpoint.vout as usize];
+
+      let address = Address::from_script(&output.script_pubkey, self.network).ok();
+
+      if let Some(ref addresses) = addresses {
+        if let Some(ref address) = address {
+          if !addresses.contains(address) {
             continue;
           }
+        } else {
+          continue;
         }
+      }
 
-        result.push(ListUnspentResultEntry {
-          txid: outpoint.txid,
-          vout: outpoint.vout,
-          address,
-          label: None,
-          redeem_script: None,
-          witness_script: None,
-          script_pub_key: output.script_pubkey.clone(),
-          amount,
-          confirmations: 0,
-          spendable: true,
-          solvable: true,
-          descriptor: None,
-          safe: true,
-        });
+      result.push(ListUnspentResultEntry {
+        txid: outpoint.txid,
+        vout: outpoint.vout,
+        address,
+        label: None,
+        redeem_script: None,
+        witness_script: None,
+        script_pub_key: output.script_pubkey.clone(),
+        amount,
+        confirmations: 0,
+        spendable: true,
+        solvable: true,
+        descriptor: None,
+        safe: true,
+      });
     }
 
     Ok(result)
@@ -576,57 +591,58 @@ impl Api for Server {
     Ok(address)
   }
 
-  fn dump_private_key(
-    &self,
-    address: Address,
-  ) -> Result<String, jsonrpc_core::Error> {
+  fn dump_private_key(&self, address: Address) -> Result<String, jsonrpc_core::Error> {
     let state = self.state();
     match state.address_privkeys.get(&address) {
       Some(privkey) => Ok(privkey.to_wif()),
       None => {
-          for (k, v) in &state.address_privkeys {
-              if k.script_pubkey() == address.script_pubkey() {
-                  return Ok(v.to_wif());
-              }
+        for (k, v) in &state.address_privkeys {
+          if k.script_pubkey() == address.script_pubkey() {
+            return Ok(v.to_wif());
           }
-          Err(Self::not_found())
+        }
+        Err(Self::not_found())
       }
     }
   }
 
-  fn get_address_info(
-    &self,
-    address: String,
-  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
+  fn get_address_info(&self, address: String) -> Result<serde_json::Value, jsonrpc_core::Error> {
     self.validate_address(address)
   }
 
-  fn validate_address(
-    &self,
-    address: String,
-  ) -> Result<serde_json::Value, jsonrpc_core::Error> {
-    let mut addr: Address = Address::from_str(&address).map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
-    
+  fn validate_address(&self, address: String) -> Result<serde_json::Value, jsonrpc_core::Error> {
+    let mut addr: Address = Address::from_str(&address)
+      .map_err(|_| jsonrpc_core::Error::invalid_params("invalid address"))?;
+
     let mut pubkey = self.state().address_pubkeys.get(&addr).cloned();
-    
+
     if pubkey.is_none() {
-        // Try other networks if it might be parsed wrong (e.g. Testnet vs Regtest)
-        for network in [Network::Bitcoin, Network::Testnet, Network::Signet, Network::Regtest] {
-            if network == addr.network { continue; }
-            if let Ok(_other_addr) = Address::from_str(&address) {
-                // Address::from_str doesn't take network, so we have to manually check variants if possible.
-                // Actually bitcoin 0.29 Address doesn't have an easy way to change network without re-parsing from script or similar.
-                // But we can just iterate over our keys and see if any matches the script_pubkey.
-                for (k, v) in &self.state().address_pubkeys {
-                    if k.script_pubkey() == addr.script_pubkey() {
-                        pubkey = Some(v.clone());
-                        addr = k.clone();
-                        break;
-                    }
-                }
-            }
-            if pubkey.is_some() { break; }
+      // Try other networks if it might be parsed wrong (e.g. Testnet vs Regtest)
+      for network in [
+        Network::Bitcoin,
+        Network::Testnet,
+        Network::Signet,
+        Network::Regtest,
+      ] {
+        if network == addr.network {
+          continue;
         }
+        if let Ok(_other_addr) = Address::from_str(&address) {
+          // Address::from_str doesn't take network, so we have to manually check variants if possible.
+          // Actually bitcoin 0.29 Address doesn't have an easy way to change network without re-parsing from script or similar.
+          // But we can just iterate over our keys and see if any matches the script_pubkey.
+          for (k, v) in &self.state().address_pubkeys {
+            if k.script_pubkey() == addr.script_pubkey() {
+              pubkey = Some(*v);
+              addr = k.clone();
+              break;
+            }
+          }
+        }
+        if pubkey.is_some() {
+          break;
+        }
+      }
     }
 
     Ok(serde_json::json!({
@@ -647,7 +663,8 @@ impl Api for Server {
     label: Option<String>,
     _rescan: Option<bool>,
   ) -> Result<serde_json::Value, jsonrpc_core::Error> {
-    let privkey = bitcoin::PrivateKey::from_wif(&privkey).map_err(|_| jsonrpc_core::Error::invalid_params("invalid privkey"))?;
+    let privkey = bitcoin::PrivateKey::from_wif(&privkey)
+      .map_err(|_| jsonrpc_core::Error::invalid_params("invalid privkey"))?;
     let pubkey = privkey.public_key(&Secp256k1::new());
     let address = Address::p2pkh(&pubkey, self.network);
 
@@ -669,109 +686,116 @@ impl Api for Server {
     let mut results = Vec::new();
 
     let mut process_tx = |tx: &Transaction| {
-        if tx.is_coin_base() {
-            return;
-        }
-        
-        // Check outputs
-        for (vout, output) in tx.output.iter().enumerate() {
-            if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
-                if state.address_pubkeys.contains_key(&address) {
-                    results.push(ListTransactionResult {
-                        info: WalletTxInfo {
-                            confirmations: state.get_confirmations(tx),
-                            blockhash: None,
-                            blockindex: None,
-                            blocktime: None,
-                            blockheight: None,
-                            txid: tx.txid(),
-                            time: 0,
-                            timereceived: 0,
-                            bip125_replaceable: Bip125Replaceable::Unknown,
-                            wallet_conflicts: Vec::new(),
-                        },
-                        detail: GetTransactionResultDetail {
-                            address: Some(address),
-                            category: GetTransactionResultDetailCategory::Receive,
-                            amount: SignedAmount::from_sat(output.value as i64),
-                            label: None,
-                            vout: vout as u32,
-                            fee: Some(SignedAmount::from_sat(0)),
-                            abandoned: None,
-                        },
-                        trusted: None,
-                        comment: None,
-                    });
-                }
-            }
-        }
+      if tx.is_coin_base() {
+        return;
+      }
 
-        // Check inputs (for sends)
-        let mut sent_amount = 0;
-        let mut is_send = false;
-        let mut first_address = None;
-
-        for input in &tx.input {
-            if let Some(prev_tx) = state.transactions.get(&input.previous_output.txid) {
-                if let Some(output) = prev_tx.output.get(input.previous_output.vout as usize) {
-                    if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
-                        if state.address_pubkeys.contains_key(&address) {
-                            sent_amount += output.value;
-                            is_send = true;
-                            if first_address.is_none() {
-                                first_address = Some(address);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if is_send {
-            // For send entries, Core usually shows the first non-wallet output address
-            let destination = tx.output.iter()
-                .find_map(|o| Address::from_script(&o.script_pubkey, self.network).ok())
-                .filter(|a| !state.address_pubkeys.contains_key(a));
-
+      // Check outputs
+      for (vout, output) in tx.output.iter().enumerate() {
+        if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
+          if state.address_pubkeys.contains_key(&address) {
             results.push(ListTransactionResult {
-                info: WalletTxInfo {
-                    confirmations: state.get_confirmations(tx),
-                    blockhash: None,
-                    blockindex: None,
-                    blocktime: None,
-                    blockheight: None,
-                    txid: tx.txid(),
-                    time: 0,
-                    timereceived: 0,
-                    bip125_replaceable: Bip125Replaceable::Unknown,
-                    wallet_conflicts: Vec::new(),
-                },
-                detail: GetTransactionResultDetail {
-                    address: destination,
-                    category: GetTransactionResultDetailCategory::Send,
-                    amount: SignedAmount::from_sat(-(sent_amount as i64)),
-                    label: None,
-                    vout: 0,
-                    fee: Some(SignedAmount::from_sat(0)), // Simplified
-                    abandoned: None,
-                },
-                trusted: None,
-                comment: None,
+              info: WalletTxInfo {
+                confirmations: state.get_confirmations(tx),
+                blockhash: None,
+                blockindex: None,
+                blocktime: None,
+                blockheight: None,
+                txid: tx.txid(),
+                time: 0,
+                timereceived: 0,
+                bip125_replaceable: Bip125Replaceable::Unknown,
+                wallet_conflicts: Vec::new(),
+              },
+              detail: GetTransactionResultDetail {
+                address: Some(address),
+                category: GetTransactionResultDetailCategory::Receive,
+                amount: SignedAmount::from_sat(output.value as i64),
+                label: None,
+                vout: vout as u32,
+                fee: Some(SignedAmount::from_sat(0)),
+                abandoned: None,
+              },
+              trusted: None,
+              comment: None,
             });
+          }
         }
+      }
+
+      // Check inputs (for sends)
+      let mut sent_amount = 0;
+      let mut is_send = false;
+      let mut first_address = None;
+
+      for input in &tx.input {
+        if let Some(prev_tx) = state.transactions.get(&input.previous_output.txid) {
+          if let Some(output) = prev_tx.output.get(input.previous_output.vout as usize) {
+            if let Ok(address) = Address::from_script(&output.script_pubkey, self.network) {
+              if state.address_pubkeys.contains_key(&address) {
+                sent_amount += output.value;
+                is_send = true;
+                if first_address.is_none() {
+                  first_address = Some(address);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if is_send {
+        // For send entries, Core usually shows the first non-wallet output address
+        let destination = tx
+          .output
+          .iter()
+          .find_map(|o| Address::from_script(&o.script_pubkey, self.network).ok())
+          .filter(|a| !state.address_pubkeys.contains_key(a));
+
+        results.push(ListTransactionResult {
+          info: WalletTxInfo {
+            confirmations: state.get_confirmations(tx),
+            blockhash: None,
+            blockindex: None,
+            blocktime: None,
+            blockheight: None,
+            txid: tx.txid(),
+            time: 0,
+            timereceived: 0,
+            bip125_replaceable: Bip125Replaceable::Unknown,
+            wallet_conflicts: Vec::new(),
+          },
+          detail: GetTransactionResultDetail {
+            address: destination,
+            category: GetTransactionResultDetailCategory::Send,
+            amount: SignedAmount::from_sat(-(sent_amount as i64)),
+            label: None,
+            vout: 0,
+            fee: Some(SignedAmount::from_sat(0)), // Simplified
+            abandoned: None,
+          },
+          trusted: None,
+          comment: None,
+        });
+      }
     };
 
     for block_hash in state.hashes.iter().rev() {
-        let block = &state.blocks[block_hash];
-        for tx in block.txdata.iter().rev() {
-            process_tx(tx);
-        }
+      let block = &state.blocks[block_hash];
+      for tx in block.txdata.iter().rev() {
+        process_tx(tx);
+      }
     }
     for tx in state.mempool.iter().rev() {
-        process_tx(tx);
+      process_tx(tx);
     }
 
-    Ok(results.into_iter().take(count.unwrap_or(u16::MAX).into()).collect())
+    Ok(
+      results
+        .into_iter()
+        .take(count.unwrap_or(u16::MAX).into())
+        .collect(),
+    )
   }
 
   fn lock_unspent(

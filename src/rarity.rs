@@ -30,13 +30,13 @@ impl Display for Rarity {
 impl From<Sat> for Rarity {
   fn from(sat: Sat) -> Self {
     if sat.0 == 0 {
-      return Self::Mythic;
+      Self::Mythic
     } else if sat == sat.epoch().starting_sat() {
-      return Self::Legendary;
+      Self::Legendary
     } else if !sat.is_common() {
-      return Self::Uncommon;
+      Self::Uncommon
     } else {
-      return Self::Common;
+      Self::Common
     }
   }
 }

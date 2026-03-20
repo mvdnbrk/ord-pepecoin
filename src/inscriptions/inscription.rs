@@ -25,17 +25,25 @@ pub(crate) enum ParsedInscription {
 
 impl Inscription {
   #[cfg(test)]
-  pub(crate) fn new(content_type: Option<Vec<u8>>, body: Option<Vec<u8>>, parent: Option<Vec<u8>>) -> Self {
-    Self { content_type, body, parent }
+  pub(crate) fn new(
+    content_type: Option<Vec<u8>>,
+    body: Option<Vec<u8>>,
+    parent: Option<Vec<u8>>,
+  ) -> Self {
+    Self {
+      content_type,
+      body,
+      parent,
+    }
   }
 
   pub(crate) fn from_transactions(txs: Vec<Transaction>) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
-    for i in 0..txs.len() {
-      if txs[i].input.is_empty() {
+    for tx in &txs {
+      if tx.input.is_empty() {
         return ParsedInscription::None;
       }
-      sig_scripts.push(txs[i].input[0].script_sig.clone());
+      sig_scripts.push(tx.input[0].script_sig.clone());
     }
     InscriptionParser::parse(sig_scripts)
   }
@@ -65,17 +73,16 @@ impl Inscription {
     if num == 0 {
       builder = builder.push_opcode(opcodes::all::OP_PUSHBYTES_0);
     } else if num <= 16 {
-      let opcode_val = opcodes::all::OP_PUSHNUM_1.to_u8() + (num - 1) as u8;
+      let opcode_val = opcodes::all::OP_PUSHNUM_1.to_u8() + u8::try_from(num - 1).unwrap();
       builder = builder.push_opcode(opcodes::All::from(opcode_val));
     } else {
-      builder = builder.push_int(num as i64);
+      builder = builder.push_int(i64::try_from(num).unwrap());
     }
     builder
   }
 
   pub(crate) fn get_inscription_script(&self) -> Script {
-    let mut builder = script::Builder::new()
-      .push_slice(PROTOCOL_ID);
+    let mut builder = script::Builder::new().push_slice(PROTOCOL_ID);
 
     let empty = Vec::new();
     let body = self.body.as_ref().unwrap_or(&empty);
@@ -362,7 +369,7 @@ impl InscriptionParser {
   }
 
   fn push_data_to_number(data: &[u8]) -> Option<u64> {
-    if data.len() == 0 {
+    if data.is_empty() {
       return Some(0);
     }
 
@@ -373,12 +380,12 @@ impl InscriptionParser {
     let mut n: u64 = 0;
     let mut m: u64 = 0;
 
-    for i in 0..data.len() {
-      n += (data[i] as u64) << m;
+    for &byte in data {
+      n += u64::from(byte) << m;
       m += 8;
     }
 
-    return Some(n);
+    Some(n)
   }
 }
 
@@ -597,6 +604,7 @@ mod tests {
     );
   }
 
+  #[allow(clippy::cast_possible_truncation)]
   fn push_number_to_vec(script: &mut Vec<Vec<u8>>, num: u64) {
     if num == 0 {
       script.push(vec![0]);

@@ -54,11 +54,7 @@ impl Fetcher {
     let (user, password) = auth.get_user_pass()?;
     let auth = format!("{}:{}", user.unwrap(), password.unwrap());
     let auth = format!("Basic {}", &base64::encode(auth));
-    Ok(Fetcher {
-      client,
-      url,
-      auth,
-    })
+    Ok(Fetcher { client, url, auth })
   }
 
   pub(crate) async fn get_transactions(&self, txids: Vec<Txid>) -> Result<Vec<Transaction>> {
@@ -119,7 +115,9 @@ impl Fetcher {
         Err(error) => {
           retries += 1;
           let seconds = 2u64.pow(retries).min(120);
-          log::warn!("Failed to fetch transactions, retrying in {seconds}s (attempt {retries}): {error}");
+          log::warn!(
+            "Failed to fetch transactions, retrying in {seconds}s (attempt {retries}): {error}"
+          );
           tokio::time::sleep(Duration::from_secs(seconds)).await;
         }
       }
@@ -143,7 +141,12 @@ impl Fetcher {
     let buf = match result {
       Ok(Ok(buf)) => buf,
       Ok(Err(e)) => return Err(anyhow!("RPC request failed: {e}")),
-      Err(_) => return Err(anyhow!("RPC request timed out after {}s", REQUEST_TIMEOUT.as_secs())),
+      Err(_) => {
+        return Err(anyhow!(
+          "RPC request timed out after {}s",
+          REQUEST_TIMEOUT.as_secs()
+        ))
+      }
     };
 
     let results: Vec<JsonResponse<String>> = serde_json::from_slice(&buf)?;

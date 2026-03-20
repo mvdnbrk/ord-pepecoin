@@ -1,7 +1,4 @@
-use {
-  super::*,
-  std::path::PathBuf,
-};
+use {super::*, std::path::PathBuf};
 
 pub(crate) trait ToArgs {
   fn to_args(&self) -> Vec<String>;
@@ -134,7 +131,11 @@ impl CommandBuilder {
       ]);
     }
 
-    let data_dir: &Path = self.data_dir.as_ref().map(|d| d.as_path()).unwrap_or(self.tempdir.path());
+    let data_dir: &Path = self
+      .data_dir
+      .as_ref()
+      .map(|d| d.as_path())
+      .unwrap_or(self.tempdir.path());
 
     command
       .env("ORD_INTEGRATION_TEST", "1")

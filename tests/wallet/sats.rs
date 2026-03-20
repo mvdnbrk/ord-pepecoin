@@ -16,7 +16,7 @@ fn sats() {
     .ord_server(&ord_server)
     .output::<Vec<OutputRare>>();
 
-  assert_eq!(output[0].sat, 50 * COIN_VALUE as u128);
+  assert_eq!(output[0].sat, 50 * u128::from(COIN_VALUE));
   assert_eq!(output[0].output.to_string(), format!("{second_coinbase}:0"));
 }
 

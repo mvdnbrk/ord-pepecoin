@@ -85,7 +85,7 @@ mod tests {
     /*
     assert_eq!(
       "1.1".parse::<Object>().unwrap(),
-      Object::Sat(Sat(50 * COIN_VALUE as u128 + 1))
+      Object::Sat(Sat(50 * u128::from(COIN_VALUE) + 1))
     );
     */
 

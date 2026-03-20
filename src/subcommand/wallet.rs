@@ -1,17 +1,13 @@
-use {
-  super::*,
-  fee_rate::FeeRate,
-  transaction_builder::TransactionBuilder,
-};
+use {super::*, fee_rate::FeeRate, transaction_builder::TransactionBuilder};
 
 pub mod addresses;
 pub mod balance;
 pub(crate) mod batch;
 pub mod broadcast;
 pub mod create;
-pub(crate) mod job;
 pub(crate) mod inscribe;
 pub mod inscriptions;
+pub(crate) mod job;
 pub mod list;
 pub mod outputs;
 pub mod receive;
@@ -23,11 +19,20 @@ pub mod transactions;
 
 #[derive(Debug, Parser)]
 pub(crate) struct WalletCommand {
-  #[clap(long, global = true, default_value = "ordpep", help = "Use wallet named <NAME>.")]
+  #[clap(
+    long,
+    global = true,
+    default_value = "ordpep",
+    help = "Use wallet named <NAME>."
+  )]
   pub(crate) name: String,
   #[clap(long, global = true, alias = "nosync", help = "Do not update index.")]
   pub(crate) no_sync: bool,
-  #[clap(long, global = true, help = "Use ordpep server running at <SERVER_URL>.")]
+  #[clap(
+    long,
+    global = true,
+    help = "Use ordpep server running at <SERVER_URL>."
+  )]
   pub(crate) server_url: Option<Url>,
   #[clap(subcommand)]
   pub(crate) subcommand: WalletSubcommand,

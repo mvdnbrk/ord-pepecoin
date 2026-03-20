@@ -34,11 +34,11 @@ pub(crate) enum Subcommand {
   #[clap(about = "Display information about a block's subsidy")]
   Subsidy(subsidy::Subsidy),
   #[clap(about = "Run the explorer server")]
-  Server(server::Server),
+  Server(Box<server::Server>),
   #[clap(about = "Display satoshi traits")]
   Traits(traits::Traits),
   #[clap(about = "Wallet commands")]
-  Wallet(wallet::WalletCommand),
+  Wallet(Box<wallet::WalletCommand>),
 }
 
 impl Subcommand {

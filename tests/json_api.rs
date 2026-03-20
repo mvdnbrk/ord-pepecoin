@@ -24,8 +24,12 @@ fn inscriptions() {
   let response = test_server.json_request("/inscriptions");
   assert_eq!(response.status(), StatusCode::OK);
 
-  let inscriptions: ord::api::Inscriptions = serde_json::from_str(&response.text().unwrap()).unwrap();
-  pretty_assert_eq!(inscriptions.ids, vec![inscribe.inscription.parse().unwrap()]);
+  let inscriptions: ord::api::Inscriptions =
+    serde_json::from_str(&response.text().unwrap()).unwrap();
+  pretty_assert_eq!(
+    inscriptions.ids,
+    vec![inscribe.inscription.parse().unwrap()]
+  );
   assert!(!inscriptions.more);
   pretty_assert_eq!(inscriptions.page_index, 0);
 }
@@ -56,7 +60,8 @@ fn inscriptions_batch() {
   let response = test_server.post_json("/inscriptions", &vec![inscribe.inscription.clone()]);
   assert_eq!(response.status(), StatusCode::OK);
 
-  let inscriptions: Vec<ord::api::Inscription> = serde_json::from_str(&response.text().unwrap()).unwrap();
+  let inscriptions: Vec<ord::api::Inscription> =
+    serde_json::from_str(&response.text().unwrap()).unwrap();
   pretty_assert_eq!(inscriptions.len(), 1);
   pretty_assert_eq!(inscriptions[0].id, inscribe.inscription.parse().unwrap());
 }

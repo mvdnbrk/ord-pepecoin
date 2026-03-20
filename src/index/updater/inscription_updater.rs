@@ -50,7 +50,11 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
     satpoint_to_id: &'a mut Table<'tx, &'static SatPointValue, &'static InscriptionIdValue>,
     timestamp: u32,
     value_cache: &'a mut HashMap<OutPoint, u64>,
-    address_to_inscription_ids: &'a mut MultimapTable<'tx, &'static str, &'static InscriptionIdValue>,
+    address_to_inscription_ids: &'a mut MultimapTable<
+      'tx,
+      &'static str,
+      &'static InscriptionIdValue,
+    >,
     id_to_address: &'a mut Table<'tx, &'static InscriptionIdValue, &'static str>,
     network: Network,
   ) -> Result<Self> {
@@ -203,7 +207,7 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
 
           let og_inscription_id = InscriptionId {
             txid: Txid::from_slice(&txids_vec[0..32]).unwrap(),
-            index: 0
+            index: 0,
           };
 
           inscriptions.push(Flotsam {
@@ -322,8 +326,8 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
           let mut offset = 0;
           for (start, end) in input_sat_ranges {
             let size = end - start;
-            if offset + size > flotsam.offset as u128 {
-              let n = start + flotsam.offset as u128 - offset;
+            if offset + size > u128::from(flotsam.offset) {
+              let n = start + u128::from(flotsam.offset) - offset;
               self.sat_to_inscription_id.insert(&n, &inscription_id)?;
               sat = Some(Sat(n));
               break;

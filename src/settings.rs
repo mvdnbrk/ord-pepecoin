@@ -95,7 +95,9 @@ impl Settings {
       config_dir: self.config_dir.or(source.config_dir),
       cookie_file: self.cookie_file.or(source.cookie_file),
       data_dir: self.data_dir.or(source.data_dir),
-      first_inscription_height: self.first_inscription_height.or(source.first_inscription_height),
+      first_inscription_height: self
+        .first_inscription_height
+        .or(source.first_inscription_height),
       height_limit: self.height_limit.or(source.height_limit),
       hidden: Some(
         self
@@ -395,10 +397,7 @@ impl Settings {
   }
 
   pub(crate) fn auth(&self) -> Result<Auth> {
-    if let (Some(user), Some(pass)) = (
-      &self.pepecoin_rpc_username,
-      &self.pepecoin_rpc_password,
-    ) {
+    if let (Some(user), Some(pass)) = (&self.pepecoin_rpc_username, &self.pepecoin_rpc_password) {
       Ok(Auth::UserPass(user.clone(), pass.clone()))
     } else {
       Ok(Auth::CookieFile(self.cookie_file()?))
@@ -414,12 +413,12 @@ impl Settings {
         "Connecting to Pepecoin Core RPC server at {rpc_url} using cookie file `{}`",
         path.display()
       ),
-      Auth::UserPass(user, _) => log::info!(
-        "Connecting to Pepecoin Core RPC server at {rpc_url} as user `{user}`"
-      ),
-      Auth::None => log::info!(
-        "Connecting to Pepecoin Core RPC server at {rpc_url} without authentication"
-      ),
+      Auth::UserPass(user, _) => {
+        log::info!("Connecting to Pepecoin Core RPC server at {rpc_url} as user `{user}`")
+      }
+      Auth::None => {
+        log::info!("Connecting to Pepecoin Core RPC server at {rpc_url} without authentication")
+      }
     }
 
     let client = Client::new(&rpc_url, auth)
@@ -470,26 +469,23 @@ impl Settings {
     let network_info: serde_json::Value = client
       .call("getnetworkinfo", &[])
       .context("failed to get network info")?;
-    let pepecoin_version = network_info["version"]
-      .as_u64()
-      .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))? as usize;
+    let pepecoin_version = usize::try_from(
+      network_info["version"]
+        .as_u64()
+        .ok_or_else(|| anyhow!("missing version in getnetworkinfo"))?,
+    )
+    .unwrap();
     if pepecoin_version < MIN_VERSION {
       bail!(
-        "Pepecoin Core {} or newer required, current version is {}",
-        format!(
-          "{}.{}.{}.{}",
-          MIN_VERSION / 1000000,
-          MIN_VERSION % 1000000 / 10000,
-          MIN_VERSION % 10000 / 100,
-          MIN_VERSION % 100
-        ),
-        format!(
-          "{}.{}.{}.{}",
-          pepecoin_version / 1000000,
-          pepecoin_version % 1000000 / 10000,
-          pepecoin_version % 10000 / 100,
-          pepecoin_version % 100
-        ),
+        "Pepecoin Core {}.{}.{}.{} or newer required, current version is {}.{}.{}.{}",
+        MIN_VERSION / 1000000,
+        MIN_VERSION % 1000000 / 10000,
+        MIN_VERSION % 10000 / 100,
+        MIN_VERSION % 100,
+        pepecoin_version / 1000000,
+        pepecoin_version % 1000000 / 10000,
+        pepecoin_version % 10000 / 100,
+        pepecoin_version % 100,
       );
     }
 

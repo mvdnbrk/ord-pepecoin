@@ -103,7 +103,9 @@ fn inscribe_exceeds_chain_limit() {
     .ord_server(&ord_server)
     .data_dir(ord_server.directory())
     .expected_exit_code(1)
-    .stderr_regex("error: content size of 1025 bytes exceeds 1024 byte limit for signet inscriptions\n")
+    .stderr_regex(
+      "error: content size of 1025 bytes exceeds 1024 byte limit for signet inscriptions\n",
+    )
     .run();
 }
 
@@ -191,10 +193,7 @@ fn refuse_to_inscribe_already_inscribed_utxo() {
   let ord_server = TestServer::spawn(&rpc_server);
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
 
-  let Inscribe {
-    reveal,
-    ..
-  } = inscribe(&rpc_server, &ord_server);
+  let Inscribe { reveal, .. } = inscribe(&rpc_server, &ord_server);
 
   let output = OutPoint {
     txid: reveal,
@@ -376,13 +375,14 @@ fn inscribe_with_dry_run_flag_fees_inscrease() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  let total_fee_dry_run = CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 10000.0")
-    .write("degenerate.png", [1; 520])
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .data_dir(ord_server.directory())
-    .output::<Inscribe>()
-    .fees;
+  let total_fee_dry_run =
+    CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 10000.0")
+      .write("degenerate.png", [1; 520])
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .data_dir(ord_server.directory())
+      .output::<Inscribe>()
+      .fees;
 
   let total_fee_normal =
     CommandBuilder::new("wallet inscribe --dry-run degenerate.png --fee-rate 50000.0")
@@ -453,7 +453,10 @@ fn batch_inscribe_creates_inscriptions() {
 
   // Create batch YAML with 2 files
   let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
-    .write("batch.yaml", "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n")
+    .write(
+      "batch.yaml",
+      "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n",
+    )
     .write("foo.txt", "FOO")
     .write("bar.txt", "BAR")
     .rpc_server(&rpc_server)
@@ -514,7 +517,10 @@ fn batch_inscribe_with_dry_run() {
   rpc_server.mine_blocks(1);
 
   CommandBuilder::new("wallet inscribe --batch batch.yaml --dry-run")
-    .write("batch.yaml", "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n")
+    .write(
+      "batch.yaml",
+      "inscriptions:\n  - file: foo.txt\n  - file: bar.txt\n",
+    )
     .write("foo.txt", "FOO")
     .write("bar.txt", "BAR")
     .rpc_server(&rpc_server)

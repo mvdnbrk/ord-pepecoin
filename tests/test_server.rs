@@ -2,7 +2,7 @@ use {
   super::*,
   axum_server::Handle,
   bitcoincore_rpc::{Auth, Client, RpcApi},
-  ord::{Index, parse_ord_server_args},
+  ord::{parse_ord_server_args, Index},
   reqwest::blocking::Response,
   std::{net::SocketAddr, path::PathBuf, sync::Arc},
 };
@@ -46,7 +46,9 @@ impl TestServer {
       let ord_server_handle = ord_server_handle.clone();
       let settings = settings.clone();
       thread::spawn(move || {
-        server.run(settings, index, ord_server_handle, Some(tx)).unwrap()
+        server
+          .run(settings, index, ord_server_handle, Some(tx))
+          .unwrap()
       });
     }
 

@@ -59,14 +59,20 @@ impl State {
   pub(crate) fn push_block(&mut self, subsidy: u64) -> Block {
     let mut fees = 0;
     for tx in &self.mempool {
-        let input_value: u64 = tx.input.iter().map(|txin| {
-            self.transactions.get(&txin.previous_output.txid)
-                .map(|prev_tx| prev_tx.output[txin.previous_output.vout as usize].value)
-                .unwrap_or(0)
-        }).sum();
-        let output_value: u64 = tx.output.iter().map(|txout| txout.value).sum();
-        fees += input_value.saturating_sub(output_value);
-        self.transactions.insert(tx.txid(), tx.clone());
+      let input_value: u64 = tx
+        .input
+        .iter()
+        .map(|txin| {
+          self
+            .transactions
+            .get(&txin.previous_output.txid)
+            .map(|prev_tx| prev_tx.output[txin.previous_output.vout as usize].value)
+            .unwrap_or(0)
+        })
+        .sum();
+      let output_value: u64 = tx.output.iter().map(|txout| txout.value).sum();
+      fees += input_value.saturating_sub(output_value);
+      self.transactions.insert(tx.txid(), tx.clone());
     }
 
     let coinbase = Transaction {
@@ -86,7 +92,7 @@ impl State {
           .coinbase_address
           .as_ref()
           .map(|address| address.script_pubkey())
-          .unwrap_or_else(|| Script::new()),
+          .unwrap_or_default(),
       }],
     };
 
@@ -172,16 +178,16 @@ impl State {
     let mut remaining = total_value - template.fee;
     let mut outputs = Vec::new();
     for i in 0..template.outputs {
-        let value = if let Some(v) = template.output_values.get(i) {
-            *v
-        } else {
-            remaining / (template.outputs - i) as u64
-        };
-        remaining -= value;
-        outputs.push(TxOut {
-          value,
-          script_pubkey: script::Builder::new().into_script(),
-        });
+      let value = if let Some(v) = template.output_values.get(i) {
+        *v
+      } else {
+        remaining / (template.outputs - i) as u64
+      };
+      remaining -= value;
+      outputs.push(TxOut {
+        value,
+        script_pubkey: script::Builder::new().into_script(),
+      });
     }
 
     let tx = Transaction {

@@ -11,7 +11,7 @@ impl HomeHtml {
   pub(crate) fn new(blocks: Vec<(u32, BlockHash)>, inscriptions: Vec<InscriptionId>) -> Self {
     Self {
       last: blocks
-        .get(0)
+        .first()
         .map(|(height, _)| height)
         .cloned()
         .unwrap_or(0),

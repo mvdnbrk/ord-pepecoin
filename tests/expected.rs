@@ -20,7 +20,7 @@ impl Expected {
           output
         };
         pretty_assert_eq!(output, string)
-      },
+      }
       Self::Regex(regex) => assert!(
         regex.is_match(output),
         "regex:\n{regex}\ndid not match output:\n{output}",
