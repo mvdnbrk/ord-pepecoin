@@ -7,7 +7,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
-## [0.9.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.9.0) - 2026-03-19
+## [0.9.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.9.0) - 2026-03-20
 
 ### Added
 - Batch chunking for large collections with deferred commit broadcasting ([#41](https://github.com/mvdnbrk/ord-pepecoin/pull/41))
