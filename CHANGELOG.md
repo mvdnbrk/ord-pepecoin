@@ -7,10 +7,23 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+### Added
+- PRC-721 parent/child inscription support ([#50](https://github.com/mvdnbrk/ord-pepecoin/pull/50))
+  - `inscribe --parent <ID>` for single child inscriptions
+  - Batch YAML `parents` field with multi-parent support and UTXO chaining
+  - Indexer: parent/child relationship tracking with explicit parent-to-output assignment
+  - JSON API: `parent_count`, `parents`, `child_count`, `children` on `/inscription/{id}`
+  - Paginated JSON endpoints: `/children/{id}` and `/parents/{id}`
+  - HTML: parent/child sections on inscription pages
+
 ### Changed
+- Extract `AcceptJson` into server submodule ([#50](https://github.com/mvdnbrk/ord-pepecoin/pull/50))
 - Extract `InscriptionParser` into separate `parser` module ([#48](https://github.com/mvdnbrk/ord-pepecoin/pull/48))
 - Add clippy and rustfmt CI checks ([#47](https://github.com/mvdnbrk/ord-pepecoin/pull/47))
 - Restructure inscription modules into `inscriptions/` directory ([#46](https://github.com/mvdnbrk/ord-pepecoin/pull/46))
+
+### Removed
+- Remove `/bounties` and `/faq` routes ([#51](https://github.com/mvdnbrk/ord-pepecoin/issues/51))
 
 ### Fixed
 - Fix macOS build failure caused by type inference overflow ([#46](https://github.com/mvdnbrk/ord-pepecoin/pull/46))
