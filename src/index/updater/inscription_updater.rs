@@ -160,7 +160,7 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
         }
       };
 
-      match Inscription::from_transactions(txs) {
+      match Inscription::from_transactions(&txs) {
         ParsedInscription::None => {
           // todo: clean up db
         }
