@@ -567,6 +567,57 @@ fn batch_inscribe_file_not_found() {
 }
 
 #[test]
+fn inscribe_with_parent() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  // Inscribe the parent
+  let parent = inscribe(&rpc_server, &ord_server);
+
+  // Need another block with funds for the child inscription
+  rpc_server.mine_blocks(1);
+
+  // Inscribe a child with --parent
+  let child = CommandBuilder::new(format!(
+    "wallet inscribe child.txt --parent {}",
+    parent.inscription
+  ))
+  .write("child.txt", "CHILD")
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .data_dir(ord_server.directory())
+  .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  // Verify child content is indexed
+  let response = ord_server.request(format!("/content/{}", child.inscription));
+  assert_eq!(response.status(), 200);
+  assert_eq!(response.text().unwrap(), "CHILD");
+}
+
+#[test]
+fn inscribe_with_invalid_parent() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let fake_parent = "0000000000000000000000000000000000000000000000000000000000000000i0";
+
+  CommandBuilder::new(format!("wallet inscribe child.txt --parent {fake_parent}"))
+    .write("child.txt", "CHILD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .expected_exit_code(1)
+    .stderr_regex("error: parent inscription .*i0 not found in wallet\n")
+    .run();
+}
+
+#[test]
 fn batch_and_file_conflict() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);
