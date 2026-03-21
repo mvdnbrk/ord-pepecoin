@@ -185,14 +185,12 @@ impl Server {
         .route("/blockcount", get(Self::block_count))
         .route("/address/{address}", get(Self::address))
         .route("/block/{query}", get(Self::block))
-
         .route("/children/{inscription_id}", get(Self::children))
         .route(
           "/children/{inscription_id}/{page}",
           get(Self::children_paginated),
         )
         .route("/content/{inscription_id}", get(Self::content))
-
         .route("/favicon.ico", get(Self::favicon))
         .route("/feed.xml", get(Self::feed))
         .route("/input/{block}/{transaction}/{input}", get(Self::input))
@@ -1035,7 +1033,6 @@ impl Server {
 
     Ok(InputHtml { path, input }.page(page_config, index.has_sat_index()?))
   }
-
 
   async fn content(
     Extension(index): Extension<Arc<Index>>,
@@ -1979,7 +1976,6 @@ mod tests {
   fn ordinal_redirects_to_sat() {
     TestServer::new().assert_redirect("/ordinal/0", "/sat/0");
   }
-
 
   #[test]
   fn search_by_query_returns_sat() {
