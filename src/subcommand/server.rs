@@ -185,14 +185,14 @@ impl Server {
         .route("/blockcount", get(Self::block_count))
         .route("/address/{address}", get(Self::address))
         .route("/block/{query}", get(Self::block))
-        .route("/bounties", get(Self::bounties))
+
         .route("/children/{inscription_id}", get(Self::children))
         .route(
           "/children/{inscription_id}/{page}",
           get(Self::children_paginated),
         )
         .route("/content/{inscription_id}", get(Self::content))
-        .route("/faq", get(Self::faq))
+
         .route("/favicon.ico", get(Self::favicon))
         .route("/feed.xml", get(Self::feed))
         .route("/input/{block}/{transaction}/{input}", get(Self::input))
@@ -1036,13 +1036,6 @@ impl Server {
     Ok(InputHtml { path, input }.page(page_config, index.has_sat_index()?))
   }
 
-  async fn faq() -> Redirect {
-    Redirect::to("https://docs.ordinals.com/faq/")
-  }
-
-  async fn bounties() -> Redirect {
-    Redirect::to("https://docs.ordinals.com/bounty/")
-  }
 
   async fn content(
     Extension(index): Extension<Arc<Index>>,
@@ -1987,15 +1980,6 @@ mod tests {
     TestServer::new().assert_redirect("/ordinal/0", "/sat/0");
   }
 
-  #[test]
-  fn bounties_redirects_to_docs_site() {
-    TestServer::new().assert_redirect("/bounties", "https://docs.ordinals.com/bounty/");
-  }
-
-  #[test]
-  fn faq_redirects_to_docs_site() {
-    TestServer::new().assert_redirect("/faq", "https://docs.ordinals.com/faq/");
-  }
 
   #[test]
   fn search_by_query_returns_sat() {
