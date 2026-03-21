@@ -12,6 +12,7 @@ pub struct Inscription {
   pub id: InscriptionId,
   pub next: Option<InscriptionId>,
   pub number: u32,
+  pub parent_count: u64,
   pub parents: Vec<InscriptionId>,
   pub previous: Option<InscriptionId>,
   pub sat: Option<Sat>,

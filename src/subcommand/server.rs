@@ -581,6 +581,7 @@ impl Server {
       let parents = index.get_parents_by_inscription_id(id)?;
       let children = index.get_children_by_inscription_id(id)?;
       let child_count = u64::try_from(children.len()).unwrap();
+      let parent_count = u64::try_from(parents.len()).unwrap();
 
       inscriptions.push(api::Inscription {
         address: page_config
@@ -597,6 +598,7 @@ impl Server {
         id,
         next,
         number: entry.number,
+        parent_count,
         parents: parents.into_iter().take(4).collect(),
         previous,
         sat: entry.sat,
@@ -1227,6 +1229,7 @@ impl Server {
     let parents = index.get_parents_by_inscription_id(inscription_id)?;
     let children = index.get_children_by_inscription_id(inscription_id)?;
     let child_count = u64::try_from(children.len()).unwrap();
+    let parent_count = u64::try_from(parents.len()).unwrap();
 
     if accept_json {
       Ok(
@@ -1245,6 +1248,7 @@ impl Server {
           id: inscription_id,
           next,
           number: entry.number,
+          parent_count,
           parents: parents.iter().copied().take(4).collect(),
           previous,
           sat: entry.sat,
