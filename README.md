@@ -118,6 +118,10 @@ curl -s -H "Accept: application/json" http://localhost:3080/inscriptions
 curl -s -H "Accept: application/json" http://localhost:3080/output/<outpoint>
 curl -s -H "Accept: application/json" http://localhost:3080/block/<height>
 curl -s -H "Accept: application/json" http://localhost:3080/address/<address>
+curl -s -H "Accept: application/json" http://localhost:3080/children/<inscription_id>
+curl -s -H "Accept: application/json" http://localhost:3080/children/<inscription_id>/<page>
+curl -s -H "Accept: application/json" http://localhost:3080/parents/<inscription_id>
+curl -s -H "Accept: application/json" http://localhost:3080/parents/<inscription_id>/<page>
 curl -s http://localhost:3080/blockcount
 curl -s http://localhost:3080/content/<inscription_id>
 ```
