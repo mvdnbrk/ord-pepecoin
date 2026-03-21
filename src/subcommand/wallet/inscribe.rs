@@ -51,10 +51,19 @@ pub(crate) struct Inscribe {
   )]
   pub(crate) commit_fee_rate: Option<FeeRate>,
   #[clap(
-    help = "Inscribe sat with contents of <FILE>",
-    required_unless_present = "batch"
+    long,
+    help = "Inscribe sat with contents of <FILE>.",
+    conflicts_with_all = &["batch", "delegate"],
+    required_unless_present_any = &["batch", "delegate"]
   )]
   pub(crate) file: Option<PathBuf>,
+  #[clap(
+    long,
+    help = "Delegate inscription content to <DELEGATE>.",
+    conflicts_with_all = &["batch", "file"],
+    required_unless_present_any = &["batch", "file"]
+  )]
+  pub(crate) delegate: Option<InscriptionId>,
   #[clap(
     long,
     help = "Do not check that transactions are equal to or below the 100,000 bytes limit. Transactions over this limit are currently nonstandard and will not be relayed by bitcoind in its default configuration. Do not use this flag unless you understand the implications."
@@ -75,7 +84,7 @@ pub(crate) struct Inscribe {
   #[clap(
     long,
     help = "Inscribe multiple files from <BATCH> YAML file.",
-    conflicts_with = "file"
+    conflicts_with_all = &["file", "delegate"]
   )]
   pub(crate) batch: Option<PathBuf>,
   #[clap(long, help = "Make inscription a child of <PARENT>.")]
@@ -267,12 +276,37 @@ impl Inscribe {
       let default_address = get_change_address(client)?;
 
       for entry in &batch_file.inscriptions {
-        let path = if entry.file.is_absolute() {
-          entry.file.clone()
+        let (mut inscription, path, delegate_id) = if let Some(ref file) = entry.file {
+          let path = if file.is_absolute() {
+            file.clone()
+          } else {
+            batch_path.parent().unwrap().join(file)
+          };
+          (
+            Inscription::from_file(wallet.chain(), &path)?,
+            Some(path),
+            None,
+          )
+        } else if let Some(delegate_id) = entry.delegate {
+          let delegate = wallet
+            .get_inscription(delegate_id)?
+            .ok_or_else(|| anyhow!("delegate {delegate_id} not found"))?;
+
+          if delegate.delegate.is_some() {
+            bail!("delegate {delegate_id} is itself a delegate");
+          }
+
+          let mut inscription = Inscription::new(None, None, BTreeMap::new());
+          inscription.tags.insert(
+            crate::inscriptions::tag::DELEGATE.to_string(),
+            vec![crate::inscriptions::tag::encode_inscription_id(
+              &delegate_id,
+            )],
+          );
+          (inscription, None, Some(delegate_id))
         } else {
-          batch_path.parent().unwrap().join(&entry.file)
+          unreachable!()
         };
-        let mut inscription = Inscription::from_file(wallet.chain(), &path)?;
 
         // Add parent tags from batch file
         for parent_id in &batch_file.parents {
@@ -283,7 +317,7 @@ impl Inscribe {
             .push(crate::inscriptions::tag::encode_inscription_id(parent_id));
         }
 
-        inscriptions.push((inscription, path));
+        inscriptions.push((inscription, path, delegate_id));
         destinations.push(
           entry
             .destination
@@ -295,7 +329,7 @@ impl Inscribe {
       // Pre-flight balance check
       let mut total_postage = 0;
       let mut total_reveal_fees = 0;
-      for (inscription, _) in &inscriptions {
+      for (inscription, _, _) in &inscriptions {
         total_postage += postage.to_sat();
         let batches = split_inscription_into_batches(inscription);
         for batch in &batches {
@@ -331,10 +365,10 @@ impl Inscribe {
         .zip(destinations.chunks(BATCH_COMMIT_CHUNK_SIZE))
         .enumerate()
       {
-        let (chunk_inscriptions_with_paths, chunk_destinations) = chunk_data;
-        let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_paths
+        let (chunk_inscriptions_with_metadata, chunk_destinations) = chunk_data;
+        let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_metadata
           .iter()
-          .map(|(ins, _)| ins.clone())
+          .map(|(ins, _, _)| ins.clone())
           .collect();
 
         let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos
@@ -366,7 +400,7 @@ impl Inscribe {
               commit_tx,
               reveal_chains,
               chunk_destinations.to_vec(),
-              chunk_inscriptions_with_paths,
+              chunk_inscriptions_with_metadata,
               fees,
             ));
           }
@@ -423,8 +457,13 @@ impl Inscribe {
           .map(|pi| pi.location.outpoint)
           .collect();
 
-        for (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees) in
-          all_chunk_results
+        for (
+          commit_tx,
+          reveal_chains,
+          chunk_destinations,
+          chunk_inscriptions_with_metadata,
+          fees,
+        ) in all_chunk_results
         {
           let signed_commit_tx = LocalSigner::sign_transaction(&wallet, commit_tx)?;
           let commit_txid = signed_commit_tx.txid();
@@ -463,18 +502,24 @@ impl Inscribe {
               destination: chunk_destinations[i].clone(),
             });
 
-            let (_ins, path) = &chunk_inscriptions_with_paths[i];
+            let (_ins, path, delegate_id) = &chunk_inscriptions_with_metadata[i];
 
             all_jobs.push(RevealJob {
               file_name: path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string(),
-              content_type: Media::content_type_for_path(path)
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| delegate_id.unwrap().to_string()),
+              content_type: path
+                .as_ref()
+                .and_then(|p| Media::content_type_for_path(p).ok())
                 .unwrap_or("application/octet-stream")
                 .to_string(),
-              file_size: fs::metadata(path).map(|m| m.len()).unwrap_or(0),
+              file_size: path
+                .as_ref()
+                .and_then(|p| fs::metadata(p).ok())
+                .map(|m| m.len())
+                .unwrap_or(0),
               commit_txid,
               commit_raw_hex: commit_raw_hex.clone(),
               commit_broadcast: false,
@@ -485,6 +530,7 @@ impl Inscribe {
               created_at: Utc::now(),
               reveals: signed.reveals,
               parent_ids: batch_parent_infos.iter().map(|pi| pi.id).collect(),
+              delegate_id: *delegate_id,
             });
           }
         }
@@ -524,8 +570,28 @@ impl Inscribe {
         }
       }
     } else {
-      let mut inscription =
-        Inscription::from_file(wallet.chain(), self.file.as_ref().context("missing file")?)?;
+      let mut inscription = if let Some(ref file) = self.file {
+        Inscription::from_file(wallet.chain(), file)?
+      } else if let Some(delegate_id) = self.delegate {
+        let delegate = wallet
+          .get_inscription(delegate_id)?
+          .ok_or_else(|| anyhow!("delegate {delegate_id} not found"))?;
+
+        if delegate.delegate.is_some() {
+          bail!("delegate {delegate_id} is itself a delegate");
+        }
+
+        let mut inscription = Inscription::new(None, None, BTreeMap::new());
+        inscription.tags.insert(
+          crate::inscriptions::tag::DELEGATE.to_string(),
+          vec![crate::inscriptions::tag::encode_inscription_id(
+            &delegate_id,
+          )],
+        );
+        inscription
+      } else {
+        unreachable!()
+      };
 
       let parent_info = if let Some(ref parent_id) = self.parent {
         let info = Self::get_parent_info(parent_id, &wallet)?;
@@ -630,17 +696,25 @@ impl Inscribe {
         fs::create_dir_all(&jobs_dir)?;
         let job_file = jobs_dir.join(format!("{}.json", commit));
 
-        let file_path = self.file.as_ref().unwrap();
         let mut job = RevealJob {
-          file_name: file_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string(),
-          content_type: Media::content_type_for_path(file_path)
+          file_name: self
+            .file
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| self.delegate.unwrap().to_string()),
+          content_type: self
+            .file
+            .as_ref()
+            .and_then(|p| Media::content_type_for_path(p).ok())
             .unwrap_or("application/octet-stream")
             .to_string(),
-          file_size: fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
+          file_size: self
+            .file
+            .as_ref()
+            .and_then(|p| fs::metadata(p).ok())
+            .map(|m| m.len())
+            .unwrap_or(0),
           commit_txid: commit,
           commit_raw_hex,
           commit_broadcast: true,
@@ -651,6 +725,7 @@ impl Inscribe {
           created_at: Utc::now(),
           reveals: signed.reveals,
           parent_ids: self.parent.iter().cloned().collect(),
+          delegate_id: self.delegate,
         };
 
         job.broadcast_batch(client);

@@ -351,6 +351,24 @@ impl Wallet {
     &self.utxos
   }
 
+  pub(crate) fn get_inscription(&self, id: InscriptionId) -> Result<Option<api::Inscription>> {
+    let response = self
+      ._ord_client
+      .get(self._rpc_url.join(&format!("/inscription/{id}"))?)
+      .send()?;
+
+    if response.status().is_success() {
+      Ok(Some(response.json()?))
+    } else if response.status() == http::StatusCode::NOT_FOUND {
+      Ok(None)
+    } else {
+      bail!(
+        "failed to get inscription from ordpep server: {}",
+        response.status()
+      );
+    }
+  }
+
   pub(crate) fn inscriptions(&self) -> &BTreeMap<SatPoint, Vec<InscriptionId>> {
     &self.inscriptions
   }

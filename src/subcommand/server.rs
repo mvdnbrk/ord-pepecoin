@@ -603,6 +603,7 @@ impl Server {
         satpoint,
         timestamp: i64::from(entry.timestamp),
         value: Some(output.value),
+        delegate: inscription.delegate_id(),
       });
     }
 
@@ -1043,9 +1044,15 @@ impl Server {
       return Ok(PreviewUnknownHtml.into_response());
     }
 
-    let inscription = index
+    let mut inscription = index
       .get_inscription_by_id(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    if let Some(delegate) = inscription.delegate_id() {
+      inscription = index
+        .get_inscription_by_id(delegate)?
+        .ok_or_not_found(|| format!("delegate {inscription_id}"))?;
+    }
 
     Ok(
       Self::content_response(inscription)
@@ -1086,9 +1093,15 @@ impl Server {
       return Ok(PreviewUnknownHtml.into_response());
     }
 
-    let inscription = index
+    let mut inscription = index
       .get_inscription_by_id(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    if let Some(delegate) = inscription.delegate_id() {
+      inscription = index
+        .get_inscription_by_id(delegate)?
+        .ok_or_not_found(|| format!("delegate {inscription_id}"))?;
+    }
 
     match inscription.media() {
       Media::Audio => Ok(PreviewAudioHtml { inscription_id }.into_response()),
@@ -1222,6 +1235,7 @@ impl Server {
     let parent_count = u64::try_from(parents.len()).unwrap();
 
     if accept_json {
+      let delegate = inscription.delegate_id();
       Ok(
         Json(api::Inscription {
           address: page_config
@@ -1245,10 +1259,12 @@ impl Server {
           satpoint,
           timestamp: i64::from(entry.timestamp),
           value: Some(output.value),
+          delegate,
         })
         .into_response(),
       )
     } else {
+      let delegate = inscription.delegate_id();
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
@@ -1266,6 +1282,7 @@ impl Server {
           sat: entry.sat,
           satpoint,
           timestamp: timestamp(entry.timestamp),
+          delegate,
         }
         .page(page_config, index.has_sat_index()?)
         .into_response(),

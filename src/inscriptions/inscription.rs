@@ -88,9 +88,7 @@ impl Inscription {
 
     builder = Self::push_number(builder, u64::try_from(chunks.len()).unwrap());
 
-    if let Some(content_type) = &self.content_type {
-      builder = builder.push_slice(content_type);
-    }
+    builder = builder.push_slice(self.content_type.as_deref().unwrap_or_default());
 
     for (i, chunk) in chunks.iter().enumerate() {
       builder = Self::push_number(builder, u64::try_from(chunks.len() - i - 1).unwrap());
@@ -130,7 +128,7 @@ impl Inscription {
   }
 
   pub(crate) fn media(&self) -> Media {
-    if self.body.is_none() {
+    if self.delegate_id().is_some() || self.body.is_none() {
       return Media::Unknown;
     }
 
@@ -142,10 +140,16 @@ impl Inscription {
   }
 
   pub(crate) fn body(&self) -> Option<&[u8]> {
+    if self.delegate_id().is_some() {
+      return None;
+    }
     Some(self.body.as_ref()?)
   }
 
   pub(crate) fn into_body(self) -> Option<Vec<u8>> {
+    if self.delegate_id().is_some() {
+      return None;
+    }
     self.body
   }
 
@@ -154,6 +158,9 @@ impl Inscription {
   }
 
   pub(crate) fn content_type(&self) -> Option<&str> {
+    if self.delegate_id().is_some() {
+      return None;
+    }
     str::from_utf8(self.content_type.as_ref()?).ok()
   }
 
