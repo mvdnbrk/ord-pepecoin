@@ -747,6 +747,37 @@ fn inscribe_with_delegate() {
   );
 
   ord_server.assert_response_regex(format!("/content/{}", output.inscription), "FOO");
+
+  // JSON API should include delegate field with null content_type and content_length
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(
+    json.delegate.unwrap().to_string(),
+    delegate.inscription.to_string()
+  );
+  assert_eq!(json.content_type, None);
+  assert_eq!(json.content_length, None);
+}
+
+#[test]
+fn inscribe_with_non_existent_delegate() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+
+  rpc_server.mine_blocks(1);
+
+  let fake_delegate = "0000000000000000000000000000000000000000000000000000000000000000i0";
+
+  CommandBuilder::new(format!("wallet inscribe --delegate {fake_delegate}"))
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .expected_exit_code(1)
+    .stderr_regex(format!("error: delegate {fake_delegate} not found\n"))
+    .run();
 }
 
 #[test]
