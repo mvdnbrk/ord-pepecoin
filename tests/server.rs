@@ -354,6 +354,30 @@ fn parent_child() {
       child.inscription
     ),
   );
+
+  // JSON children endpoint
+  let children: ord::api::InscriptionIds = test_server
+    .json_request(format!("/children/{}", parent.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(children.ids.len(), 1);
+  assert_eq!(children.ids[0].to_string(), child.inscription);
+  assert!(!children.more);
+  assert_eq!(children.page, 0);
+
+  // JSON parents endpoint
+  let parents: ord::api::InscriptionIds = test_server
+    .json_request(format!("/parents/{}", child.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(parents.ids.len(), 1);
+  assert_eq!(parents.ids[0].to_string(), parent.inscription);
+  assert!(!parents.more);
+  assert_eq!(parents.page, 0);
+
+  // parent_count in API response
+  assert_eq!(child_api.parent_count, 1);
+  assert_eq!(parent_api.parent_count, 0);
 }
 
 #[test]
