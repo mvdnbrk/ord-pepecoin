@@ -36,9 +36,9 @@ impl Inscription {
     }
   }
 
-  pub(crate) fn from_transactions(txs: Vec<Transaction>) -> ParsedInscription {
+  pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
-    for tx in &txs {
+    for tx in txs {
       if tx.input.is_empty() {
         return ParsedInscription::None;
       }
@@ -87,7 +87,7 @@ impl Inscription {
     let body = self.body.as_ref().unwrap_or(&empty);
     let chunks: Vec<&[u8]> = body.chunks(240).collect();
 
-    builder = Self::push_number(builder, chunks.len() as u64);
+    builder = Self::push_number(builder, u64::try_from(chunks.len()).unwrap());
 
     if let Some(content_type) = &self.content_type {
       builder = builder.push_slice(content_type);
@@ -99,7 +99,7 @@ impl Inscription {
     }
 
     for (i, chunk) in chunks.iter().enumerate() {
-      builder = Self::push_number(builder, (chunks.len() - i - 1) as u64);
+      builder = Self::push_number(builder, u64::try_from(chunks.len() - i - 1).unwrap());
       builder = builder.push_slice(chunk);
     }
 

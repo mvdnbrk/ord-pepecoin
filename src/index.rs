@@ -740,7 +740,7 @@ impl Index {
           }
         }
 
-        let parsed_inscription = Inscription::from_transactions(txs);
+        let parsed_inscription = Inscription::from_transactions(&txs);
 
         match parsed_inscription {
           ParsedInscription::None => Ok(None),

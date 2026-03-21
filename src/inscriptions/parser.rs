@@ -48,9 +48,7 @@ impl InscriptionParser {
       });
     }
 
-    // TODO: Add tag parsing for parent/child (Tag 3) once we define a format
-    // that doesn't collide with body countdown numbers. Currently, an inscription
-    // with exactly 4 chunks has countdown starting at 3, which collides with Tag 3.
+    // TODO: Parse PRC-721 tag trailer (string-keyed tags after countdown 0)
     let parent: Option<Vec<u8>> = None;
 
     // read body
@@ -693,7 +691,7 @@ mod tests {
     };
 
     assert_eq!(
-      Inscription::from_transactions(vec![tx]),
+      Inscription::from_transactions(&[tx]),
       ParsedInscription::Complete(inscription("text/plain;charset=utf-8", "woof")),
     );
   }
@@ -731,7 +729,7 @@ mod tests {
     };
 
     assert_eq!(
-      Inscription::from_transactions(vec![tx]),
+      Inscription::from_transactions(&[tx]),
       ParsedInscription::None
     );
   }
