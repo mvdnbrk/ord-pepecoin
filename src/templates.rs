@@ -6,6 +6,7 @@ use {
 pub(crate) use {
   address::AddressHtml,
   block::BlockHtml,
+  children::ChildrenHtml,
   home::HomeHtml,
   iframe::Iframe,
   input::InputHtml,
@@ -14,6 +15,7 @@ pub(crate) use {
   inscriptions_block::InscriptionsBlockHtml,
   output::OutputHtml,
   page_config::PageConfig,
+  parents::ParentsHtml,
   preview::{
     PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml,
     PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml,
@@ -27,6 +29,7 @@ pub(crate) use {
 
 mod address;
 mod block;
+mod children;
 mod home;
 mod iframe;
 mod input;
@@ -34,6 +37,7 @@ mod inscription;
 mod inscriptions;
 mod inscriptions_block;
 mod output;
+mod parents;
 mod preview;
 mod range;
 mod rare;

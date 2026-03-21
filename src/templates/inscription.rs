@@ -3,6 +3,8 @@ use super::*;
 #[derive(Boilerplate)]
 pub(crate) struct InscriptionHtml {
   pub(crate) chain: Chain,
+  pub(crate) children: Vec<InscriptionId>,
+  pub(crate) child_count: u64,
   pub(crate) fee: u64,
   pub(crate) height: u32,
   pub(crate) inscription: Inscription,
@@ -10,6 +12,7 @@ pub(crate) struct InscriptionHtml {
   pub(crate) next: Option<InscriptionId>,
   pub(crate) number: u32,
   pub(crate) output: TxOut,
+  pub(crate) parents: Vec<InscriptionId>,
   pub(crate) previous: Option<InscriptionId>,
   pub(crate) sat: Option<Sat>,
   pub(crate) satpoint: SatPoint,
@@ -35,6 +38,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
+        children: Vec::new(),
+        child_count: 0,
         fee: 1,
         height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
@@ -42,6 +47,7 @@ mod tests {
         next: None,
         number: 1,
         output: tx_out(1, address()),
+        parents: Vec::new(),
         previous: None,
         sat: None,
         satpoint: satpoint(1, 0),
@@ -94,6 +100,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
+        children: Vec::new(),
+        child_count: 0,
         fee: 1,
         height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
@@ -101,6 +109,7 @@ mod tests {
         next: None,
         number: 1,
         output: tx_out(1, address()),
+        parents: Vec::new(),
         previous: None,
         sat: Some(Sat(1)),
         satpoint: satpoint(1, 0),
@@ -126,6 +135,8 @@ mod tests {
     assert_regex_match!(
       InscriptionHtml {
         chain: Chain::Mainnet,
+        children: Vec::new(),
+        child_count: 0,
         fee: 1,
         height: 0,
         inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
@@ -133,6 +144,7 @@ mod tests {
         next: Some(inscription_id(3)),
         number: 1,
         output: tx_out(1, address()),
+        parents: Vec::new(),
         previous: Some(inscription_id(1)),
         sat: None,
         satpoint: satpoint(1, 0),

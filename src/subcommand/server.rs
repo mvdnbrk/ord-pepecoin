@@ -7,8 +7,8 @@ use {
   crate::api,
   crate::page_config::PageConfig,
   crate::templates::{
-    AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
-    InscriptionsHtml, OutputHtml, PageContent, PageHtml, PreviewAudioHtml, PreviewCodeHtml,
+    AddressHtml, BlockHtml, ChildrenHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
+    InscriptionsHtml, OutputHtml, PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml,
     PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml,
     PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml,
     TransactionHtml,
@@ -206,6 +206,8 @@ impl Server {
         .route("/address/{address}", get(Self::address))
         .route("/block/{query}", get(Self::block))
         .route("/bounties", get(Self::bounties))
+        .route("/children/{inscription_id}", get(Self::children))
+        .route("/children/{inscription_id}/{page}", get(Self::children_paginated))
         .route("/content/{inscription_id}", get(Self::content))
         .route("/faq", get(Self::faq))
         .route("/favicon.ico", get(Self::favicon))
@@ -229,6 +231,8 @@ impl Server {
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
+        .route("/parents/{inscription_id}", get(Self::parents))
+        .route("/parents/{inscription_id}/{page}", get(Self::parents_paginated))
         .route("/outputs", post(Self::outputs_batch).layer(body_limit))
         .route("/preview/{inscription_id}", get(Self::preview))
         .route("/range/{start}/{end}", get(Self::range))
@@ -588,12 +592,18 @@ impl Server {
 
       let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
+      let parents = index.get_parents_by_inscription_id(id)?;
+      let children = index.get_children_by_inscription_id(id)?;
+      let child_count = u64::try_from(children.len()).unwrap();
+
       inscriptions.push(api::Inscription {
         address: page_config
           .chain
           .address_from_script(&output.script_pubkey)
           .map(|a| a.to_string())
           .ok(),
+        children: children.into_iter().take(4).collect(),
+        child_count,
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
         fee: entry.fee,
@@ -601,6 +611,7 @@ impl Server {
         id,
         next,
         number: entry.number,
+        parents: parents.into_iter().take(4).collect(),
         previous,
         sat: entry.sat,
         satpoint,
@@ -1227,6 +1238,10 @@ impl Server {
 
     let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
+    let parents = index.get_parents_by_inscription_id(inscription_id)?;
+    let children = index.get_children_by_inscription_id(inscription_id)?;
+    let child_count = u64::try_from(children.len()).unwrap();
+
     if accept_json.0 {
       Ok(
         Json(api::Inscription {
@@ -1235,6 +1250,8 @@ impl Server {
             .address_from_script(&output.script_pubkey)
             .map(|address| address.to_string())
             .ok(),
+          children: children.iter().copied().take(4).collect(),
+          child_count,
           content_length: inscription.body().map(|body: &[u8]| body.len()),
           content_type: inscription.content_type().map(|s: &str| s.to_string()),
           fee: entry.fee,
@@ -1242,6 +1259,7 @@ impl Server {
           id: inscription_id,
           next,
           number: entry.number,
+          parents: parents.iter().copied().take(4).collect(),
           previous,
           sat: entry.sat,
           satpoint,
@@ -1254,6 +1272,8 @@ impl Server {
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
+          children: children.into_iter().take(4).collect(),
+          child_count,
           fee: entry.fee,
           height: entry.height,
           inscription,
@@ -1261,6 +1281,7 @@ impl Server {
           next,
           number: entry.number,
           output,
+          parents: parents.into_iter().take(4).collect(),
           previous,
           sat: entry.sat,
           satpoint,
@@ -1408,6 +1429,100 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn children(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
+  ) -> ServerResult<Response> {
+    Self::children_paginated_inner(page_config, index, inscription_id, 0).await
+  }
+
+  async fn children_paginated(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(DeserializeFromStr<InscriptionId>, usize)>,
+  ) -> ServerResult<Response> {
+    Self::children_paginated_inner(page_config, index, inscription_id, page).await
+  }
+
+  async fn children_paginated_inner(
+    page_config: Arc<PageConfig>,
+    index: Arc<Index>,
+    inscription_id: InscriptionId,
+    page: usize,
+  ) -> ServerResult<Response> {
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let page_size = 100;
+
+    let (children, more) =
+      index.get_children_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    let prev_page = if page > 0 { Some(page - 1) } else { None };
+    let next_page = if more { Some(page + 1) } else { None };
+
+    Ok(
+      ChildrenHtml {
+        parent: inscription_id,
+        parent_number: entry.number,
+        children,
+        prev_page,
+        next_page,
+      }
+      .page(page_config, index.has_sat_index()?)
+      .into_response(),
+    )
+  }
+
+  async fn parents(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
+  ) -> ServerResult<Response> {
+    Self::parents_paginated_inner(page_config, index, inscription_id, 0).await
+  }
+
+  async fn parents_paginated(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(DeserializeFromStr<InscriptionId>, usize)>,
+  ) -> ServerResult<Response> {
+    Self::parents_paginated_inner(page_config, index, inscription_id, page).await
+  }
+
+  async fn parents_paginated_inner(
+    page_config: Arc<PageConfig>,
+    index: Arc<Index>,
+    inscription_id: InscriptionId,
+    page: usize,
+  ) -> ServerResult<Response> {
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let page_size = 100;
+
+    let (parents, more) =
+      index.get_parents_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    let prev_page = if page > 0 { Some(page - 1) } else { None };
+    let next_page = if more { Some(page + 1) } else { None };
+
+    Ok(
+      ParentsHtml {
+        inscription_id,
+        inscription_number: entry.number,
+        parents,
+        prev_page,
+        next_page,
+      }
+      .page(page_config, index.has_sat_index()?)
+      .into_response(),
+    )
   }
 
   async fn redirect_http_to_https(
