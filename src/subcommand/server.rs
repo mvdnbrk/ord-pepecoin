@@ -1456,7 +1456,7 @@ impl Server {
 
     if accept_json {
       return Ok(
-        Json(api::Children {
+        Json(api::InscriptionIds {
           ids: children,
           more,
           page,
@@ -1520,7 +1520,7 @@ impl Server {
 
     if accept_json {
       return Ok(
-        Json(api::Children {
+        Json(api::InscriptionIds {
           ids: parents,
           more,
           page,
