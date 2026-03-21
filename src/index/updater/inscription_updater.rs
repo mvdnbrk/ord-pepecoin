@@ -222,7 +222,9 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
           // Collect validated parent relationships (read-only borrows)
           let mut validated_parents: Vec<(InscriptionId, u32)> = Vec::new();
           for parent_id_bytes in inscription.tags.get("parent").cloned().unwrap_or_default() {
-            if let Some(parent_id) = crate::inscriptions::tag::parse_inscription_id(&parent_id_bytes) {
+            if let Some(parent_id) =
+              crate::inscriptions::tag::parse_inscription_id(&parent_id_bytes)
+            {
               if let Some(parent_entry) = self.id_to_entry.get(&parent_id.store())? {
                 let parent_number = InscriptionEntry::load(parent_entry.value()).number;
                 if let Some(parent_satpoint) = self.id_to_satpoint.get(&parent_id.store())? {
@@ -241,8 +243,12 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
 
           // Apply mutations for validated parents
           for (parent_id, parent_number) in &validated_parents {
-            self.number_to_parents.insert(&child_number, parent_number)?;
-            self.parent_number_to_children.insert(parent_number, &child_number)?;
+            self
+              .number_to_parents
+              .insert(&child_number, parent_number)?;
+            self
+              .parent_number_to_children
+              .insert(parent_number, &child_number)?;
 
             // In upstream ord (SegWit), parents are input[0..N] so their
             // inscriptions sit at low sat offsets and naturally land in their
@@ -251,7 +257,10 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
             // input[1+]. This puts the parent inscription at a high sat offset
             // (after all commit sats), where it gets consumed by fees.
             // Fix: explicitly assign the parent to its return output.
-            if let Some(parent_flotsam_idx) = inscriptions.iter().position(|f| f.inscription_id == *parent_id) {
+            if let Some(parent_flotsam_idx) = inscriptions
+              .iter()
+              .position(|f| f.inscription_id == *parent_id)
+            {
               if let Some(return_output) = tx.output.get(1) {
                 let parent_flotsam = inscriptions.remove(parent_flotsam_idx);
                 let new_satpoint = SatPoint {

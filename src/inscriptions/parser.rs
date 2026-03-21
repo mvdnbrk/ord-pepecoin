@@ -123,7 +123,10 @@ impl InscriptionParser {
 
     for pair in push_datas.chunks_exact(2) {
       if let Ok(key) = str::from_utf8(&pair[0]) {
-        tags.entry(key.to_string()).or_default().push(pair[1].clone());
+        tags
+          .entry(key.to_string())
+          .or_default()
+          .push(pair[1].clone());
       }
     }
 
@@ -633,7 +636,10 @@ mod tests {
       ParsedInscription::Complete(inscription) => {
         assert_eq!(inscription.body, Some(b"woof".to_vec()));
         // "woof woof" is a valid UTF-8 key, so it becomes a tag
-        assert_eq!(inscription.tags.get("woof woof").unwrap(), &vec![b"woof woof woof".to_vec()]);
+        assert_eq!(
+          inscription.tags.get("woof woof").unwrap(),
+          &vec![b"woof woof woof".to_vec()]
+        );
       }
       _ => panic!("expected Complete"),
     }

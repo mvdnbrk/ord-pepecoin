@@ -1570,7 +1570,9 @@ mod tests {
     let id_to_parents = rtx
       .open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)
       .unwrap();
-    let parent_number_to_children = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN).unwrap();
+    let parent_number_to_children = rtx
+      .open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN)
+      .unwrap();
 
     assert_eq!(
       id_to_parents

@@ -7,11 +7,11 @@ use {
   crate::api,
   crate::page_config::PageConfig,
   crate::templates::{
-    AddressHtml, BlockHtml, ChildrenHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
-    InscriptionsHtml, OutputHtml, PageContent, PageHtml, ParentsHtml, PreviewAudioHtml, PreviewCodeHtml,
-    PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml,
-    PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml,
-    TransactionHtml,
+    AddressHtml, BlockHtml, ChildrenHtml, HomeHtml, InputHtml, InscriptionHtml,
+    InscriptionsBlockHtml, InscriptionsHtml, OutputHtml, PageContent, PageHtml, ParentsHtml,
+    PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml,
+    PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml,
+    RangeHtml, RareTxt, SatHtml, StatusHtml, TransactionHtml,
   },
   axum::{
     body::Body,
@@ -207,7 +207,10 @@ impl Server {
         .route("/block/{query}", get(Self::block))
         .route("/bounties", get(Self::bounties))
         .route("/children/{inscription_id}", get(Self::children))
-        .route("/children/{inscription_id}/{page}", get(Self::children_paginated))
+        .route(
+          "/children/{inscription_id}/{page}",
+          get(Self::children_paginated),
+        )
         .route("/content/{inscription_id}", get(Self::content))
         .route("/faq", get(Self::faq))
         .route("/favicon.ico", get(Self::favicon))
@@ -232,7 +235,10 @@ impl Server {
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
         .route("/parents/{inscription_id}", get(Self::parents))
-        .route("/parents/{inscription_id}/{page}", get(Self::parents_paginated))
+        .route(
+          "/parents/{inscription_id}/{page}",
+          get(Self::parents_paginated),
+        )
         .route("/outputs", post(Self::outputs_batch).layer(body_limit))
         .route("/preview/{inscription_id}", get(Self::preview))
         .route("/range/{start}/{end}", get(Self::range))
@@ -1442,7 +1448,10 @@ impl Server {
   async fn children_paginated(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    Path((DeserializeFromStr(inscription_id), page)): Path<(DeserializeFromStr<InscriptionId>, usize)>,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(
+      DeserializeFromStr<InscriptionId>,
+      usize,
+    )>,
   ) -> ServerResult<Response> {
     Self::children_paginated_inner(page_config, index, inscription_id, page).await
   }
@@ -1489,7 +1498,10 @@ impl Server {
   async fn parents_paginated(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    Path((DeserializeFromStr(inscription_id), page)): Path<(DeserializeFromStr<InscriptionId>, usize)>,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(
+      DeserializeFromStr<InscriptionId>,
+      usize,
+    )>,
   ) -> ServerResult<Response> {
     Self::parents_paginated_inner(page_config, index, inscription_id, page).await
   }
@@ -2660,8 +2672,7 @@ mod tests {
   #[test]
   fn content_response_no_content_type() {
     let (headers, body) =
-      Server::content_response(Inscription::new(None, Some(Vec::new()), BTreeMap::new()))
-        .unwrap();
+      Server::content_response(Inscription::new(None, Some(Vec::new()), BTreeMap::new())).unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());

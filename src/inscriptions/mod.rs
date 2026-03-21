@@ -6,10 +6,7 @@ pub(crate) mod media;
 pub(crate) mod parser;
 pub(crate) mod tag;
 
-pub use self::{
-  inscription::Inscription,
-  inscription_id::InscriptionId,
-};
+pub use self::{inscription::Inscription, inscription_id::InscriptionId};
 
 pub(crate) use self::{
   inscription::ParsedInscription,

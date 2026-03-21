@@ -129,8 +129,7 @@ fn sign_reveal_chain(
           let input_idx = idx + 1;
           tx.input[input_idx].previous_output = *parent_utxo_outpoint;
 
-          let (change, index) =
-            wallet.get_address_info(&parent_info.tx_out.script_pubkey)?;
+          let (change, index) = wallet.get_address_info(&parent_info.tx_out.script_pubkey)?;
           let parent_privkey = wallet.get_private_key(change, index)?;
 
           let parent_sighash = tx.signature_hash(
@@ -670,10 +669,7 @@ impl Inscribe {
     Ok(())
   }
 
-  fn get_parent_info(
-    parent_id: &InscriptionId,
-    wallet: &Wallet,
-  ) -> Result<ParentInfo> {
+  fn get_parent_info(parent_id: &InscriptionId, wallet: &Wallet) -> Result<ParentInfo> {
     let inscriptions = wallet.inscriptions();
     let location = inscriptions
       .iter()
