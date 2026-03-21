@@ -21,6 +21,13 @@ pub struct Inscription {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct Children {
+  pub ids: Vec<InscriptionId>,
+  pub more: bool,
+  pub page: usize,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscriptions {
   pub ids: Vec<InscriptionId>,
   pub more: bool,

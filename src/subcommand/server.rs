@@ -1440,25 +1440,28 @@ impl Server {
   async fn children(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
   ) -> ServerResult<Response> {
-    Self::children_paginated_inner(page_config, index, inscription_id, 0).await
+    Self::children_paginated_inner(page_config, index, accept_json, inscription_id, 0).await
   }
 
   async fn children_paginated(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path((DeserializeFromStr(inscription_id), page)): Path<(
       DeserializeFromStr<InscriptionId>,
       usize,
     )>,
   ) -> ServerResult<Response> {
-    Self::children_paginated_inner(page_config, index, inscription_id, page).await
+    Self::children_paginated_inner(page_config, index, accept_json, inscription_id, page).await
   }
 
   async fn children_paginated_inner(
     page_config: Arc<PageConfig>,
     index: Arc<Index>,
+    accept_json: AcceptJson,
     inscription_id: InscriptionId,
     page: usize,
   ) -> ServerResult<Response> {
@@ -1470,6 +1473,17 @@ impl Server {
 
     let (children, more) =
       index.get_children_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    if accept_json.0 {
+      return Ok(
+        Json(api::Children {
+          ids: children,
+          more,
+          page,
+        })
+        .into_response(),
+      );
+    }
 
     let prev_page = if page > 0 { Some(page - 1) } else { None };
     let next_page = if more { Some(page + 1) } else { None };
@@ -1490,25 +1504,28 @@ impl Server {
   async fn parents(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
   ) -> ServerResult<Response> {
-    Self::parents_paginated_inner(page_config, index, inscription_id, 0).await
+    Self::parents_paginated_inner(page_config, index, accept_json, inscription_id, 0).await
   }
 
   async fn parents_paginated(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
+    accept_json: AcceptJson,
     Path((DeserializeFromStr(inscription_id), page)): Path<(
       DeserializeFromStr<InscriptionId>,
       usize,
     )>,
   ) -> ServerResult<Response> {
-    Self::parents_paginated_inner(page_config, index, inscription_id, page).await
+    Self::parents_paginated_inner(page_config, index, accept_json, inscription_id, page).await
   }
 
   async fn parents_paginated_inner(
     page_config: Arc<PageConfig>,
     index: Arc<Index>,
+    accept_json: AcceptJson,
     inscription_id: InscriptionId,
     page: usize,
   ) -> ServerResult<Response> {
@@ -1520,6 +1537,17 @@ impl Server {
 
     let (parents, more) =
       index.get_parents_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    if accept_json.0 {
+      return Ok(
+        Json(api::Children {
+          ids: parents,
+          more,
+          page,
+        })
+        .into_response(),
+      );
+    }
 
     let prev_page = if page > 0 { Some(page - 1) } else { None };
     let next_page = if more { Some(page + 1) } else { None };
