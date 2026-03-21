@@ -9,10 +9,10 @@ use {
 };
 
 #[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Inscription {
-  pub(crate) body: Option<Vec<u8>>,
-  pub(crate) content_type: Option<Vec<u8>>,
-  pub(crate) parent: Option<Vec<u8>>,
+pub struct Inscription {
+  pub body: Option<Vec<u8>>,
+  pub content_type: Option<Vec<u8>>,
+  pub tags: BTreeMap<String, Vec<Vec<u8>>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -23,16 +23,15 @@ pub(crate) enum ParsedInscription {
 }
 
 impl Inscription {
-  #[cfg(test)]
-  pub(crate) fn new(
+  pub fn new(
     content_type: Option<Vec<u8>>,
     body: Option<Vec<u8>>,
-    parent: Option<Vec<u8>>,
+    tags: BTreeMap<String, Vec<Vec<u8>>>,
   ) -> Self {
     Self {
       content_type,
       body,
-      parent,
+      tags,
     }
   }
 
@@ -64,7 +63,7 @@ impl Inscription {
     Ok(Self {
       body: Some(body),
       content_type: Some(content_type.into()),
-      parent: None,
+      tags: BTreeMap::new(),
     })
   }
 
@@ -93,17 +92,41 @@ impl Inscription {
       builder = builder.push_slice(content_type);
     }
 
-    if let Some(parent) = &self.parent {
-      builder = builder.push_opcode(opcodes::all::OP_PUSHNUM_3);
-      builder = builder.push_slice(parent);
-    }
-
     for (i, chunk) in chunks.iter().enumerate() {
       builder = Self::push_number(builder, u64::try_from(chunks.len() - i - 1).unwrap());
       builder = builder.push_slice(chunk);
     }
 
+    // PRC-721 tag trailer
+    for (key, values) in &self.tags {
+      for value in values {
+        builder = builder.push_slice(key.as_bytes());
+        builder = builder.push_slice(value);
+      }
+    }
+
     builder.into_script()
+  }
+
+  pub(crate) fn parent_ids(&self) -> Vec<InscriptionId> {
+    self
+      .tags
+      .get(tag::PARENT)
+      .map(|values| {
+        values
+          .iter()
+          .filter_map(|v| tag::parse_inscription_id(v))
+          .collect()
+      })
+      .unwrap_or_default()
+  }
+
+  pub(crate) fn delegate_id(&self) -> Option<InscriptionId> {
+    self
+      .tags
+      .get(tag::DELEGATE)
+      .and_then(|values| values.first())
+      .and_then(|v| tag::parse_inscription_id(v))
   }
 
   pub(crate) fn media(&self) -> Media {
@@ -134,8 +157,7 @@ impl Inscription {
     str::from_utf8(self.content_type.as_ref()?).ok()
   }
 
-  #[cfg(test)]
-  pub(crate) fn to_p2sh_unlock(&self) -> Script {
+  pub fn to_p2sh_unlock(&self) -> Script {
     self.get_inscription_script()
   }
 

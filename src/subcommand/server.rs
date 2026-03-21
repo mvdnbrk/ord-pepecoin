@@ -2523,7 +2523,7 @@ mod tests {
       Server::content_response(Inscription::new(
         Some("text/plain".as_bytes().to_vec()),
         None,
-        None
+        BTreeMap::new()
       )),
       None
     );
@@ -2534,7 +2534,7 @@ mod tests {
     let (headers, body) = Server::content_response(Inscription::new(
       Some("text/plain".as_bytes().to_vec()),
       Some(vec![1, 2, 3]),
-      None,
+      BTreeMap::new(),
     ))
     .unwrap();
 
@@ -2545,7 +2545,8 @@ mod tests {
   #[test]
   fn content_response_no_content_type() {
     let (headers, body) =
-      Server::content_response(Inscription::new(None, Some(Vec::new()), None)).unwrap();
+      Server::content_response(Inscription::new(None, Some(Vec::new()), BTreeMap::new()))
+        .unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());
@@ -2874,7 +2875,7 @@ mod tests {
         script_sig: Inscription {
           content_type: Some("foo/bar".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()
@@ -2903,7 +2904,7 @@ mod tests {
         script_sig: Inscription {
           content_type: Some("image/png".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()
