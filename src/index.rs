@@ -59,6 +59,8 @@ define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
 define_multimap_table! { ADDRESS_TO_INSCRIPTION_IDS, &str, &InscriptionIdValue }
 define_table! { INSCRIPTION_ID_TO_ADDRESS, &InscriptionIdValue, &str }
+define_multimap_table! { INSCRIPTION_NUMBER_TO_PARENTS, u32, u32 }
+define_multimap_table! { INSCRIPTION_NUMBER_TO_CHILDREN, u32, u32 }
 
 const SCHEMA_VERSION: u64 = 6;
 
@@ -158,6 +160,15 @@ impl<T> BitcoinCoreRpcResultExt<T> for Result<T, bitcoincore_rpc::Error> {
 }
 
 impl Index {
+  // Create new tables in an existing database without requiring a full reindex.
+  fn migrate(database: &Database) -> Result {
+    let tx = database.begin_write()?;
+    tx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+    tx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN)?;
+    tx.commit()?;
+    Ok(())
+  }
+
   pub fn open(settings: &Settings) -> Result<Self> {
     let rpc_url = settings.rpc_url();
     let auth = settings.auth()?;
@@ -214,6 +225,8 @@ impl Index {
         }
       }
 
+      Self::migrate(&database)?;
+
       database
     } else {
       let database = Database::builder()
@@ -237,6 +250,8 @@ impl Index {
       tx.open_table(WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP)?;
       tx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
       tx.open_table(INSCRIPTION_ID_TO_ADDRESS)?;
+      tx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+      tx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN)?;
 
       tx.open_table(STATISTIC_TO_COUNT)?
         .insert(&Statistic::Schema.key(), &SCHEMA_VERSION)?;
@@ -1178,6 +1193,140 @@ impl Index {
     )
   }
 
+  pub(crate) fn get_parents_by_inscription_id(
+    &self,
+    inscription_id: InscriptionId,
+  ) -> Result<Vec<InscriptionId>> {
+    let rtx = self.database.begin_read()?;
+
+    let entry = rtx
+      .open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?
+      .get(&inscription_id.store())?;
+
+    let number = match entry {
+      Some(entry) => InscriptionEntry::load(entry.value()).number,
+      None => return Ok(Vec::new()),
+    };
+
+    let table = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+    let number_to_id = rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
+
+    let mut parents = Vec::new();
+    for guard in table.get(&number)? {
+      let parent_number = guard?.value();
+      if let Some(id) = number_to_id.get(&parent_number)? {
+        parents.push(InscriptionId::load(*id.value()));
+      }
+    }
+
+    Ok(parents)
+  }
+
+  pub(crate) fn get_children_by_inscription_id(
+    &self,
+    inscription_id: InscriptionId,
+  ) -> Result<Vec<InscriptionId>> {
+    let rtx = self.database.begin_read()?;
+
+    let entry = rtx
+      .open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?
+      .get(&inscription_id.store())?;
+
+    let number = match entry {
+      Some(entry) => InscriptionEntry::load(entry.value()).number,
+      None => return Ok(Vec::new()),
+    };
+
+    let table = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN)?;
+    let number_to_id = rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
+
+    let mut children = Vec::new();
+    for guard in table.get(&number)? {
+      let child_number = guard?.value();
+      if let Some(id) = number_to_id.get(&child_number)? {
+        children.push(InscriptionId::load(*id.value()));
+      }
+    }
+
+    Ok(children)
+  }
+
+  pub(crate) fn get_parents_by_inscription_id_paginated(
+    &self,
+    inscription_id: InscriptionId,
+    page_size: usize,
+    page_index: usize,
+  ) -> Result<(Vec<InscriptionId>, bool)> {
+    let rtx = self.database.begin_read()?;
+
+    let entry = rtx
+      .open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?
+      .get(&inscription_id.store())?;
+
+    let number = match entry {
+      Some(entry) => InscriptionEntry::load(entry.value()).number,
+      None => return Ok((Vec::new(), false)),
+    };
+
+    let table = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)?;
+    let number_to_id = rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
+
+    let mut parents = Vec::new();
+    let mut iter = table.get(&number)?.skip(page_index * page_size);
+    let mut more = false;
+
+    while let Some(guard) = iter.next() {
+      if parents.len() == page_size {
+        more = true;
+        break;
+      }
+      let parent_number = guard?.value();
+      if let Some(id) = number_to_id.get(&parent_number)? {
+        parents.push(InscriptionId::load(*id.value()));
+      }
+    }
+
+    Ok((parents, more))
+  }
+
+  pub(crate) fn get_children_by_inscription_id_paginated(
+    &self,
+    inscription_id: InscriptionId,
+    page_size: usize,
+    page_index: usize,
+  ) -> Result<(Vec<InscriptionId>, bool)> {
+    let rtx = self.database.begin_read()?;
+
+    let entry = rtx
+      .open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?
+      .get(&inscription_id.store())?;
+
+    let number = match entry {
+      Some(entry) => InscriptionEntry::load(entry.value()).number,
+      None => return Ok((Vec::new(), false)),
+    };
+
+    let table = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN)?;
+    let number_to_id = rtx.open_table(INSCRIPTION_NUMBER_TO_INSCRIPTION_ID)?;
+
+    let mut children = Vec::new();
+    let mut iter = table.get(&number)?.skip(page_index * page_size);
+    let mut more = false;
+
+    while let Some(guard) = iter.next() {
+      if children.len() == page_size {
+        more = true;
+        break;
+      }
+      let child_number = guard?.value();
+      if let Some(id) = number_to_id.get(&child_number)? {
+        children.push(InscriptionId::load(*id.value()));
+      }
+    }
+
+    Ok((children, more))
+  }
+
   #[cfg(test)]
   fn assert_inscription_location(
     &self,
@@ -1380,6 +1529,109 @@ mod tests {
         Context::builder().arg("--index-sats").build(),
       ]
     }
+  }
+
+  #[test]
+  fn parent_child() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_inscription = inscription("text/plain", "parent");
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: parent_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_id = InscriptionId::from(parent_txid);
+
+    context.mine_blocks(1);
+
+    let mut tags = BTreeMap::new();
+    tags.insert(
+      "parent".to_string(),
+      vec![crate::inscriptions::tag::encode_inscription_id(&parent_id)],
+    );
+
+    let child_inscription = Inscription::new(
+      Some("text/plain;charset=utf-8".as_bytes().to_vec()),
+      Some("child".as_bytes().to_vec()),
+      tags,
+    );
+
+    let _child_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 1, 0)], // spend parent (at 2,1,0)
+      script_sig: child_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let rtx = context.index.database.begin_read().unwrap();
+    let id_to_parents = rtx
+      .open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)
+      .unwrap();
+    let parent_number_to_children = rtx.open_multimap_table(INSCRIPTION_NUMBER_TO_CHILDREN).unwrap();
+
+    assert_eq!(
+      id_to_parents
+        .get(&1)
+        .unwrap()
+        .map(|guard| guard.unwrap().value())
+        .collect::<Vec<_>>(),
+      vec![0]
+    );
+
+    assert_eq!(
+      parent_number_to_children
+        .get(&0)
+        .unwrap()
+        .map(|guard| guard.unwrap().value())
+        .collect::<Vec<_>>(),
+      vec![1]
+    );
+  }
+
+  #[test]
+  fn parent_child_invalid_spend() {
+    let context = Context::builder().build();
+    context.mine_blocks(1);
+
+    let parent_inscription = inscription("text/plain", "parent");
+    let parent_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(1, 0, 0)],
+      script_sig: parent_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+    let parent_id = InscriptionId::from(parent_txid);
+
+    context.mine_blocks(1);
+
+    let mut tags = BTreeMap::new();
+    tags.insert(
+      "parent".to_string(),
+      vec![crate::inscriptions::tag::encode_inscription_id(&parent_id)],
+    );
+
+    let child_inscription = Inscription::new(
+      Some("text/plain;charset=utf-8".as_bytes().to_vec()),
+      Some("child".as_bytes().to_vec()),
+      tags,
+    );
+
+    let _child_txid = context.rpc_server.broadcast_tx(TransactionTemplate {
+      inputs: &[(2, 0, 0)], // DOES NOT spend parent
+      script_sig: child_inscription.to_p2sh_unlock(),
+      ..Default::default()
+    });
+
+    context.mine_blocks(1);
+
+    let rtx = context.index.database.begin_read().unwrap();
+    let id_to_parents = rtx
+      .open_multimap_table(INSCRIPTION_NUMBER_TO_PARENTS)
+      .unwrap();
+
+    assert!(id_to_parents.get(&1).unwrap().next().is_none());
   }
 
   #[test]
