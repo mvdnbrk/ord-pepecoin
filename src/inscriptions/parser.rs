@@ -1,4 +1,4 @@
-use {super::*, bitcoin::Script};
+use {super::*, bitcoin::Script, std::str};
 
 pub(crate) const PROTOCOL_ID: &[u8] = b"ord";
 
@@ -41,15 +41,13 @@ impl InscriptionParser {
     push_datas = &push_datas[3..];
 
     if npieces == 0 {
+      let tags = Self::parse_tags(push_datas);
       return ParsedInscription::Complete(Inscription {
         content_type: Some(content_type),
         body: None,
-        parent: None,
+        tags,
       });
     }
-
-    // TODO: Parse PRC-721 tag trailer (string-keyed tags after countdown 0)
-    let parent: Option<Vec<u8>> = None;
 
     // read body
 
@@ -62,13 +60,14 @@ impl InscriptionParser {
       // loop over chunks
       loop {
         if npieces == 0 {
-          let inscription = Inscription {
+          // Parse PRC-721 tag trailer from remaining push data
+          let tags = Self::parse_tags(push_datas);
+
+          return ParsedInscription::Complete(Inscription {
             content_type: Some(content_type),
             body: Some(body),
-            parent,
-          };
-
-          return ParsedInscription::Complete(inscription);
+            tags,
+          });
         }
 
         if push_datas.len() < 2 {
@@ -116,6 +115,22 @@ impl InscriptionParser {
 
       push_datas = push_datas_vec.as_slice();
     }
+  }
+
+  /// Parse tag trailer: consecutive key/value push data pairs after body countdown.
+  fn parse_tags(push_datas: &[Vec<u8>]) -> BTreeMap<String, Vec<Vec<u8>>> {
+    let mut tags: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
+
+    for pair in push_datas.chunks_exact(2) {
+      if let Ok(key) = str::from_utf8(&pair[0]) {
+        tags
+          .entry(key.to_string())
+          .or_default()
+          .push(pair[1].clone());
+      }
+    }
+
+    tags
   }
 
   pub(crate) fn decode_push_datas(script: &Script) -> Option<Vec<Vec<u8>>> {
@@ -230,7 +245,7 @@ mod tests {
     Inscription {
       content_type: Some(content_type.as_ref().into()),
       body: Some(body.as_ref().into()),
-      parent: None,
+      tags: BTreeMap::new(),
     }
   }
 
@@ -567,13 +582,13 @@ mod tests {
       ParsedInscription::Complete(Inscription {
         content_type: Some(b"woof".to_vec()),
         body: None,
-        parent: None,
+        tags: BTreeMap::new(),
       }),
     );
   }
 
   #[test]
-  fn valid_with_extra_data() {
+  fn valid_with_tag_trailer() {
     let mut script: Vec<&[u8]> = Vec::new();
     script.push(&[3]);
     script.push(b"ord");
@@ -583,14 +598,51 @@ mod tests {
     script.push(&[0]);
     script.push(&[4]);
     script.push(b"woof");
+    // tag trailer: key="parent", value=36 zero bytes
+    script.push(&[6]);
+    script.push(b"parent");
+    script.push(&[36]);
+    script.push(&[0; 36]);
+    let result = InscriptionParser::parse(vec![Script::from(script.concat())]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, Some(b"woof".to_vec()));
+        assert_eq!(inscription.tags.len(), 1);
+        assert_eq!(inscription.tags.get("parent").unwrap(), &vec![vec![0; 36]]);
+      }
+      _ => panic!("expected Complete"),
+    }
+  }
+
+  #[test]
+  fn extra_data_after_body_parsed_as_tags() {
+    // Data after countdown 0 that isn't valid UTF-8 keys is ignored
+    let mut script: Vec<&[u8]> = Vec::new();
+    script.push(&[3]);
+    script.push(b"ord");
+    script.push(&[81]);
+    script.push(&[24]);
+    script.push(b"text/plain;charset=utf-8");
+    script.push(&[0]);
+    script.push(&[4]);
+    script.push(b"woof");
+    // extra data with valid UTF-8 key
     script.push(&[9]);
     script.push(b"woof woof");
     script.push(&[14]);
     script.push(b"woof woof woof");
-    assert_eq!(
-      InscriptionParser::parse(vec![Script::from(script.concat())]),
-      ParsedInscription::Complete(inscription("text/plain;charset=utf-8", "woof"))
-    );
+    let result = InscriptionParser::parse(vec![Script::from(script.concat())]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, Some(b"woof".to_vec()));
+        // "woof woof" is a valid UTF-8 key, so it becomes a tag
+        assert_eq!(
+          inscription.tags.get("woof woof").unwrap(),
+          &vec![b"woof woof woof".to_vec()]
+        );
+      }
+      _ => panic!("expected Complete"),
+    }
   }
 
   #[test]

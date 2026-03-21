@@ -1,5 +1,6 @@
 use {
   self::{
+    accept_json::AcceptJson,
     deserialize_from_str::DeserializeFromStr,
     error::{OptionExt, ServerError, ServerResult},
   },
@@ -7,11 +8,11 @@ use {
   crate::api,
   crate::page_config::PageConfig,
   crate::templates::{
-    AddressHtml, BlockHtml, HomeHtml, InputHtml, InscriptionHtml, InscriptionsBlockHtml,
-    InscriptionsHtml, OutputHtml, PageContent, PageHtml, PreviewAudioHtml, PreviewCodeHtml,
-    PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml, PreviewModelHtml, PreviewPdfHtml,
-    PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, StatusHtml,
-    TransactionHtml,
+    AddressHtml, BlockHtml, ChildrenHtml, HomeHtml, InputHtml, InscriptionHtml,
+    InscriptionsBlockHtml, InscriptionsHtml, OutputHtml, PageContent, PageHtml, ParentsHtml,
+    PreviewAudioHtml, PreviewCodeHtml, PreviewFontHtml, PreviewImageHtml, PreviewMarkdownHtml,
+    PreviewModelHtml, PreviewPdfHtml, PreviewTextHtml, PreviewUnknownHtml, PreviewVideoHtml,
+    RangeHtml, RareTxt, SatHtml, StatusHtml, TransactionHtml,
   },
   axum::{
     body::Body,
@@ -39,30 +40,9 @@ use {
   },
 };
 
+mod accept_json;
 mod error;
 mod query;
-
-pub(crate) struct AcceptJson(pub(crate) bool);
-
-impl<S> axum::extract::FromRequestParts<S> for AcceptJson
-where
-  S: Send + Sync,
-{
-  type Rejection = (StatusCode, &'static str);
-
-  async fn from_request_parts(
-    parts: &mut http::request::Parts,
-    _state: &S,
-  ) -> Result<Self, Self::Rejection> {
-    Ok(Self(
-      parts
-        .headers
-        .get("accept")
-        .map(|value| value == "application/json")
-        .unwrap_or_default(),
-    ))
-  }
-}
 
 enum BlockQuery {
   Height(u32),
@@ -206,6 +186,11 @@ impl Server {
         .route("/address/{address}", get(Self::address))
         .route("/block/{query}", get(Self::block))
         .route("/bounties", get(Self::bounties))
+        .route("/children/{inscription_id}", get(Self::children))
+        .route(
+          "/children/{inscription_id}/{page}",
+          get(Self::children_paginated),
+        )
         .route("/content/{inscription_id}", get(Self::content))
         .route("/faq", get(Self::faq))
         .route("/favicon.ico", get(Self::favicon))
@@ -229,6 +214,11 @@ impl Server {
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/{sat}", get(Self::ordinal))
         .route("/output/{output}", get(Self::output))
+        .route("/parents/{inscription_id}", get(Self::parents))
+        .route(
+          "/parents/{inscription_id}/{page}",
+          get(Self::parents_paginated),
+        )
         .route("/outputs", post(Self::outputs_batch).layer(body_limit))
         .route("/preview/{inscription_id}", get(Self::preview))
         .route("/range/{start}/{end}", get(Self::range))
@@ -501,10 +491,10 @@ impl Server {
   async fn output(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(outpoint): Path<OutPoint>,
   ) -> ServerResult<Response> {
-    if accept_json.0 {
+    if accept_json {
       Ok(Json(Self::get_output_json(index, page_config.chain, outpoint)?).into_response())
     } else {
       let list = if index.has_sat_index()? {
@@ -588,12 +578,19 @@ impl Server {
 
       let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
+      let parents = index.get_parents_by_inscription_id(id)?;
+      let children = index.get_children_by_inscription_id(id)?;
+      let child_count = u64::try_from(children.len()).unwrap();
+      let parent_count = u64::try_from(parents.len()).unwrap();
+
       inscriptions.push(api::Inscription {
         address: page_config
           .chain
           .address_from_script(&output.script_pubkey)
           .map(|a| a.to_string())
           .ok(),
+        children: children.into_iter().take(4).collect(),
+        child_count,
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
         fee: entry.fee,
@@ -601,6 +598,8 @@ impl Server {
         id,
         next,
         number: entry.number,
+        parent_count,
+        parents: parents.into_iter().take(4).collect(),
         previous,
         sat: entry.sat,
         satpoint,
@@ -705,12 +704,12 @@ impl Server {
   async fn address(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(address): Path<String>,
   ) -> ServerResult<Response> {
     let (inscriptions, outputs) = index.get_inscriptions_by_address(&address)?;
 
-    if accept_json.0 {
+    if accept_json {
       Ok(
         Json(api::Address {
           inscriptions,
@@ -733,7 +732,7 @@ impl Server {
   async fn block(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(DeserializeFromStr(query)): Path<DeserializeFromStr<BlockQuery>>,
   ) -> ServerResult<Response> {
     let (block, height) = match query {
@@ -757,7 +756,7 @@ impl Server {
       }
     };
 
-    if accept_json.0 {
+    if accept_json {
       let inscriptions = index.get_inscriptions_in_block(height)?;
 
       let info = index
@@ -825,7 +824,7 @@ impl Server {
   async fn status(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
   ) -> ServerResult<Response> {
     let height = index.block_count().ok();
     let index_size = index.index_file_size();
@@ -833,7 +832,7 @@ impl Server {
     let sat_index = index.has_sat_index().unwrap_or(false);
     let unrecoverably_reorged = index.is_unrecoverably_reorged();
 
-    if accept_json.0 {
+    if accept_json {
       Ok(
         Json(api::Status {
           address_index: true,
@@ -1185,7 +1184,7 @@ impl Server {
   async fn inscription(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(DeserializeFromStr(query)): Path<DeserializeFromStr<query::Inscription>>,
   ) -> ServerResult<Response> {
     let inscription_id = match query {
@@ -1227,7 +1226,12 @@ impl Server {
 
     let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
-    if accept_json.0 {
+    let parents = index.get_parents_by_inscription_id(inscription_id)?;
+    let children = index.get_children_by_inscription_id(inscription_id)?;
+    let child_count = u64::try_from(children.len()).unwrap();
+    let parent_count = u64::try_from(parents.len()).unwrap();
+
+    if accept_json {
       Ok(
         Json(api::Inscription {
           address: page_config
@@ -1235,6 +1239,8 @@ impl Server {
             .address_from_script(&output.script_pubkey)
             .map(|address| address.to_string())
             .ok(),
+          children: children.iter().copied().take(4).collect(),
+          child_count,
           content_length: inscription.body().map(|body: &[u8]| body.len()),
           content_type: inscription.content_type().map(|s: &str| s.to_string()),
           fee: entry.fee,
@@ -1242,6 +1248,8 @@ impl Server {
           id: inscription_id,
           next,
           number: entry.number,
+          parent_count,
+          parents: parents.iter().copied().take(4).collect(),
           previous,
           sat: entry.sat,
           satpoint,
@@ -1254,6 +1262,8 @@ impl Server {
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
+          children: children.into_iter().take(4).collect(),
+          child_count,
           fee: entry.fee,
           height: entry.height,
           inscription,
@@ -1261,6 +1271,7 @@ impl Server {
           next,
           number: entry.number,
           output,
+          parents: parents.into_iter().take(4).collect(),
           previous,
           sat: entry.sat,
           satpoint,
@@ -1275,7 +1286,7 @@ impl Server {
   async fn inscriptions(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
   ) -> ServerResult<Response> {
     Self::inscriptions_inner(page_config, index, accept_json, None).await
   }
@@ -1283,7 +1294,7 @@ impl Server {
   async fn inscriptions_from(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(from): Path<u32>,
   ) -> ServerResult<Response> {
     Self::inscriptions_inner(page_config, index, accept_json, Some(from)).await
@@ -1292,14 +1303,14 @@ impl Server {
   async fn inscriptions_inner(
     page_config: Arc<PageConfig>,
     index: Arc<Index>,
-    accept_json: AcceptJson,
+    accept_json: bool,
     from: Option<u32>,
   ) -> ServerResult<Response> {
     let page_index = from.unwrap_or(0);
     let count = index.inscription_count()?;
 
     if u64::from(page_index) * 100 >= count {
-      if accept_json.0 {
+      if accept_json {
         return Ok(
           Json(api::Inscriptions {
             ids: Vec::new(),
@@ -1328,7 +1339,7 @@ impl Server {
 
     let more = prev.is_some();
 
-    if accept_json.0 {
+    if accept_json {
       Ok(
         Json(api::Inscriptions {
           ids: inscriptions,
@@ -1353,13 +1364,13 @@ impl Server {
   async fn inscriptions_in_block(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path(block_height): Path<u32>,
   ) -> ServerResult<Response> {
     Self::inscriptions_in_block_paginated(
       Extension(page_config),
       Extension(index),
-      accept_json,
+      AcceptJson(accept_json),
       Path((block_height, 0)),
     )
     .await
@@ -1368,7 +1379,7 @@ impl Server {
   async fn inscriptions_in_block_paginated(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
-    accept_json: AcceptJson,
+    AcceptJson(accept_json): AcceptJson,
     Path((block_height, page_index)): Path<(u32, u32)>,
   ) -> ServerResult<Response> {
     let page_size = 100;
@@ -1386,7 +1397,7 @@ impl Server {
       inscriptions.pop();
     }
 
-    if accept_json.0 {
+    if accept_json {
       Ok(
         Json(api::Inscriptions {
           ids: inscriptions,
@@ -1408,6 +1419,134 @@ impl Server {
         .into_response(),
       )
     }
+  }
+
+  async fn children(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    AcceptJson(accept_json): AcceptJson,
+    Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
+  ) -> ServerResult<Response> {
+    Self::children_paginated_inner(page_config, index, accept_json, inscription_id, 0).await
+  }
+
+  async fn children_paginated(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    AcceptJson(accept_json): AcceptJson,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(
+      DeserializeFromStr<InscriptionId>,
+      usize,
+    )>,
+  ) -> ServerResult<Response> {
+    Self::children_paginated_inner(page_config, index, accept_json, inscription_id, page).await
+  }
+
+  async fn children_paginated_inner(
+    page_config: Arc<PageConfig>,
+    index: Arc<Index>,
+    accept_json: bool,
+    inscription_id: InscriptionId,
+    page: usize,
+  ) -> ServerResult<Response> {
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let page_size = 100;
+
+    let (children, more) =
+      index.get_children_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    if accept_json {
+      return Ok(
+        Json(api::InscriptionIds {
+          ids: children,
+          more,
+          page,
+        })
+        .into_response(),
+      );
+    }
+
+    let prev_page = if page > 0 { Some(page - 1) } else { None };
+    let next_page = if more { Some(page + 1) } else { None };
+
+    Ok(
+      ChildrenHtml {
+        parent: inscription_id,
+        parent_number: entry.number,
+        children,
+        prev_page,
+        next_page,
+      }
+      .page(page_config, index.has_sat_index()?)
+      .into_response(),
+    )
+  }
+
+  async fn parents(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    AcceptJson(accept_json): AcceptJson,
+    Path(DeserializeFromStr(inscription_id)): Path<DeserializeFromStr<InscriptionId>>,
+  ) -> ServerResult<Response> {
+    Self::parents_paginated_inner(page_config, index, accept_json, inscription_id, 0).await
+  }
+
+  async fn parents_paginated(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    AcceptJson(accept_json): AcceptJson,
+    Path((DeserializeFromStr(inscription_id), page)): Path<(
+      DeserializeFromStr<InscriptionId>,
+      usize,
+    )>,
+  ) -> ServerResult<Response> {
+    Self::parents_paginated_inner(page_config, index, accept_json, inscription_id, page).await
+  }
+
+  async fn parents_paginated_inner(
+    page_config: Arc<PageConfig>,
+    index: Arc<Index>,
+    accept_json: bool,
+    inscription_id: InscriptionId,
+    page: usize,
+  ) -> ServerResult<Response> {
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let page_size = 100;
+
+    let (parents, more) =
+      index.get_parents_by_inscription_id_paginated(inscription_id, page_size, page)?;
+
+    if accept_json {
+      return Ok(
+        Json(api::InscriptionIds {
+          ids: parents,
+          more,
+          page,
+        })
+        .into_response(),
+      );
+    }
+
+    let prev_page = if page > 0 { Some(page - 1) } else { None };
+    let next_page = if more { Some(page + 1) } else { None };
+
+    Ok(
+      ParentsHtml {
+        inscription_id,
+        inscription_number: entry.number,
+        parents,
+        prev_page,
+        next_page,
+      }
+      .page(page_config, index.has_sat_index()?)
+      .into_response(),
+    )
   }
 
   async fn redirect_http_to_https(
@@ -2523,7 +2662,7 @@ mod tests {
       Server::content_response(Inscription::new(
         Some("text/plain".as_bytes().to_vec()),
         None,
-        None
+        BTreeMap::new()
       )),
       None
     );
@@ -2534,7 +2673,7 @@ mod tests {
     let (headers, body) = Server::content_response(Inscription::new(
       Some("text/plain".as_bytes().to_vec()),
       Some(vec![1, 2, 3]),
-      None,
+      BTreeMap::new(),
     ))
     .unwrap();
 
@@ -2545,7 +2684,7 @@ mod tests {
   #[test]
   fn content_response_no_content_type() {
     let (headers, body) =
-      Server::content_response(Inscription::new(None, Some(Vec::new()), None)).unwrap();
+      Server::content_response(Inscription::new(None, Some(Vec::new()), BTreeMap::new())).unwrap();
 
     assert_eq!(headers["content-type"], "application/octet-stream");
     assert!(body.is_empty());
@@ -2874,7 +3013,7 @@ mod tests {
         script_sig: Inscription {
           content_type: Some("foo/bar".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()
@@ -2903,7 +3042,7 @@ mod tests {
         script_sig: Inscription {
           content_type: Some("image/png".as_bytes().to_vec()),
           body: None,
-          parent: None,
+          tags: BTreeMap::new(),
         }
         .to_p2sh_unlock(),
         ..Default::default()

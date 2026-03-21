@@ -1,13 +1,16 @@
 use crate::*;
 
-pub(crate) mod inscription;
+pub mod inscription;
 pub(crate) mod inscription_id;
 pub(crate) mod media;
 pub(crate) mod parser;
+pub(crate) mod tag;
+
+pub use self::{inscription::Inscription, inscription_id::InscriptionId};
 
 pub(crate) use self::{
-  inscription::{Inscription, ParsedInscription},
-  inscription_id::{InscriptionId, ParseError},
+  inscription::ParsedInscription,
+  inscription_id::ParseError,
   media::{ImageRendering, Language, Media},
   parser::InscriptionParser,
 };

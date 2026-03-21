@@ -31,6 +31,8 @@ pub(super) struct InscriptionUpdater<'a, 'tx> {
   value_cache: &'a mut HashMap<OutPoint, u64>,
   address_to_inscription_ids: &'a mut MultimapTable<'tx, &'static str, &'static InscriptionIdValue>,
   id_to_address: &'a mut Table<'tx, &'static InscriptionIdValue, &'static str>,
+  number_to_parents: &'a mut MultimapTable<'tx, u32, u32>,
+  parent_number_to_children: &'a mut MultimapTable<'tx, u32, u32>,
   network: Network,
 }
 
@@ -56,6 +58,8 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
       &'static InscriptionIdValue,
     >,
     id_to_address: &'a mut Table<'tx, &'static InscriptionIdValue, &'static str>,
+    number_to_parents: &'a mut MultimapTable<'tx, u32, u32>,
+    parent_number_to_children: &'a mut MultimapTable<'tx, u32, u32>,
     network: Network,
   ) -> Result<Self> {
     let next_number = number_to_id
@@ -85,6 +89,8 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
       value_cache,
       address_to_inscription_ids,
       id_to_address,
+      number_to_parents,
+      parent_number_to_children,
       network,
     })
   }
@@ -130,7 +136,8 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
       }
     }
 
-    if inscriptions.iter().all(|flotsam| flotsam.offset != 0) {
+    // In Pepecoin, we always check for new inscriptions to support parent/child collection provenance
+    if true {
       let previous_txid = tx.input[0].previous_output.txid;
       let previous_txid_bytes: [u8; 32] = previous_txid.into_inner();
       let mut txids_vec = vec![];
@@ -183,7 +190,7 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
             .insert(&txid.into_inner().as_slice(), tx_buf.as_slice())?;
         }
 
-        ParsedInscription::Complete(_inscription) => {
+        ParsedInscription::Complete(inscription) => {
           self
             .partial_txid_to_txids
             .remove(&previous_txid_bytes.as_slice())?;
@@ -209,6 +216,66 @@ impl<'a, 'tx> InscriptionUpdater<'a, 'tx> {
             txid: Txid::from_slice(&txids_vec[0..32]).unwrap(),
             index: 0,
           };
+
+          let child_number = self.next_number;
+
+          // Collect validated parent relationships (read-only borrows)
+          let mut validated_parents: Vec<(InscriptionId, u32)> = Vec::new();
+          for parent_id_bytes in inscription.tags.get("parent").cloned().unwrap_or_default() {
+            if let Some(parent_id) =
+              crate::inscriptions::tag::parse_inscription_id(&parent_id_bytes)
+            {
+              if let Some(parent_entry) = self.id_to_entry.get(&parent_id.store())? {
+                let parent_number = InscriptionEntry::load(parent_entry.value()).number;
+                if let Some(parent_satpoint) = self.id_to_satpoint.get(&parent_id.store())? {
+                  let parent_satpoint = SatPoint::load(*parent_satpoint.value());
+                  if txs[0]
+                    .input
+                    .iter()
+                    .any(|input| input.previous_output == parent_satpoint.outpoint)
+                  {
+                    validated_parents.push((parent_id, parent_number));
+                  }
+                }
+              }
+            }
+          }
+
+          // Apply mutations for validated parents
+          for (parent_id, parent_number) in &validated_parents {
+            self
+              .number_to_parents
+              .insert(&child_number, parent_number)?;
+            self
+              .parent_number_to_children
+              .insert(parent_number, &child_number)?;
+
+            // In upstream ord (SegWit), parents are input[0..N] so their
+            // inscriptions sit at low sat offsets and naturally land in their
+            // return outputs. In our P2SH model, the commit must be input[0]
+            // (parser uses input[0] for the commit chain), so parents are
+            // input[1+]. This puts the parent inscription at a high sat offset
+            // (after all commit sats), where it gets consumed by fees.
+            // Fix: explicitly assign the parent to its return output.
+            if let Some(parent_flotsam_idx) = inscriptions
+              .iter()
+              .position(|f| f.inscription_id == *parent_id)
+            {
+              if let Some(return_output) = tx.output.get(1) {
+                let parent_flotsam = inscriptions.remove(parent_flotsam_idx);
+                let new_satpoint = SatPoint {
+                  outpoint: OutPoint { txid, vout: 1 },
+                  offset: 0,
+                };
+                self.update_inscription_location(
+                  input_sat_ranges,
+                  parent_flotsam,
+                  new_satpoint,
+                  Some(&return_output.script_pubkey),
+                )?;
+              }
+            }
+          }
 
           inscriptions.push(Flotsam {
             inscription_id: og_inscription_id,

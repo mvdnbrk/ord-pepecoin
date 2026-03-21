@@ -3,6 +3,8 @@ use super::*;
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscription {
   pub address: Option<String>,
+  pub children: Vec<InscriptionId>,
+  pub child_count: u64,
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
   pub fee: u64,
@@ -10,11 +12,20 @@ pub struct Inscription {
   pub id: InscriptionId,
   pub next: Option<InscriptionId>,
   pub number: u32,
+  pub parent_count: u64,
+  pub parents: Vec<InscriptionId>,
   pub previous: Option<InscriptionId>,
   pub sat: Option<Sat>,
   pub satpoint: SatPoint,
   pub timestamp: i64,
   pub value: Option<u64>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct InscriptionIds {
+  pub ids: Vec<InscriptionId>,
+  pub more: bool,
+  pub page: usize,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]

@@ -78,6 +78,15 @@ pub(crate) struct Inscribe {
     conflicts_with = "file"
   )]
   pub(crate) batch: Option<PathBuf>,
+  #[clap(long, help = "Make inscription a child of <PARENT>.")]
+  pub(crate) parent: Option<InscriptionId>,
+}
+
+pub(crate) struct ParentInfo {
+  pub(crate) id: InscriptionId,
+  pub(crate) location: SatPoint,
+  pub(crate) tx_out: TxOut,
+  pub(crate) destination: Address,
 }
 
 pub(crate) const BATCH_COMMIT_CHUNK_SIZE: usize = 2000;
@@ -97,6 +106,7 @@ fn sign_reveal_chain(
   parent_outpoint: OutPoint,
   privkey: &PrivateKey,
   secp: &Secp256k1<secp256k1::All>,
+  parent_signing: Option<(&Wallet, &[(&ParentInfo, OutPoint)])>,
 ) -> Result<SignedReveal> {
   let mut last_txid = parent_outpoint.txid;
   let mut reveals = Vec::new();
@@ -111,6 +121,35 @@ fn sign_reveal_chain(
         vout: 0,
       }
     };
+
+    // Sign parent inputs on the first reveal tx
+    if j == 0 {
+      if let Some((wallet, parent_entries)) = &parent_signing {
+        for (idx, (parent_info, parent_utxo_outpoint)) in parent_entries.iter().enumerate() {
+          let input_idx = idx + 1;
+          tx.input[input_idx].previous_output = *parent_utxo_outpoint;
+
+          let (change, index) = wallet.get_address_info(&parent_info.tx_out.script_pubkey)?;
+          let parent_privkey = wallet.get_private_key(change, index)?;
+
+          let parent_sighash = tx.signature_hash(
+            input_idx,
+            &parent_info.tx_out.script_pubkey,
+            EcdsaSighashType::All as u32,
+          );
+          let parent_msg = secp256k1::Message::from_slice(&parent_sighash[..])?;
+          let parent_sig = secp.sign_ecdsa(&parent_msg, &parent_privkey.inner);
+
+          let mut parent_sig_bytes = parent_sig.serialize_der().to_vec();
+          parent_sig_bytes.push(EcdsaSighashType::All as u8);
+
+          tx.input[input_idx].script_sig = script::Builder::new()
+            .push_slice(&parent_sig_bytes)
+            .push_slice(&parent_privkey.public_key(secp).to_bytes())
+            .into_script();
+        }
+      }
+    }
 
     let sighash = tx.signature_hash(0, &reveal.redeem_script, EcdsaSighashType::All as u32);
     let msg = secp256k1::Message::from_slice(&sighash[..])?;
@@ -211,6 +250,17 @@ impl Inscribe {
     if let Some(batch_path) = &self.batch {
       let batch_file = BatchFile::load(batch_path)?;
 
+      // Validate all parents exist in wallet and exclude their UTXOs from funding
+      let batch_parent_infos: Vec<ParentInfo> = batch_file
+        .parents
+        .iter()
+        .map(|parent_id| {
+          let info = Self::get_parent_info(parent_id, &wallet)?;
+          utxos.remove(&info.location.outpoint);
+          Ok(info)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
       // Load all inscriptions once
       let mut inscriptions = Vec::new();
       let mut destinations = Vec::new();
@@ -222,7 +272,18 @@ impl Inscribe {
         } else {
           batch_path.parent().unwrap().join(&entry.file)
         };
-        inscriptions.push((Inscription::from_file(wallet.chain(), &path)?, path));
+        let mut inscription = Inscription::from_file(wallet.chain(), &path)?;
+
+        // Add parent tags from batch file
+        for parent_id in &batch_file.parents {
+          inscription
+            .tags
+            .entry(crate::inscriptions::tag::PARENT.to_string())
+            .or_default()
+            .push(crate::inscriptions::tag::encode_inscription_id(parent_id));
+        }
+
+        inscriptions.push((inscription, path));
         destinations.push(
           entry
             .destination
@@ -293,6 +354,7 @@ impl Inscribe {
           fee_rate,
           pubkey,
           postage,
+          &batch_parent_infos,
         ) {
           Ok((commit_tx, reveal_chains, fees)) => {
             for input in &commit_tx.input {
@@ -356,6 +418,10 @@ impl Inscribe {
         let mut all_jobs = Vec::new();
         let secp = Secp256k1::new();
         let mut inscription_outputs = Vec::new();
+        let mut current_parent_outpoints: Vec<OutPoint> = batch_parent_infos
+          .iter()
+          .map(|pi| pi.location.outpoint)
+          .collect();
 
         for (commit_tx, reveal_chains, chunk_destinations, chunk_inscriptions_with_paths, fees) in
           all_chunk_results
@@ -366,11 +432,30 @@ impl Inscribe {
             hex::encode(bitcoin::consensus::encode::serialize(&signed_commit_tx));
 
           for (i, chain) in reveal_chains.into_iter().enumerate() {
-            let parent = OutPoint {
+            let commit_out = OutPoint {
               txid: commit_txid,
               vout: u32::try_from(i).unwrap(),
             };
-            let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
+            let parent_entries: Vec<(&ParentInfo, OutPoint)> = batch_parent_infos
+              .iter()
+              .zip(current_parent_outpoints.iter())
+              .map(|(pi, po)| (pi, *po))
+              .collect();
+            let parent_signing = if parent_entries.is_empty() {
+              None
+            } else {
+              Some((&wallet, parent_entries.as_slice()))
+            };
+            let signed = sign_reveal_chain(chain, commit_out, &privkey, &secp, parent_signing)?;
+
+            // Update parent outpoints: after this chain's first reveal tx,
+            // parent inscriptions are at output[1], output[2], etc.
+            for (idx, _) in batch_parent_infos.iter().enumerate() {
+              current_parent_outpoints[idx] = OutPoint {
+                txid: signed.reveals[0].txid,
+                vout: u32::try_from(idx + 1).unwrap(),
+              };
+            }
 
             inscription_outputs.push(InscriptionOutput {
               inscription: signed.inscription_id,
@@ -399,6 +484,7 @@ impl Inscribe {
               total_fees: fees,
               created_at: Utc::now(),
               reveals: signed.reveals,
+              parent_ids: batch_parent_infos.iter().map(|pi| pi.id).collect(),
             });
           }
         }
@@ -438,8 +524,21 @@ impl Inscribe {
         }
       }
     } else {
-      let inscription =
+      let mut inscription =
         Inscription::from_file(wallet.chain(), self.file.as_ref().context("missing file")?)?;
+
+      let parent_info = if let Some(ref parent_id) = self.parent {
+        let info = Self::get_parent_info(parent_id, &wallet)?;
+        inscription.tags.insert(
+          crate::inscriptions::tag::PARENT.to_string(),
+          vec![crate::inscriptions::tag::encode_inscription_id(parent_id)],
+        );
+        // Exclude parent UTXO from available funding UTXOs
+        utxos.remove(&info.location.outpoint);
+        Some(info)
+      } else {
+        None
+      };
 
       let reveal_tx_destination = self
         .destination
@@ -459,6 +558,7 @@ impl Inscribe {
         fee_rate,
         pubkey,
         postage,
+        parent_info.as_ref(),
       )?;
 
       let reveal_count = txs.len() - 1; // exclude commit tx
@@ -515,7 +615,16 @@ impl Inscribe {
           txid: commit,
           vout: 0,
         };
-        let signed = sign_reveal_chain(chain, parent, &privkey, &secp)?;
+        let parent_entries: Vec<(&ParentInfo, OutPoint)> = parent_info
+          .as_ref()
+          .map(|pi| vec![(pi, pi.location.outpoint)])
+          .unwrap_or_default();
+        let parent_signing = if parent_entries.is_empty() {
+          None
+        } else {
+          Some((&wallet, parent_entries.as_slice()))
+        };
+        let signed = sign_reveal_chain(chain, parent, &privkey, &secp, parent_signing)?;
 
         let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
         fs::create_dir_all(&jobs_dir)?;
@@ -541,6 +650,7 @@ impl Inscribe {
           total_fees: fees,
           created_at: Utc::now(),
           reveals: signed.reveals,
+          parent_ids: self.parent.iter().cloned().collect(),
         };
 
         job.broadcast_batch(client);
@@ -557,6 +667,36 @@ impl Inscribe {
     }
 
     Ok(())
+  }
+
+  fn get_parent_info(parent_id: &InscriptionId, wallet: &Wallet) -> Result<ParentInfo> {
+    let inscriptions = wallet.inscriptions();
+    let location = inscriptions
+      .iter()
+      .find_map(|(satpoint, ids)| {
+        if ids.contains(parent_id) {
+          Some(*satpoint)
+        } else {
+          None
+        }
+      })
+      .ok_or_else(|| anyhow!("parent inscription {parent_id} not found in wallet"))?;
+
+    let tx_out = wallet
+      .utxos()
+      .get(&location.outpoint)
+      .ok_or_else(|| anyhow!("parent UTXO {} not found in wallet", location.outpoint))?
+      .clone();
+
+    let destination = Address::from_script(&tx_out.script_pubkey, wallet.chain().network())
+      .context("could not derive address from parent UTXO")?;
+
+    Ok(ParentInfo {
+      id: *parent_id,
+      location,
+      tx_out,
+      destination,
+    })
   }
 
   fn get_key_pair(&self, wallet: &Wallet) -> Result<(PublicKey, PrivateKey)> {
@@ -579,6 +719,7 @@ impl Inscribe {
     reveal_fee_rate: FeeRate,
     pubkey: PublicKey,
     postage: Amount,
+    parent_info: Option<&ParentInfo>,
   ) -> Result<(Vec<Transaction>, Vec<(Script, Script)>, u64)> {
     let satpoint = if let Some(satpoint) = satpoint {
       satpoint
@@ -662,23 +803,43 @@ impl Inscribe {
       let fee = reveal_fees[i];
       let next_value = last_value.checked_sub(fee).unwrap();
 
+      let mut inputs = vec![TxIn {
+        previous_output: last_outpoint,
+        script_sig: Script::new(),
+        witness: Witness::new(),
+        sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+      }];
+
+      let mut outputs = vec![TxOut {
+        script_pubkey: if is_last {
+          destination.script_pubkey()
+        } else {
+          Address::p2sh(&locks[i + 1], network)
+            .unwrap()
+            .script_pubkey()
+        },
+        value: next_value,
+      }];
+
+      // Add parent UTXO as input and return output on the first reveal tx
+      if i == 0 {
+        if let Some(parent) = parent_info {
+          inputs.push(TxIn {
+            previous_output: parent.location.outpoint,
+            script_sig: Script::new(),
+            witness: Witness::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+          });
+          outputs.push(TxOut {
+            script_pubkey: parent.destination.script_pubkey(),
+            value: parent.tx_out.value,
+          });
+        }
+      }
+
       let reveal_tx = Transaction {
-        input: vec![TxIn {
-          previous_output: last_outpoint,
-          script_sig: Script::new(),
-          witness: Witness::new(),
-          sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-        }],
-        output: vec![TxOut {
-          script_pubkey: if is_last {
-            destination.script_pubkey()
-          } else {
-            Address::p2sh(&locks[i + 1], network)
-              .unwrap()
-              .script_pubkey()
-          },
-          value: next_value,
-        }],
+        input: inputs,
+        output: outputs,
         lock_time: PackedLockTime::ZERO,
         version: 1,
       };

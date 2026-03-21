@@ -18,7 +18,7 @@ use {
     deserialize_from_str::DeserializeFromStr,
     epoch::Epoch,
     height::Height,
-    inscriptions::{Inscription, InscriptionId, Media, ParseError, ParsedInscription},
+    inscriptions::{Media, ParseError, ParsedInscription},
     options::Options,
     outgoing::Outgoing,
     representation::Representation,
@@ -69,6 +69,7 @@ use {
 pub use crate::{
   fee_rate::FeeRate,
   index::{Index, List},
+  inscriptions::{Inscription, InscriptionId},
   object::Object,
   rarity::Rarity,
   sat::Sat,

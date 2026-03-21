@@ -301,6 +301,86 @@ fn inscriptions_page_has_next_and_previous() {
 }
 
 #[test]
+fn parent_child() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let test_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(test_server.directory()));
+
+  let parent = inscribe(&rpc_server, &test_server);
+  rpc_server.mine_blocks(1);
+
+  let child = CommandBuilder::new(format!(
+    "wallet inscribe child.txt --parent {}",
+    parent.inscription
+  ))
+  .write("child.txt", "CHILD")
+  .rpc_server(&rpc_server)
+  .ord_server(&test_server)
+  .data_dir(test_server.directory())
+  .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  // Parent inscription location must survive child reveal spending its UTXO
+  let parent_api: ord::api::Inscription = test_server
+    .json_request(format!("/inscription/{}", parent.inscription))
+    .json()
+    .unwrap();
+  assert!(parent_api.value.unwrap() > 0, "parent UTXO value lost");
+  assert_eq!(parent_api.child_count, 1);
+  assert_eq!(parent_api.children.len(), 1);
+
+  let child_api: ord::api::Inscription = test_server
+    .json_request(format!("/inscription/{}", child.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(child_api.parents.len(), 1);
+  assert_eq!(child_api.parents[0].to_string(), parent.inscription);
+
+  // Inscription page links to parent
+  test_server.assert_response_regex(
+    format!("/inscription/{}", child.inscription),
+    format!(
+      r"(?s).*<dt>parents</dt>.*<a href=/inscription/{}>.*</a>.*",
+      parent.inscription
+    ),
+  );
+
+  // Inscription page links to children
+  test_server.assert_response_regex(
+    format!("/inscription/{}", parent.inscription),
+    format!(
+      r"(?s).*<dt>children</dt>.*<a href=/inscription/{}>.*</a>.*all \(1\).*",
+      child.inscription
+    ),
+  );
+
+  // JSON children endpoint
+  let children: ord::api::InscriptionIds = test_server
+    .json_request(format!("/children/{}", parent.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(children.ids.len(), 1);
+  assert_eq!(children.ids[0].to_string(), child.inscription);
+  assert!(!children.more);
+  assert_eq!(children.page, 0);
+
+  // JSON parents endpoint
+  let parents: ord::api::InscriptionIds = test_server
+    .json_request(format!("/parents/{}", child.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(parents.ids.len(), 1);
+  assert_eq!(parents.ids[0].to_string(), parent.inscription);
+  assert!(!parents.more);
+  assert_eq!(parents.page, 0);
+
+  // parent_count in API response
+  assert_eq!(child_api.parent_count, 1);
+  assert_eq!(parent_api.parent_count, 0);
+}
+
+#[test]
 fn expected_sat_time_is_rounded() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let test_server = TestServer::spawn(&rpc_server);

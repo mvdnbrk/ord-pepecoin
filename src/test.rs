@@ -106,7 +106,11 @@ pub(crate) fn inscription(content_type: &str, body: impl AsRef<[u8]>) -> Inscrip
   } else {
     content_type
   };
-  Inscription::new(Some(content_type.into()), Some(body.as_ref().into()), None)
+  Inscription::new(
+    Some(content_type.into()),
+    Some(body.as_ref().into()),
+    BTreeMap::new(),
+  )
 }
 
 pub(crate) fn inscription_id(n: u32) -> InscriptionId {

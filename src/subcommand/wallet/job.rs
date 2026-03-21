@@ -40,6 +40,8 @@ pub(crate) struct RevealJob {
   pub(crate) total_fees: u64,
   pub(crate) created_at: DateTime<Utc>,
   pub(crate) reveals: Vec<RevealTx>,
+  #[serde(skip_serializing_if = "Vec::is_empty", default)]
+  pub(crate) parent_ids: Vec<InscriptionId>,
 }
 
 impl RevealJob {
@@ -452,6 +454,7 @@ mod tests {
         broadcast: true,
         confirmed: false,
       }],
+      parent_ids: vec![],
     };
 
     let serialized = serde_json::to_string(&job).unwrap();
@@ -488,6 +491,7 @@ mod tests {
       destination,
       total_fees: 1000,
       created_at: Utc::now(),
+      parent_ids: vec![],
       reveals: (0..num_reveals)
         .map(|i| RevealTx {
           index: i,

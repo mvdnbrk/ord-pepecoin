@@ -1,5 +1,5 @@
 use {
-  super::*,
+  super::{super::inscribe::ParentInfo, *},
   bitcoin::{blockdata::opcodes, blockdata::script, PackedLockTime, PublicKey, TxIn, Witness},
   std::collections::BTreeMap,
   std::collections::BTreeSet,
@@ -127,6 +127,7 @@ pub(crate) fn create_batch_inscription_transactions(
   reveal_fee_rate: FeeRate,
   pubkey: PublicKey,
   postage: Amount,
+  parent_infos: &[ParentInfo],
 ) -> Result<(Transaction, Vec<Vec<RevealTx>>, u64)> {
   let mut reveal_chains: Vec<Vec<RevealTx>> = Vec::new();
   let mut chain_initial_values: Vec<u64> = Vec::new();
@@ -156,23 +157,43 @@ pub(crate) fn create_batch_inscription_transactions(
       let fee = chain_reveal_fees[i];
       let next_value = current_reveal_value.checked_sub(fee).unwrap();
 
+      let mut inputs = vec![TxIn {
+        previous_output: OutPoint::null(), // To be filled after commit tx
+        script_sig: Script::new(),
+        witness: Witness::new(),
+        sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+      }];
+
+      let mut outputs = vec![TxOut {
+        script_pubkey: if is_last {
+          destination.script_pubkey()
+        } else {
+          Address::p2sh(&locks[i + 1], network)
+            .unwrap()
+            .script_pubkey()
+        },
+        value: next_value,
+      }];
+
+      // Add parent inputs/outputs on the first reveal tx
+      if i == 0 {
+        for parent in parent_infos {
+          inputs.push(TxIn {
+            previous_output: OutPoint::null(), // resolved during signing
+            script_sig: Script::new(),
+            witness: Witness::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+          });
+          outputs.push(TxOut {
+            script_pubkey: parent.destination.script_pubkey(),
+            value: parent.tx_out.value,
+          });
+        }
+      }
+
       let reveal_tx = Transaction {
-        input: vec![TxIn {
-          previous_output: OutPoint::null(), // To be filled after commit tx
-          script_sig: Script::new(),
-          witness: Witness::new(),
-          sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-        }],
-        output: vec![TxOut {
-          script_pubkey: if is_last {
-            destination.script_pubkey()
-          } else {
-            Address::p2sh(&locks[i + 1], network)
-              .unwrap()
-              .script_pubkey()
-          },
-          value: next_value,
-        }],
+        input: inputs,
+        output: outputs,
         lock_time: PackedLockTime::ZERO,
         version: 1,
       };
