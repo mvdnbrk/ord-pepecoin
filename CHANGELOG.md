@@ -7,6 +7,14 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+### Changed
+- Extract `InscriptionParser` into separate `parser` module ([#48](https://github.com/mvdnbrk/ord-pepecoin/pull/48))
+- Add clippy and rustfmt CI checks ([#47](https://github.com/mvdnbrk/ord-pepecoin/pull/47))
+- Restructure inscription modules into `inscriptions/` directory ([#46](https://github.com/mvdnbrk/ord-pepecoin/pull/46))
+
+### Fixed
+- Fix macOS build failure caused by type inference overflow ([#46](https://github.com/mvdnbrk/ord-pepecoin/pull/46))
+
 ## [0.9.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.9.0) - 2026-03-20
 
 ### Added
