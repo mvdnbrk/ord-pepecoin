@@ -2,6 +2,8 @@ use {super::*, std::path::Path};
 
 #[derive(Deserialize)]
 pub(crate) struct BatchFile {
+  #[serde(default)]
+  pub(crate) parents: Vec<InscriptionId>,
   pub(crate) inscriptions: Vec<BatchEntry>,
 }
 
