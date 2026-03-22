@@ -15,8 +15,16 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
   - JSON API: `parent_count`, `parents`, `child_count`, `children` on `/inscription/{id}`
   - Paginated JSON endpoints: `/children/{id}` and `/parents/{id}`
   - HTML: parent/child sections on inscription pages
+- Delegate inscription support ([#52](https://github.com/mvdnbrk/ord-pepecoin/pull/52))
+  - `inscribe --delegate <ID>` to reference another inscription's content
+  - Batch YAML `delegate` field (mutually exclusive with `file`)
+  - Delegate resolution in `/content` and `/preview` handlers
+  - JSON API: `delegate`, `effective_content_type` on `/inscription/{id}`
+  - HTML: delegate link on inscription pages
+  - No-chaining validation: delegate target must be a content inscription
 
 ### Changed
+- Change positional `file` arg to `--file` flag ([#52](https://github.com/mvdnbrk/ord-pepecoin/pull/52))
 - Extract `AcceptJson` into server submodule ([#50](https://github.com/mvdnbrk/ord-pepecoin/pull/50))
 - Extract `InscriptionParser` into separate `parser` module ([#48](https://github.com/mvdnbrk/ord-pepecoin/pull/48))
 - Add clippy and rustfmt CI checks ([#47](https://github.com/mvdnbrk/ord-pepecoin/pull/47))
