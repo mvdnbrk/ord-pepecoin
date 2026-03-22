@@ -106,7 +106,6 @@ impl Inscription {
     builder.into_script()
   }
 
-
   pub(crate) fn delegate_id(&self) -> Option<InscriptionId> {
     self
       .tags
