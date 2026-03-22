@@ -63,6 +63,10 @@
   <dt>content type</dt>
   <dd>{{ content_type }}</dd>
 %% }
+%% if let Some(delegate) = self.delegate {
+  <dt>delegate</dt>
+  <dd><a href=/inscription/{{delegate}}>{{delegate}}</a></dd>
+%% }
   <dt>timestamp</dt>
   <dd><time>{{ self.timestamp }}</time></dd>
   <dt>height</dt>

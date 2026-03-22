@@ -7,6 +7,8 @@ pub struct Inscription {
   pub child_count: u64,
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
+  pub delegate: Option<InscriptionId>,
+  pub effective_content_type: Option<String>,
   pub fee: u64,
   pub height: u32,
   pub id: InscriptionId,

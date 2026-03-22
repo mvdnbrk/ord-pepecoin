@@ -9,7 +9,8 @@ pub(crate) struct BatchFile {
 
 #[derive(Deserialize)]
 pub(crate) struct BatchEntry {
-  pub(crate) file: PathBuf,
+  pub(crate) file: Option<PathBuf>,
+  pub(crate) delegate: Option<InscriptionId>,
   pub(crate) destination: Option<Address>,
 }
 
@@ -24,13 +25,21 @@ impl BatchFile {
 
     let parent = path.parent().unwrap();
     for entry in &batch_file.inscriptions {
-      let file_path = if entry.file.is_absolute() {
-        entry.file.clone()
-      } else {
-        parent.join(&entry.file)
-      };
-      if !file_path.exists() {
-        bail!("file not found: {}", file_path.display());
+      if entry.file.is_some() && entry.delegate.is_some() {
+        bail!("batch entry cannot have both `file` and `delegate` set");
+      }
+
+      if let Some(ref file) = entry.file {
+        let file_path = if file.is_absolute() {
+          file.clone()
+        } else {
+          parent.join(file)
+        };
+        if !file_path.exists() {
+          bail!("file not found: {}", file_path.display());
+        }
+      } else if entry.delegate.is_none() {
+        bail!("batch entry must have either `file` or `delegate` set");
       }
     }
 

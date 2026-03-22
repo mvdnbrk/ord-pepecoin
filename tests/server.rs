@@ -310,7 +310,7 @@ fn parent_child() {
   rpc_server.mine_blocks(1);
 
   let child = CommandBuilder::new(format!(
-    "wallet inscribe child.txt --parent {}",
+    "wallet inscribe --file child.txt --parent {}",
     parent.inscription
   ))
   .write("child.txt", "CHILD")

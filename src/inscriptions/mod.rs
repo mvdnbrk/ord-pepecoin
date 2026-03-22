@@ -12,5 +12,4 @@ pub(crate) use self::{
   inscription::ParsedInscription,
   inscription_id::ParseError,
   media::{ImageRendering, Language, Media},
-  parser::InscriptionParser,
 };

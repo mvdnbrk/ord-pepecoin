@@ -10,6 +10,7 @@ use {
     Address, Network, OutPoint, PrivateKey, Txid,
   },
   executable_path::executable_path,
+  ord::InscriptionId,
   pretty_assertions::assert_eq as pretty_assert_eq,
   regex::Regex,
   reqwest::{StatusCode, Url},
@@ -71,7 +72,7 @@ struct BatchInscription {
 fn inscribe(rpc_server: &test_bitcoincore_rpc::Handle, ord_server: &TestServer) -> Inscribe {
   rpc_server.mine_blocks(1);
 
-  let output = CommandBuilder::new("wallet inscribe foo.txt")
+  let output = CommandBuilder::new("wallet inscribe --file foo.txt")
     .write("foo.txt", "FOO")
     .rpc_server(rpc_server)
     .ord_server(ord_server)
@@ -130,6 +131,24 @@ fn create_wallet_with_options(
   let address = Address::p2pkh(&privkey.public_key(&secp), privkey.network);
 
   rpc_server.set_coinbase_address(&address);
+}
+
+#[derive(Deserialize)]
+struct InscriptionOutput {
+  inscription: InscriptionId,
+  #[allow(dead_code)]
+  reveal: Txid,
+  #[allow(dead_code)]
+  destination: Address,
+}
+
+#[derive(Deserialize)]
+struct BatchOutput {
+  #[allow(dead_code)]
+  commit: Txid,
+  inscriptions: Vec<InscriptionOutput>,
+  #[allow(dead_code)]
+  total_fees: u64,
 }
 
 mod command_builder;

@@ -24,6 +24,7 @@ pub(crate) struct JobStatus {
   pub(crate) batch_name: Option<String>,
   pub(crate) commit_broadcast: bool,
   pub(crate) commit_confirmed: bool,
+  pub(crate) delegate_id: Option<InscriptionId>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -42,6 +43,8 @@ pub(crate) struct RevealJob {
   pub(crate) reveals: Vec<RevealTx>,
   #[serde(skip_serializing_if = "Vec::is_empty", default)]
   pub(crate) parent_ids: Vec<InscriptionId>,
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub(crate) delegate_id: Option<InscriptionId>,
 }
 
 impl RevealJob {
@@ -216,6 +219,7 @@ impl RevealJob {
       batch_name,
       commit_broadcast: self.commit_broadcast,
       commit_confirmed: self.commit_confirmed,
+      delegate_id: self.delegate_id,
     }
   }
 
@@ -455,6 +459,7 @@ mod tests {
         confirmed: false,
       }],
       parent_ids: vec![],
+      delegate_id: None,
     };
 
     let serialized = serde_json::to_string(&job).unwrap();
@@ -492,6 +497,7 @@ mod tests {
       total_fees: 1000,
       created_at: Utc::now(),
       parent_ids: vec![],
+      delegate_id: None,
       reveals: (0..num_reveals)
         .map(|i| RevealTx {
           index: i,
