@@ -108,18 +108,6 @@ impl Inscription {
     builder.into_script()
   }
 
-  pub(crate) fn parent_ids(&self) -> Vec<InscriptionId> {
-    self
-      .tags
-      .get(tag::PARENT)
-      .map(|values| {
-        values
-          .iter()
-          .filter_map(|v| tag::parse_inscription_id(v))
-          .collect()
-      })
-      .unwrap_or_default()
-  }
 
   pub(crate) fn delegate_id(&self) -> Option<InscriptionId> {
     self
