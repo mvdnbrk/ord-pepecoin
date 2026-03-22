@@ -875,3 +875,158 @@ fn inscribe_with_chained_delegate() {
     ))
     .run();
 }
+
+#[test]
+fn inscribe_with_title() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title MyInscription")
+    .write("hello.txt", "HELLOWORLD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+  ord_server.assert_response_regex(
+    format!("/inscription/{}", output.inscription),
+    ".*<h2>MyInscription</h2>.*",
+  );
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(json.properties.unwrap().title.unwrap(), "MyInscription");
+}
+
+#[test]
+fn inscribe_with_title_escapes_html() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title <script>alert('xss')</script>")
+    .write("hello.txt", "HELLOWORLD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+  ord_server.assert_response_regex(
+    format!("/inscription/{}", output.inscription),
+    ".*<h2>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</h2>.*",
+  );
+}
+
+#[test]
+fn inscribe_with_title_escapes_quotes() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title \"onclick=\"alert(1)\"")
+    .write("hello.txt", "HELLOWORLD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+  ord_server.assert_response_regex(
+    format!("/inscription/{}", output.inscription),
+    ".*<h2>&quot;onclick=&quot;alert\\(1\\)&quot;</h2>.*",
+  );
+}
+
+#[test]
+fn inscribe_without_title() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt")
+    .write("hello.txt", "HELLOWORLD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  let html = ord_server.request(format!("/inscription/{}", output.inscription)).text().unwrap();
+  assert!(!html.contains("<h2>"));
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  assert!(json.properties.is_none());
+}
+
+#[test]
+fn inscribe_with_empty_title() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title=")
+    .write("hello.txt", "HELLOWORLD")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  let html = ord_server.request(format!("/inscription/{}", output.inscription)).text().unwrap();
+  assert!(!html.contains("<h2>"));
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  assert!(json.properties.is_none());
+}
+
+#[test]
+fn batch_inscribe_with_title() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("hello.txt", "HELLOWORLD")
+    .write("batch.yaml", "inscriptions:\n  - file: hello.txt\n    title: Batch Title\n")
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<BatchOutput>();
+
+  rpc_server.mine_blocks(1);
+  ord_server.assert_response_regex(
+    format!("/inscription/{}", output.inscriptions[0].inscription),
+    ".*<h2>Batch Title</h2>.*",
+  );
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscriptions[0].inscription))
+    .json()
+    .unwrap();
+  assert_eq!(json.properties.unwrap().title.unwrap(), "Batch Title");
+}

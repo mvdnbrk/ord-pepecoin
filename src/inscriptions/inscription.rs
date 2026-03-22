@@ -35,6 +35,28 @@ impl Inscription {
     }
   }
 
+  pub(crate) fn properties_title(&self) -> Option<String> {
+    let cbor_bytes = if let Some(compressed) = self.tags.get("properties;br").and_then(|v| v.first()) {
+      let mut decompressed = Vec::new();
+      brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
+      decompressed
+    } else {
+      self.tags.get("properties")?.first()?.clone()
+    };
+
+    let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
+    if let ciborium::Value::Map(map) = value {
+      for (k, v) in map {
+        if let (ciborium::Value::Text(key), ciborium::Value::Text(val)) = (k, v) {
+          if key == "title" && !val.is_empty() {
+            return Some(val);
+          }
+        }
+      }
+    }
+    None
+  }
+
   pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
     for tx in txs {

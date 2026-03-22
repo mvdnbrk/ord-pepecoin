@@ -18,6 +18,7 @@ pub(crate) struct InscriptionHtml {
   pub(crate) satpoint: SatPoint,
   pub(crate) timestamp: DateTime<Utc>,
   pub(crate) delegate: Option<InscriptionId>,
+  pub(crate) title: Option<String>,
 }
 
 impl PageContent for InscriptionHtml {
@@ -54,6 +55,7 @@ mod tests {
         satpoint: satpoint(1, 0),
         timestamp: timestamp(0),
         delegate: None,
+        title: None,
       },
       "
         <h1>Inscription 1</h1>
@@ -117,6 +119,7 @@ mod tests {
         satpoint: satpoint(1, 0),
         timestamp: timestamp(0),
         delegate: None,
+        title: None,
       },
       "
         <h1>Inscription 1</h1>
@@ -153,6 +156,7 @@ mod tests {
         satpoint: satpoint(1, 0),
         timestamp: timestamp(0),
         delegate: None,
+        title: None,
       },
       "
         <h1>Inscription 1</h1>

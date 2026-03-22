@@ -1,5 +1,10 @@
 use super::*;
 
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
+pub struct Properties {
+  pub title: Option<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscription {
   pub address: Option<String>,
@@ -17,6 +22,7 @@ pub struct Inscription {
   pub parent_count: u64,
   pub parents: Vec<InscriptionId>,
   pub previous: Option<InscriptionId>,
+  pub properties: Option<Properties>,
   pub sat: Option<Sat>,
   pub satpoint: SatPoint,
   pub timestamp: i64,

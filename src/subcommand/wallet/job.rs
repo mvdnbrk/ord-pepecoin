@@ -29,6 +29,8 @@ pub(crate) struct JobStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RevealJob {
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub(crate) title: Option<String>,
   pub(crate) file_name: String,
   pub(crate) content_type: String,
   pub(crate) file_size: u64,
