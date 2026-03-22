@@ -581,6 +581,17 @@ impl Server {
       let child_count = u64::try_from(children.len()).unwrap();
       let parent_count = u64::try_from(parents.len()).unwrap();
 
+      let delegate = inscription.delegate_id();
+      let effective_content_type = if let Some(delegate_id) = delegate {
+        index
+          .get_inscription_by_id(delegate_id)
+          .ok()
+          .flatten()
+          .and_then(|d| d.content_type().map(|s: &str| s.to_string()))
+      } else {
+        inscription.content_type().map(|s: &str| s.to_string())
+      };
+
       inscriptions.push(api::Inscription {
         address: page_config
           .chain
@@ -591,7 +602,8 @@ impl Server {
         child_count,
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
-        delegate: inscription.delegate_id(),
+        delegate,
+        effective_content_type,
         fee: entry.fee,
         height: entry.height,
         id,
@@ -1248,6 +1260,15 @@ impl Server {
           content_length: inscription.body().map(|body: &[u8]| body.len()),
           content_type: inscription.content_type().map(|s: &str| s.to_string()),
           delegate,
+          effective_content_type: if let Some(delegate_id) = delegate {
+            index
+              .get_inscription_by_id(delegate_id)
+              .ok()
+              .flatten()
+              .and_then(|d| d.content_type().map(|s: &str| s.to_string()))
+          } else {
+            inscription.content_type().map(|s: &str| s.to_string())
+          },
           fee: entry.fee,
           height: entry.height,
           id: inscription_id,

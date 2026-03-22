@@ -759,6 +759,10 @@ fn inscribe_with_delegate() {
   );
   assert_eq!(json.content_type, None);
   assert_eq!(json.content_length, None);
+  assert_eq!(
+    json.effective_content_type,
+    Some("text/plain;charset=utf-8".to_string())
+  );
 }
 
 #[test]
