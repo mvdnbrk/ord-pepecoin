@@ -591,6 +591,7 @@ impl Server {
         child_count,
         content_length: inscription.body().map(|body: &[u8]| body.len()),
         content_type: inscription.content_type().map(|s: &str| s.to_string()),
+        delegate: inscription.delegate_id(),
         fee: entry.fee,
         height: entry.height,
         id,
@@ -603,7 +604,6 @@ impl Server {
         satpoint,
         timestamp: i64::from(entry.timestamp),
         value: Some(output.value),
-        delegate: inscription.delegate_id(),
       });
     }
 
@@ -1247,6 +1247,7 @@ impl Server {
           child_count,
           content_length: inscription.body().map(|body: &[u8]| body.len()),
           content_type: inscription.content_type().map(|s: &str| s.to_string()),
+          delegate,
           fee: entry.fee,
           height: entry.height,
           id: inscription_id,
@@ -1259,7 +1260,6 @@ impl Server {
           satpoint,
           timestamp: i64::from(entry.timestamp),
           value: Some(output.value),
-          delegate,
         })
         .into_response(),
       )

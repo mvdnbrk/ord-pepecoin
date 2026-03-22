@@ -7,6 +7,7 @@ pub struct Inscription {
   pub child_count: u64,
   pub content_length: Option<usize>,
   pub content_type: Option<String>,
+  pub delegate: Option<InscriptionId>,
   pub fee: u64,
   pub height: u32,
   pub id: InscriptionId,
@@ -19,7 +20,6 @@ pub struct Inscription {
   pub satpoint: SatPoint,
   pub timestamp: i64,
   pub value: Option<u64>,
-  pub delegate: Option<InscriptionId>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
