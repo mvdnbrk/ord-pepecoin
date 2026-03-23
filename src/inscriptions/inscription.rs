@@ -57,6 +57,25 @@ impl Inscription {
     None
   }
 
+  pub(crate) fn set_title(&mut self, title: &str) -> Result {
+    if !title.is_empty() {
+      let mut properties = std::collections::BTreeMap::new();
+      properties.insert("title", title);
+      let mut cbor = Vec::new();
+      ciborium::into_writer(&properties, &mut cbor)?;
+
+      let mut compressed = Vec::new();
+      brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
+
+      if compressed.len() < cbor.len() {
+        self.tags.insert("properties;br".to_string(), vec![compressed]);
+      } else {
+        self.tags.insert("properties".to_string(), vec![cbor]);
+      }
+    }
+    Ok(())
+  }
+
   pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
     for tx in txs {

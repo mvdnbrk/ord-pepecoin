@@ -324,21 +324,7 @@ impl Inscribe {
         }
 
         if let Some(ref title) = entry.title {
-          if !title.is_empty() {
-            let mut properties = std::collections::BTreeMap::new();
-            properties.insert("title", title.as_str());
-            let mut cbor = Vec::new();
-            ciborium::into_writer(&properties, &mut cbor)?;
-
-            let mut compressed = Vec::new();
-            brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
-
-            if compressed.len() < cbor.len() {
-              inscription.tags.insert("properties;br".to_string(), vec![compressed]);
-            } else {
-              inscription.tags.insert("properties".to_string(), vec![cbor]);
-            }
-          }
+          inscription.set_title(title)?;
         }
 
         inscriptions.push((inscription, path, delegate_id, entry.title.clone()));
@@ -632,21 +618,7 @@ impl Inscribe {
       };
 
       if let Some(ref title) = self.title {
-        if !title.is_empty() {
-          let mut properties = std::collections::BTreeMap::new();
-          properties.insert("title", title.as_str());
-          let mut cbor = Vec::new();
-          ciborium::into_writer(&properties, &mut cbor)?;
-
-          let mut compressed = Vec::new();
-          brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
-
-          if compressed.len() < cbor.len() {
-            inscription.tags.insert("properties;br".to_string(), vec![compressed]);
-          } else {
-            inscription.tags.insert("properties".to_string(), vec![cbor]);
-          }
-        }
+        inscription.set_title(title)?;
       }
 
       let reveal_tx_destination = self
