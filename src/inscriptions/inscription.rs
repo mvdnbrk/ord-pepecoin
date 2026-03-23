@@ -35,6 +35,50 @@ impl Inscription {
     }
   }
 
+  pub(crate) fn properties_title(&self) -> Option<String> {
+    let cbor_bytes =
+      if let Some(compressed) = self.tags.get(tag::PROPERTIES_BR).and_then(|v| v.first()) {
+        let mut decompressed = Vec::new();
+        brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
+        decompressed
+      } else {
+        self.tags.get(tag::PROPERTIES)?.first()?.clone()
+      };
+
+    let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
+    if let ciborium::Value::Map(map) = value {
+      for (k, v) in map {
+        if let (ciborium::Value::Text(key), ciborium::Value::Text(val)) = (k, v) {
+          if key == "title" && !val.is_empty() {
+            return Some(val);
+          }
+        }
+      }
+    }
+    None
+  }
+
+  pub(crate) fn set_title(&mut self, title: &str) -> Result {
+    if !title.is_empty() {
+      let mut properties = std::collections::BTreeMap::new();
+      properties.insert("title", title);
+      let mut cbor = Vec::new();
+      ciborium::into_writer(&properties, &mut cbor)?;
+
+      let mut compressed = Vec::new();
+      brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
+
+      if compressed.len() < cbor.len() {
+        self
+          .tags
+          .insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
+      } else {
+        self.tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+      }
+    }
+    Ok(())
+  }
+
   pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
     for tx in txs {
@@ -181,5 +225,37 @@ impl Inscription {
     witness.push([]);
 
     witness
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn set_title_short() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_title("Hello").unwrap();
+    assert!(inscription.tags.contains_key("properties"));
+    assert!(!inscription.tags.contains_key("properties;br"));
+    assert_eq!(inscription.properties_title().unwrap(), "Hello");
+  }
+
+  #[test]
+  fn set_title_long_compressed() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    let long_title = "A".repeat(1000);
+    inscription.set_title(&long_title).unwrap();
+    assert!(inscription.tags.contains_key("properties;br"));
+    assert!(!inscription.tags.contains_key("properties"));
+    assert_eq!(inscription.properties_title().unwrap(), long_title);
+  }
+
+  #[test]
+  fn set_title_empty() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_title("").unwrap();
+    assert!(inscription.tags.is_empty());
+    assert_eq!(inscription.properties_title(), None);
   }
 }

@@ -612,6 +612,9 @@ impl Server {
         parent_count,
         parents: parents.into_iter().take(4).collect(),
         previous,
+        properties: inscription
+          .properties_title()
+          .map(|title| api::Properties { title: Some(title) }),
         sat: entry.sat,
         satpoint,
         timestamp: i64::from(entry.timestamp),
@@ -1277,6 +1280,9 @@ impl Server {
           parent_count,
           parents: parents.iter().copied().take(4).collect(),
           previous,
+          properties: inscription
+            .properties_title()
+            .map(|title| api::Properties { title: Some(title) }),
           sat: entry.sat,
           satpoint,
           timestamp: i64::from(entry.timestamp),
@@ -1286,6 +1292,7 @@ impl Server {
       )
     } else {
       let delegate = inscription.delegate_id();
+      let title = inscription.properties_title();
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
@@ -1304,6 +1311,7 @@ impl Server {
           satpoint,
           timestamp: timestamp(entry.timestamp),
           delegate,
+          title,
         }
         .page(page_config, index.has_sat_index()?)
         .into_response(),

@@ -1,4 +1,7 @@
 <h1>Inscription {{ self.number }}</h1>
+%% if let Some(title) = &self.title {
+<p class=subtitle>{{ title }}</p>
+%% }
 <div class=inscription>
 %% if let Some(previous) = self.previous {
 <a class=prev href=/inscription/{{previous}}>❮</a>
@@ -41,6 +44,10 @@
 %% }
   <dt>id</dt>
   <dd class=monospace>{{ self.inscription_id }}</dd>
+%% if let Some(title) = &self.title {
+  <dt>title</dt>
+  <dd>{{ title }}</dd>
+%% }
 %% if let Ok(address) = self.chain.address_from_script(&self.output.script_pubkey ) {
   <dt>address</dt>
   <dd class=monospace>{{ address }}</dd>

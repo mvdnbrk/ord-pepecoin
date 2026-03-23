@@ -12,6 +12,7 @@ pub(crate) struct BatchEntry {
   pub(crate) file: Option<PathBuf>,
   pub(crate) delegate: Option<InscriptionId>,
   pub(crate) destination: Option<Address>,
+  pub(crate) title: Option<String>,
 }
 
 impl BatchFile {

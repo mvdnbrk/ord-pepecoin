@@ -59,6 +59,8 @@ tokio-stream = "0.1.9"
 tokio-util = {version = "0.7.3", features = ["compat"] }
 tower-http = { version = "0.6.2", features = ["auth", "compression-br", "compression-gzip", "cors", "set-header"] }
 url = { version = "2.2.2", features = ["serde"] }
+ciborium = "0.2.2"
+brotli = "8.0.2"
 
 [dev-dependencies]
 executable-path = "1.0.0"

@@ -89,6 +89,12 @@ pub(crate) struct Inscribe {
   pub(crate) batch: Option<PathBuf>,
   #[clap(long, help = "Make inscription a child of <PARENT>.")]
   pub(crate) parent: Option<InscriptionId>,
+  #[clap(
+    long,
+    help = "Set `title` property to <TITLE>.",
+    conflicts_with = "batch"
+  )]
+  pub(crate) title: Option<String>,
 }
 
 pub(crate) struct ParentInfo {
@@ -317,7 +323,11 @@ impl Inscribe {
             .push(crate::inscriptions::tag::encode_inscription_id(parent_id));
         }
 
-        inscriptions.push((inscription, path, delegate_id));
+        if let Some(ref title) = entry.title {
+          inscription.set_title(title)?;
+        }
+
+        inscriptions.push((inscription, path, delegate_id, entry.title.clone()));
         destinations.push(
           entry
             .destination
@@ -329,7 +339,7 @@ impl Inscribe {
       // Pre-flight balance check
       let mut total_postage = 0;
       let mut total_reveal_fees = 0;
-      for (inscription, _, _) in &inscriptions {
+      for (inscription, _, _, _) in &inscriptions {
         total_postage += postage.to_sat();
         let batches = split_inscription_into_batches(inscription);
         for batch in &batches {
@@ -368,7 +378,7 @@ impl Inscribe {
         let (chunk_inscriptions_with_metadata, chunk_destinations) = chunk_data;
         let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_metadata
           .iter()
-          .map(|(ins, _, _)| ins.clone())
+          .map(|(ins, _, _, _)| ins.clone())
           .collect();
 
         let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos
@@ -502,9 +512,10 @@ impl Inscribe {
               destination: chunk_destinations[i].clone(),
             });
 
-            let (_ins, path, delegate_id) = &chunk_inscriptions_with_metadata[i];
+            let (_ins, path, delegate_id, title) = &chunk_inscriptions_with_metadata[i];
 
             all_jobs.push(RevealJob {
+              title: title.clone(),
               file_name: path
                 .as_ref()
                 .and_then(|p| p.file_name())
@@ -606,6 +617,10 @@ impl Inscribe {
         None
       };
 
+      if let Some(ref title) = self.title {
+        inscription.set_title(title)?;
+      }
+
       let reveal_tx_destination = self
         .destination
         .clone()
@@ -697,6 +712,7 @@ impl Inscribe {
         let job_file = jobs_dir.join(format!("{}.json", commit));
 
         let mut job = RevealJob {
+          title: self.title.clone(),
           file_name: self
             .file
             .as_ref()

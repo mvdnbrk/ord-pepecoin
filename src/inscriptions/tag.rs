@@ -4,6 +4,7 @@ pub(crate) const PARENT: &str = "parent";
 pub(crate) const DELEGATE: &str = "delegate";
 pub(crate) const METADATA: &str = "metadata";
 pub(crate) const PROPERTIES: &str = "properties";
+pub(crate) const PROPERTIES_BR: &str = "properties;br";
 pub(crate) const CONTENT_ENCODING: &str = "content-encoding";
 
 /// Extract the first value for a tag key, removing it from the map.

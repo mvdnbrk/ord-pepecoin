@@ -29,6 +29,8 @@ pub(crate) struct JobStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct RevealJob {
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub(crate) title: Option<String>,
   pub(crate) file_name: String,
   pub(crate) content_type: String,
   pub(crate) file_size: u64,
@@ -440,6 +442,7 @@ mod tests {
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     let job = RevealJob {
+      title: None,
       file_name: "test.png".to_string(),
       content_type: "image/png".to_string(),
       file_size: 520,
@@ -485,6 +488,7 @@ mod tests {
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     RevealJob {
+      title: None,
       file_name: "test.png".to_string(),
       content_type: "image/png".to_string(),
       file_size: 520,
