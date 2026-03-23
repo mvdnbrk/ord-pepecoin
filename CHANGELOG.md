@@ -31,6 +31,13 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
   - No-chaining validation: delegate target must be a content inscription
 
 ### Changed
+- Extract `Properties` struct for PRC-721 properties encoding ([#54](https://github.com/mvdnbrk/ord-pepecoin/pull/54))
+  - Enforce spec limits: max 4,000 bytes uncompressed, max 30:1 compression ratio
+  - Skip Brotli compression for properties under 64 bytes
+  - Trim whitespace from title on read and write
+  - Builder pattern: `Properties::default().with_title("...")`
+- Centralize wallet fee rate and postage defaults ([`6822366`](https://github.com/mvdnbrk/ord-pepecoin/commit/6822366c))
+- Remove unused `take`/`take_all` from tag module ([`923cec2`](https://github.com/mvdnbrk/ord-pepecoin/commit/923cec23))
 - Change positional `file` arg to `--file` flag ([#52](https://github.com/mvdnbrk/ord-pepecoin/pull/52))
 - Extract `AcceptJson` into server submodule ([#50](https://github.com/mvdnbrk/ord-pepecoin/pull/50))
 - Extract `InscriptionParser` into separate `parser` module ([#48](https://github.com/mvdnbrk/ord-pepecoin/pull/48))
