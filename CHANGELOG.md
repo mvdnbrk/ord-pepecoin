@@ -7,6 +7,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-03-23
+
 ### Added
 - PRC-721 title property support for inscriptions ([#53](https://github.com/mvdnbrk/ord-pepecoin/pull/53))
   - `inscribe --title <TITLE>` flag for single inscriptions
