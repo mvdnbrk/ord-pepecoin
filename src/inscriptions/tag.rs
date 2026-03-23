@@ -7,20 +7,6 @@ pub(crate) const PROPERTIES: &str = "properties";
 pub(crate) const PROPERTIES_BR: &str = "properties;br";
 pub(crate) const CONTENT_ENCODING: &str = "content-encoding";
 
-/// Extract the first value for a tag key, removing it from the map.
-pub(crate) fn take(tags: &mut BTreeMap<String, Vec<Vec<u8>>>, key: &str) -> Option<Vec<u8>> {
-  let values = tags.get_mut(key)?;
-  if values.is_empty() {
-    return None;
-  }
-  Some(values.remove(0))
-}
-
-/// Extract all values for a tag key, removing it from the map.
-pub(crate) fn take_all(tags: &mut BTreeMap<String, Vec<Vec<u8>>>, key: &str) -> Vec<Vec<u8>> {
-  tags.remove(key).unwrap_or_default()
-}
-
 /// Parse a 36-byte inscription ID (32-byte txid LE + 4-byte index LE) from tag value.
 pub(crate) fn parse_inscription_id(value: &[u8]) -> Option<InscriptionId> {
   if value.len() != 36 {
@@ -76,25 +62,4 @@ mod tests {
     assert_eq!(parse_inscription_id(&[]), None);
   }
 
-  #[test]
-  fn take_first_value() {
-    let mut tags = BTreeMap::new();
-    tags.insert("parent".to_string(), vec![vec![1], vec![2]]);
-    assert_eq!(take(&mut tags, "parent"), Some(vec![1]));
-    assert_eq!(tags.get("parent").unwrap(), &vec![vec![2]]);
-  }
-
-  #[test]
-  fn take_missing_key() {
-    let mut tags: BTreeMap<String, Vec<Vec<u8>>> = BTreeMap::new();
-    assert_eq!(take(&mut tags, "parent"), None);
-  }
-
-  #[test]
-  fn take_all_values() {
-    let mut tags = BTreeMap::new();
-    tags.insert("parent".to_string(), vec![vec![1], vec![2]]);
-    assert_eq!(take_all(&mut tags, "parent"), vec![vec![1], vec![2]]);
-    assert!(!tags.contains_key("parent"));
-  }
 }
