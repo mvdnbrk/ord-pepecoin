@@ -442,6 +442,7 @@ mod tests {
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     let job = RevealJob {
+      title: None,
       file_name: "test.png".to_string(),
       content_type: "image/png".to_string(),
       file_size: 520,
@@ -487,6 +488,7 @@ mod tests {
     let destination = Address::from_str("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM").unwrap();
 
     RevealJob {
+      title: None,
       file_name: "test.png".to_string(),
       content_type: "image/png".to_string(),
       file_size: 520,

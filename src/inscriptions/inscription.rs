@@ -224,3 +224,35 @@ impl Inscription {
     witness
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn set_title_short() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_title("Hello").unwrap();
+    assert!(inscription.tags.contains_key("properties"));
+    assert!(!inscription.tags.contains_key("properties;br"));
+    assert_eq!(inscription.properties_title().unwrap(), "Hello");
+  }
+
+  #[test]
+  fn set_title_long_compressed() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    let long_title = "A".repeat(1000);
+    inscription.set_title(&long_title).unwrap();
+    assert!(inscription.tags.contains_key("properties;br"));
+    assert!(!inscription.tags.contains_key("properties"));
+    assert_eq!(inscription.properties_title().unwrap(), long_title);
+  }
+
+  #[test]
+  fn set_title_empty() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_title("").unwrap();
+    assert!(inscription.tags.is_empty());
+    assert_eq!(inscription.properties_title(), None);
+  }
+}
