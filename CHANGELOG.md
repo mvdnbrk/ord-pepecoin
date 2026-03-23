@@ -7,6 +7,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-03-23
+
 ### Fixed
 - Fix PRC-721 tags lost in multi-tx reveal chains ([#56](https://github.com/mvdnbrk/ord-pepecoin/pull/56))
 
