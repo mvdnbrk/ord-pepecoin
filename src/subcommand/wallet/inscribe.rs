@@ -321,7 +321,7 @@ impl Inscribe {
         }
 
         if let Some(ref title) = entry.title {
-          inscription.set_title(title)?;
+          inscription.set_properties_title(title)?;
         }
 
         inscriptions.push((inscription, path, delegate_id, entry.title.clone()));
@@ -615,7 +615,7 @@ impl Inscribe {
       };
 
       if let Some(ref title) = self.title {
-        inscription.set_title(title)?;
+        inscription.set_properties_title(title)?;
       }
 
       let reveal_tx_destination = self

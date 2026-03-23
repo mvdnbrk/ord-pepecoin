@@ -39,11 +39,11 @@ impl Inscription {
     super::properties::Properties::from_tags(&self.tags)
   }
 
-  pub(crate) fn properties_title(&self) -> Option<String> {
+  pub(crate) fn get_properties_title(&self) -> Option<String> {
     self.properties().and_then(|p| p.title)
   }
 
-  pub(crate) fn set_title(&mut self, title: &str) -> Result {
+  pub(crate) fn set_properties_title(&mut self, title: &str) -> Result {
     if !title.is_empty() {
       let props = super::properties::Properties {
         title: Some(title.to_string()),
@@ -207,17 +207,17 @@ mod tests {
   use super::*;
 
   #[test]
-  fn set_title_roundtrip() {
+  fn set_properties_title_roundtrip() {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
-    inscription.set_title("Hello").unwrap();
-    assert_eq!(inscription.properties_title().unwrap(), "Hello");
+    inscription.set_properties_title("Hello").unwrap();
+    assert_eq!(inscription.get_properties_title().unwrap(), "Hello");
   }
 
   #[test]
-  fn set_title_empty() {
+  fn set_properties_title_empty() {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
-    inscription.set_title("").unwrap();
+    inscription.set_properties_title("").unwrap();
     assert!(inscription.tags.is_empty());
-    assert_eq!(inscription.properties_title(), None);
+    assert_eq!(inscription.get_properties_title(), None);
   }
 }
