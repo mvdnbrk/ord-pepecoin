@@ -8,6 +8,13 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ## [Unreleased]
 
 ### Added
+- PRC-721title property support for inscriptions ([#53](https://github.com/mvdnbrk/ord-pepecoin/pull/53))
+  - `inscribe --title <TITLE>` flag for single inscriptions
+  - Batch YAML `title` field for structured collection metadata
+  - Properties stored in `properties` (CBOR) or `properties;br` (Brotli-compressed) tags
+  - Auto-compression: indexer automatically chooses smaller representation on-chain
+  - JSON API: `properties` object with `title` on `/inscription/{id}`
+  - HTML: title displayed as subtitle and in metadata list (with full escaping)
 - PRC-721 parent/child inscription support ([#50](https://github.com/mvdnbrk/ord-pepecoin/pull/50))
   - `inscribe --parent <ID>` for single child inscriptions
   - Batch YAML `parents` field with multi-parent support and UTXO chaining
