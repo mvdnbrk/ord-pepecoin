@@ -8,7 +8,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ## [Unreleased]
 
 ### Added
-- PRC-721title property support for inscriptions ([#53](https://github.com/mvdnbrk/ord-pepecoin/pull/53))
+- PRC-721 title property support for inscriptions ([#53](https://github.com/mvdnbrk/ord-pepecoin/pull/53))
   - `inscribe --title <TITLE>` flag for single inscriptions
   - Batch YAML `title` field for structured collection metadata
   - Properties stored in `properties` (CBOR) or `properties;br` (Brotli-compressed) tags
