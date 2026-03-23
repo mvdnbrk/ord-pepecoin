@@ -36,6 +36,7 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
   - Skip Brotli compression for properties under 64 bytes
   - Trim whitespace from title on read and write
   - Builder pattern: `Properties::default().with_title("...")`
+- Deduplicate inscription setup helpers in inscribe ([#55](https://github.com/mvdnbrk/ord-pepecoin/pull/55))
 - Centralize wallet fee rate and postage defaults ([`6822366`](https://github.com/mvdnbrk/ord-pepecoin/commit/6822366c))
 - Remove unused `take`/`take_all` from tag module ([`923cec2`](https://github.com/mvdnbrk/ord-pepecoin/commit/923cec23))
 - Change positional `file` arg to `--file` flag ([#52](https://github.com/mvdnbrk/ord-pepecoin/pull/52))
