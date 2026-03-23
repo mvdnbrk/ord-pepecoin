@@ -44,6 +44,10 @@
 %% }
   <dt>id</dt>
   <dd class=monospace>{{ self.inscription_id }}</dd>
+%% if let Some(title) = &self.title {
+  <dt>title</dt>
+  <dd>{{ title }}</dd>
+%% }
 %% if let Ok(address) = self.chain.address_from_script(&self.output.script_pubkey ) {
   <dt>address</dt>
   <dd class=monospace>{{ address }}</dd>

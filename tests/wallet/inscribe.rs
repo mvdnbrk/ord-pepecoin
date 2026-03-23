@@ -894,7 +894,7 @@ fn inscribe_with_title() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<p class=subtitle>MyInscription</p>.*",
+    ".*<p class=subtitle>MyInscription</p>.*<dt>title</dt>\\s*<dd>MyInscription</dd>.*",
   );
 
   let json: ord::api::Inscription = ord_server
@@ -923,7 +923,7 @@ fn inscribe_with_title_escapes_html() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<p class=subtitle>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</p>.*",
+    ".*<p class=subtitle>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</p>.*<dt>title</dt>\\s*<dd>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</dd>.*",
   );
 }
 
@@ -946,7 +946,7 @@ fn inscribe_with_title_escapes_quotes() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<p class=subtitle>&quot;onclick=&quot;alert\\(1\\)&quot;</p>.*",
+    ".*<p class=subtitle>&quot;onclick=&quot;alert\\(1\\)&quot;</p>.*<dt>title</dt>\\s*<dd>&quot;onclick=&quot;alert\\(1\\)&quot;</dd>.*",
   );
 }
 
@@ -1032,7 +1032,7 @@ fn batch_inscribe_with_title() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscriptions[0].inscription),
-    ".*<p class=subtitle>Batch Title</p>.*",
+    ".*<p class=subtitle>Batch Title</p>.*<dt>title</dt>\\s*<dd>Batch Title</dd>.*",
   );
 
   let json: ord::api::Inscription = ord_server
