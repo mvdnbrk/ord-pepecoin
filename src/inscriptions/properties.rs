@@ -53,10 +53,22 @@ fn compress(cbor: Vec<u8>, tags: &mut BTreeMap<String, Vec<Vec<u8>>>) -> Result 
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Properties {
-  pub(crate) title: Option<String>,
+  title: Option<String>,
 }
 
 impl Properties {
+  pub(crate) fn with_title(mut self, title: &str) -> Self {
+    let trimmed = title.trim();
+    if !trimmed.is_empty() {
+      self.title = Some(trimmed.to_string());
+    }
+    self
+  }
+
+  pub(crate) fn title(&self) -> Option<&str> {
+    self.title.as_deref()
+  }
+
   pub(crate) fn from_tags(tags: &BTreeMap<String, Vec<Vec<u8>>>) -> Option<Self> {
     let cbor_bytes = decompress(tags)?;
 
@@ -118,9 +130,7 @@ mod tests {
 
   #[test]
   fn roundtrip_title() {
-    let props = Properties {
-      title: Some("Hello".to_string()),
-    };
+    let props = Properties::default().with_title("Hello");
     let mut tags = BTreeMap::new();
     props.to_tags(&mut tags).unwrap();
 
@@ -128,15 +138,13 @@ mod tests {
     assert!(!tags.contains_key(tag::PROPERTIES_BR));
 
     let decoded = Properties::from_tags(&tags).unwrap();
-    assert_eq!(decoded.title.unwrap(), "Hello");
+    assert_eq!(decoded.title().unwrap(), "Hello");
   }
 
   #[test]
   fn roundtrip_title_compressed() {
     let long_title: String = (0..500).map(|i| char::from(b'A' + (i % 26) as u8)).collect();
-    let props = Properties {
-      title: Some(long_title.clone()),
-    };
+    let props = Properties::default().with_title(&long_title);
     let mut tags = BTreeMap::new();
     props.to_tags(&mut tags).unwrap();
 
@@ -144,7 +152,7 @@ mod tests {
     assert!(!tags.contains_key(tag::PROPERTIES));
 
     let decoded = Properties::from_tags(&tags).unwrap();
-    assert_eq!(decoded.title.unwrap(), long_title);
+    assert_eq!(decoded.title().unwrap(), long_title);
   }
 
   #[test]
@@ -157,9 +165,7 @@ mod tests {
 
   #[test]
   fn empty_title_not_encoded() {
-    let props = Properties {
-      title: Some(String::new()),
-    };
+    let props = Properties::default().with_title("");
     let mut tags = BTreeMap::new();
     props.to_tags(&mut tags).unwrap();
     assert!(tags.is_empty());
@@ -167,9 +173,7 @@ mod tests {
 
   #[test]
   fn rejects_oversized() {
-    let props = Properties {
-      title: Some("X".repeat(4000)),
-    };
+    let props = Properties::default().with_title(&"X".repeat(4000));
     let mut tags = BTreeMap::new();
     assert!(props.to_tags(&mut tags).is_err());
   }

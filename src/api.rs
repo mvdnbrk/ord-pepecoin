@@ -7,7 +7,9 @@ pub struct Properties {
 
 impl From<crate::inscriptions::properties::Properties> for Properties {
   fn from(props: crate::inscriptions::properties::Properties) -> Self {
-    Self { title: props.title }
+    Self {
+      title: props.title().map(String::from),
+    }
   }
 }
 

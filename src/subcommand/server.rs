@@ -1288,7 +1288,7 @@ impl Server {
       )
     } else {
       let delegate = inscription.delegate_id();
-      let title = inscription.properties().and_then(|p| p.title);
+      let title = inscription.properties().and_then(|p| p.title().map(String::from));
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
