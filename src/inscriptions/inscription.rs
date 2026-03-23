@@ -37,12 +37,12 @@ impl Inscription {
 
   pub(crate) fn properties_title(&self) -> Option<String> {
     let cbor_bytes =
-      if let Some(compressed) = self.tags.get("properties;br").and_then(|v| v.first()) {
+      if let Some(compressed) = self.tags.get(tag::PROPERTIES_BR).and_then(|v| v.first()) {
         let mut decompressed = Vec::new();
         brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
         decompressed
       } else {
-        self.tags.get("properties")?.first()?.clone()
+        self.tags.get(tag::PROPERTIES)?.first()?.clone()
       };
 
     let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
@@ -71,9 +71,9 @@ impl Inscription {
       if compressed.len() < cbor.len() {
         self
           .tags
-          .insert("properties;br".to_string(), vec![compressed]);
+          .insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
       } else {
-        self.tags.insert("properties".to_string(), vec![cbor]);
+        self.tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
       }
     }
     Ok(())
