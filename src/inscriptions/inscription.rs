@@ -36,13 +36,14 @@ impl Inscription {
   }
 
   pub(crate) fn properties_title(&self) -> Option<String> {
-    let cbor_bytes = if let Some(compressed) = self.tags.get("properties;br").and_then(|v| v.first()) {
-      let mut decompressed = Vec::new();
-      brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
-      decompressed
-    } else {
-      self.tags.get("properties")?.first()?.clone()
-    };
+    let cbor_bytes =
+      if let Some(compressed) = self.tags.get("properties;br").and_then(|v| v.first()) {
+        let mut decompressed = Vec::new();
+        brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
+        decompressed
+      } else {
+        self.tags.get("properties")?.first()?.clone()
+      };
 
     let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
     if let ciborium::Value::Map(map) = value {
@@ -68,7 +69,9 @@ impl Inscription {
       brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
 
       if compressed.len() < cbor.len() {
-        self.tags.insert("properties;br".to_string(), vec![compressed]);
+        self
+          .tags
+          .insert("properties;br".to_string(), vec![compressed]);
       } else {
         self.tags.insert("properties".to_string(), vec![cbor]);
       }

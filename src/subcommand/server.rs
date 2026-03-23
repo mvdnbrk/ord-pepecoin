@@ -612,7 +612,9 @@ impl Server {
         parent_count,
         parents: parents.into_iter().take(4).collect(),
         previous,
-        properties: inscription.properties_title().map(|title| api::Properties { title: Some(title) }),
+        properties: inscription
+          .properties_title()
+          .map(|title| api::Properties { title: Some(title) }),
         sat: entry.sat,
         satpoint,
         timestamp: i64::from(entry.timestamp),
@@ -1278,7 +1280,9 @@ impl Server {
           parent_count,
           parents: parents.iter().copied().take(4).collect(),
           previous,
-          properties: inscription.properties_title().map(|title| api::Properties { title: Some(title) }),
+          properties: inscription
+            .properties_title()
+            .map(|title| api::Properties { title: Some(title) }),
           sat: entry.sat,
           satpoint,
           timestamp: i64::from(entry.timestamp),

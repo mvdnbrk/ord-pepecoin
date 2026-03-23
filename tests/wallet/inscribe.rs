@@ -912,12 +912,13 @@ fn inscribe_with_title_escapes_html() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title <script>alert('xss')</script>")
-    .write("hello.txt", "HELLOWORLD")
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .data_dir(ord_server.directory())
-    .output::<Inscribe>();
+  let output =
+    CommandBuilder::new("wallet inscribe --file hello.txt --title <script>alert('xss')</script>")
+      .write("hello.txt", "HELLOWORLD")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .data_dir(ord_server.directory())
+      .output::<Inscribe>();
 
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
@@ -934,12 +935,13 @@ fn inscribe_with_title_escapes_quotes() {
   create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
   rpc_server.mine_blocks(1);
 
-  let output = CommandBuilder::new("wallet inscribe --file hello.txt --title \"onclick=\"alert(1)\"")
-    .write("hello.txt", "HELLOWORLD")
-    .rpc_server(&rpc_server)
-    .ord_server(&ord_server)
-    .data_dir(ord_server.directory())
-    .output::<Inscribe>();
+  let output =
+    CommandBuilder::new("wallet inscribe --file hello.txt --title \"onclick=\"alert(1)\"")
+      .write("hello.txt", "HELLOWORLD")
+      .rpc_server(&rpc_server)
+      .ord_server(&ord_server)
+      .data_dir(ord_server.directory())
+      .output::<Inscribe>();
 
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
@@ -965,7 +967,10 @@ fn inscribe_without_title() {
 
   rpc_server.mine_blocks(1);
 
-  let html = ord_server.request(format!("/inscription/{}", output.inscription)).text().unwrap();
+  let html = ord_server
+    .request(format!("/inscription/{}", output.inscription))
+    .text()
+    .unwrap();
   assert!(!html.contains("<h2>"));
 
   let json: ord::api::Inscription = ord_server
@@ -992,7 +997,10 @@ fn inscribe_with_empty_title() {
 
   rpc_server.mine_blocks(1);
 
-  let html = ord_server.request(format!("/inscription/{}", output.inscription)).text().unwrap();
+  let html = ord_server
+    .request(format!("/inscription/{}", output.inscription))
+    .text()
+    .unwrap();
   assert!(!html.contains("<h2>"));
 
   let json: ord::api::Inscription = ord_server
@@ -1012,7 +1020,10 @@ fn batch_inscribe_with_title() {
 
   let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
     .write("hello.txt", "HELLOWORLD")
-    .write("batch.yaml", "inscriptions:\n  - file: hello.txt\n    title: Batch Title\n")
+    .write(
+      "batch.yaml",
+      "inscriptions:\n  - file: hello.txt\n    title: Batch Title\n",
+    )
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .data_dir(ord_server.directory())
@@ -1025,7 +1036,10 @@ fn batch_inscribe_with_title() {
   );
 
   let json: ord::api::Inscription = ord_server
-    .json_request(format!("/inscription/{}", output.inscriptions[0].inscription))
+    .json_request(format!(
+      "/inscription/{}",
+      output.inscriptions[0].inscription
+    ))
     .json()
     .unwrap();
   assert_eq!(json.properties.unwrap().title.unwrap(), "Batch Title");
