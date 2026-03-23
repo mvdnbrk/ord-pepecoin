@@ -35,14 +35,31 @@ impl Inscription {
     }
   }
 
+  const MAX_PROPERTIES_SIZE: usize = 4_000;
+  const MAX_COMPRESSION_RATIO: usize = 30;
+
   pub(crate) fn properties_title(&self) -> Option<String> {
     let cbor_bytes =
       if let Some(compressed) = self.tags.get(tag::PROPERTIES_BR).and_then(|v| v.first()) {
         let mut decompressed = Vec::new();
         brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
+
+        if decompressed.len() > Self::MAX_PROPERTIES_SIZE {
+          return None;
+        }
+        if !compressed.is_empty()
+          && decompressed.len() / compressed.len() > Self::MAX_COMPRESSION_RATIO
+        {
+          return None;
+        }
+
         decompressed
       } else {
-        self.tags.get(tag::PROPERTIES)?.first()?.clone()
+        let raw = self.tags.get(tag::PROPERTIES)?.first()?.clone();
+        if raw.len() > Self::MAX_PROPERTIES_SIZE {
+          return None;
+        }
+        raw
       };
 
     let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
@@ -64,6 +81,14 @@ impl Inscription {
       properties.insert("title", title);
       let mut cbor = Vec::new();
       ciborium::into_writer(&properties, &mut cbor)?;
+
+      if cbor.len() > Self::MAX_PROPERTIES_SIZE {
+        bail!(
+          "properties size of {} bytes exceeds {} byte limit",
+          cbor.len(),
+          Self::MAX_PROPERTIES_SIZE
+        );
+      }
 
       let mut compressed = Vec::new();
       brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
@@ -244,7 +269,8 @@ mod tests {
   #[test]
   fn set_title_long_compressed() {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
-    let long_title = "A".repeat(1000);
+    // Use a title with enough entropy to stay under the 30:1 ratio limit
+    let long_title: String = (0..500).map(|i| char::from(b'A' + (i % 26) as u8)).collect();
     inscription.set_title(&long_title).unwrap();
     assert!(inscription.tags.contains_key("properties;br"));
     assert!(!inscription.tags.contains_key("properties"));
@@ -256,6 +282,23 @@ mod tests {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
     inscription.set_title("").unwrap();
     assert!(inscription.tags.is_empty());
+    assert_eq!(inscription.properties_title(), None);
+  }
+
+  #[test]
+  fn set_title_exceeding_max_size() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    let huge_title = "X".repeat(4000);
+    assert!(inscription.set_title(&huge_title).is_err());
+  }
+
+  #[test]
+  fn properties_title_rejects_oversized_raw() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    let oversized = vec![0u8; 4001];
+    inscription
+      .tags
+      .insert(tag::PROPERTIES.to_string(), vec![oversized]);
     assert_eq!(inscription.properties_title(), None);
   }
 }
