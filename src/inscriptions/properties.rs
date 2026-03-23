@@ -144,7 +144,9 @@ mod tests {
 
   #[test]
   fn roundtrip_title_compressed() {
-    let long_title: String = (0..500).map(|i| char::from(b'A' + (i % 26) as u8)).collect();
+    let long_title: String = (0..500)
+      .map(|i| char::from(b'A' + (i % 26) as u8))
+      .collect();
     let props = Properties::default().with_title(&long_title);
     let mut tags = BTreeMap::new();
     props.to_tags(&mut tags).unwrap();
