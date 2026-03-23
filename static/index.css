@@ -34,6 +34,10 @@ h1 {
   width: 100%;
 }
 
+.subtitle {
+  margin-top: 0.25rem;
+}
+
 iframe {
   aspect-ratio: 1 / 1;
   border: none;

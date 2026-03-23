@@ -894,7 +894,7 @@ fn inscribe_with_title() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<h2>MyInscription</h2>.*",
+    ".*<p class=subtitle>MyInscription</p>.*",
   );
 
   let json: ord::api::Inscription = ord_server
@@ -923,7 +923,7 @@ fn inscribe_with_title_escapes_html() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<h2>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</h2>.*",
+    ".*<p class=subtitle>&lt;script&gt;alert\\(&apos;xss&apos;\\)&lt;/script&gt;</p>.*",
   );
 }
 
@@ -946,7 +946,7 @@ fn inscribe_with_title_escapes_quotes() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscription),
-    ".*<h2>&quot;onclick=&quot;alert\\(1\\)&quot;</h2>.*",
+    ".*<p class=subtitle>&quot;onclick=&quot;alert\\(1\\)&quot;</p>.*",
   );
 }
 
@@ -971,7 +971,7 @@ fn inscribe_without_title() {
     .request(format!("/inscription/{}", output.inscription))
     .text()
     .unwrap();
-  assert!(!html.contains("<h2>"));
+  assert!(!html.contains("class=subtitle"));
 
   let json: ord::api::Inscription = ord_server
     .json_request(format!("/inscription/{}", output.inscription))
@@ -1001,7 +1001,7 @@ fn inscribe_with_empty_title() {
     .request(format!("/inscription/{}", output.inscription))
     .text()
     .unwrap();
-  assert!(!html.contains("<h2>"));
+  assert!(!html.contains("class=subtitle"));
 
   let json: ord::api::Inscription = ord_server
     .json_request(format!("/inscription/{}", output.inscription))
@@ -1032,7 +1032,7 @@ fn batch_inscribe_with_title() {
   rpc_server.mine_blocks(1);
   ord_server.assert_response_regex(
     format!("/inscription/{}", output.inscriptions[0].inscription),
-    ".*<h2>Batch Title</h2>.*",
+    ".*<p class=subtitle>Batch Title</p>.*",
   );
 
   let json: ord::api::Inscription = ord_server
