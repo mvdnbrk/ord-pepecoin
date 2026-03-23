@@ -191,8 +191,8 @@ ordpep wallet send <DESTINATION_ADDRESS> 100pep
 ### Inscribing
 
 ```bash
-ordpep wallet inscribe /path/to/file.png
-ordpep wallet inscribe --dry-run /path/to/file.png
+ordpep wallet inscribe --file /path/to/file.png --title "Optional Title"
+ordpep wallet inscribe --dry-run --file /path/to/file.png
 ```
 
 Inscriptions use P2SH `script_sig` transactions (Pepecoin has no SegWit). Large files are split across multiple chained transactions using 240-byte data chunks. Reveal transactions are signed locally.
@@ -208,10 +208,22 @@ ordpep wallet inscribe --batch batch.yaml
 Example `batch.yaml`:
 
 ```yaml
+# Optional parents for all inscriptions in this batch
+parents:
+  - "0000000000000000000000000000000000000000000000000000000000000000i0"
+
 inscriptions:
+    # path to inscription content
   - file: first.png
-  - file: second.txt
-    destination: "PR7id..." # Optional custom destination
+    # title (optional)
+    title: "Optional Title"
+    # destination (optional, if no destination is specified a new wallet change address will be used)
+    destination: PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM
+
+  - file: second.png
+
+  # Inscription to delegate content to
+  - delegate: "1111111111111111111111111111111111111111111111111111111111111111i0"
 ```
 
 ## Credits
