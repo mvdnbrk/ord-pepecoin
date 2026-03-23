@@ -82,6 +82,7 @@ impl Properties {
 
     for (k, v) in map {
       if let (ciborium::Value::Text(key), ciborium::Value::Text(val)) = (k, v) {
+        #[allow(clippy::single_match)]
         match key.as_str() {
           KEY_TITLE => {
             let trimmed = val.trim().to_string();
