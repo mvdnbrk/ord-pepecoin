@@ -228,21 +228,18 @@ impl Inscribe {
   pub(crate) fn run(self, wallet: Wallet) -> Result {
     let client = wallet.bitcoin_client();
     let (pubkey, privkey) = self.get_key_pair(&wallet)?;
-    let fee_rate = self
-      .fee_rate
-      .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+    let fee_rate = self.fee_rate.unwrap_or(wallet.default_fee_rate());
     let commit_fee_rate = self.commit_fee_rate.unwrap_or(fee_rate);
 
-    let min = wallet.chain().min_fee_rate();
-    let min_fee_rate = FeeRate::try_from(min).unwrap();
+    let min_fee_rate = wallet.chain().min_fee_rate();
     if fee_rate < min_fee_rate {
-      bail!("fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+      bail!("fee rate must be at least {min_fee_rate} sat/vB (Pepecoin minimum relay fee)");
     }
     if commit_fee_rate < min_fee_rate {
-      bail!("commit fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+      bail!("commit fee rate must be at least {min_fee_rate} sat/vB (Pepecoin minimum relay fee)");
     }
 
-    let postage = self.postage.unwrap_or(wallet.chain().default_postage());
+    let postage = self.postage.unwrap_or(wallet.default_postage());
 
     let mut utxos = wallet
       .utxos()

@@ -45,15 +45,19 @@ impl Chain {
     }
   }
 
-  pub(crate) fn default_fee_rate(self) -> f64 {
+  pub(crate) fn default_fee_rate(self) -> FeeRate {
     match self {
-      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 10000.0,
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => {
+        FeeRate::try_from(10000.0).unwrap()
+      }
     }
   }
 
-  pub(crate) fn min_fee_rate(self) -> f64 {
+  pub(crate) fn min_fee_rate(self) -> FeeRate {
     match self {
-      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => 10000.0,
+      Self::Mainnet | Self::Regtest | Self::Signet | Self::Testnet => {
+        FeeRate::try_from(10000.0).unwrap()
+      }
     }
   }
 

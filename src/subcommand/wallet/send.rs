@@ -88,9 +88,7 @@ impl Send {
           .map(|satpoint| satpoint.outpoint)
           .collect::<HashSet<OutPoint>>();
 
-        let fee_rate = self
-          .fee_rate
-          .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+        let fee_rate = self.fee_rate.unwrap_or(wallet.default_fee_rate());
         let change_address = wallet.get_address(true)?;
 
         // Select cardinal (non-inscribed) UTXOs
@@ -189,16 +187,14 @@ impl Send {
 
     let change = [wallet.get_address(true)?, wallet.get_address(true)?];
 
-    let fee_rate = self
-      .fee_rate
-      .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+    let fee_rate = self.fee_rate.unwrap_or(wallet.default_fee_rate());
 
-    let min = wallet.chain().min_fee_rate();
-    if fee_rate < FeeRate::try_from(min).unwrap() {
-      bail!("fee rate must be at least {min} sat/vB (Pepecoin minimum relay fee)");
+    let min_fee_rate = wallet.chain().min_fee_rate();
+    if fee_rate < min_fee_rate {
+      bail!("fee rate must be at least {min_fee_rate} sat/vB (Pepecoin minimum relay fee)");
     }
 
-    let postage = self.postage.unwrap_or(wallet.chain().default_postage());
+    let postage = self.postage.unwrap_or(wallet.default_postage());
 
     let unsigned_transaction = TransactionBuilder::build_transaction_with_postage(
       satpoint,
@@ -234,9 +230,7 @@ impl Send {
       .map(|satpoint| satpoint.outpoint)
       .collect::<HashSet<OutPoint>>();
 
-    let fee_rate = self
-      .fee_rate
-      .unwrap_or(FeeRate::try_from(wallet.chain().default_fee_rate()).unwrap());
+    let fee_rate = self.fee_rate.unwrap_or(wallet.default_fee_rate());
 
     // Select ALL cardinal (non-inscribed) UTXOs
     let cardinal_utxos: Vec<(OutPoint, Amount)> = wallet

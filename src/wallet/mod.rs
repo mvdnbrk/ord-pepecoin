@@ -385,6 +385,14 @@ impl Wallet {
     self.settings.chain()
   }
 
+  pub(crate) fn default_postage(&self) -> Amount {
+    self.chain().default_postage()
+  }
+
+  pub(crate) fn default_fee_rate(&self) -> FeeRate {
+    self.chain().default_fee_rate()
+  }
+
   pub(crate) fn get_unspent_output_ranges(&self) -> Result<Vec<(OutPoint, Vec<(u128, u128)>)>> {
     if !self._has_sat_index {
       bail!("ordpep server does not have a sat index");
