@@ -41,7 +41,13 @@ impl InscriptionParser {
     push_datas = &push_datas[3..];
 
     if npieces == 0 {
-      let tags = Self::parse_tags(push_datas);
+      let mut tag_data: Vec<Vec<u8>> = push_datas.to_vec();
+      for script in &sig_scripts[1..] {
+        if let Some(more) = Self::decode_push_datas(script) {
+          tag_data.extend(more);
+        }
+      }
+      let tags = Self::parse_tags(&tag_data);
       return ParsedInscription::Complete(Inscription {
         content_type: Some(content_type),
         body: None,
@@ -60,8 +66,18 @@ impl InscriptionParser {
       // loop over chunks
       loop {
         if npieces == 0 {
-          // Parse PRC-721 tag trailer from remaining push data
-          let tags = Self::parse_tags(push_datas);
+          // Collect PRC-721 tag trailer from remaining push data
+          // in this tx and all subsequent txs in the chain
+          let mut tag_data: Vec<Vec<u8>> = push_datas.to_vec();
+          let mut remaining = &sig_scripts[1..];
+          while !remaining.is_empty() {
+            if let Some(more) = Self::decode_push_datas(&remaining[0]) {
+              tag_data.extend(more);
+            }
+            remaining = &remaining[1..];
+          }
+
+          let tags = Self::parse_tags(&tag_data);
 
           return ParsedInscription::Complete(Inscription {
             content_type: Some(content_type),
@@ -784,5 +800,197 @@ mod tests {
       Inscription::from_transactions(&[tx]),
       ParsedInscription::None
     );
+  }
+
+  #[test]
+  fn multitx_tags_with_properties_and_parent() {
+    use super::properties::Properties;
+
+    // Build real PRC-721 tags: properties (CBOR title) + parent (36-byte inscription ID)
+    let props = Properties::default().with_title("My Pepe");
+    let mut tags = BTreeMap::new();
+    props.to_tags(&mut tags).unwrap();
+
+    let parent_id = InscriptionId {
+      txid: bitcoin::Txid::all_zeros(),
+      index: 1,
+    };
+    let parent_bytes = tag::encode_inscription_id(&parent_id);
+
+    tags.insert(tag::PARENT.to_string(), vec![parent_bytes.clone()]);
+
+    // Flatten tags into push data pairs: [key_len, key, val_len, val, ...]
+    let mut tag_pushes: Vec<Vec<u8>> = Vec::new();
+    for (key, values) in &tags {
+      for val in values {
+        tag_pushes.push(key.as_bytes().to_vec());
+        tag_pushes.push(val.clone());
+      }
+    }
+
+    // tx1: header + body + first tag pair
+    let mut script1: Vec<u8> = Vec::new();
+    script1.push(3);
+    script1.extend_from_slice(b"ord");
+    script1.push(81); // npieces=1
+    script1.push(24);
+    script1.extend_from_slice(b"text/plain;charset=utf-8");
+    script1.push(0); // countdown 0
+    script1.push(4);
+    script1.extend_from_slice(b"woof");
+    // first tag pair in tx1
+    let k1 = &tag_pushes[0];
+    let v1 = &tag_pushes[1];
+    script1.push(u8::try_from(k1.len()).unwrap());
+    script1.extend_from_slice(k1);
+    script1.push(u8::try_from(v1.len()).unwrap());
+    script1.extend_from_slice(v1);
+
+    // tx2: second tag pair
+    let mut script2: Vec<u8> = Vec::new();
+    let k2 = &tag_pushes[2];
+    let v2 = &tag_pushes[3];
+    script2.push(u8::try_from(k2.len()).unwrap());
+    script2.extend_from_slice(k2);
+    script2.push(u8::try_from(v2.len()).unwrap());
+    script2.extend_from_slice(v2);
+
+    let result = InscriptionParser::parse(vec![Script::from(script1), Script::from(script2)]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, Some(b"woof".to_vec()));
+        // Verify properties decode correctly
+        let decoded_props = inscription.properties().unwrap();
+        assert_eq!(decoded_props.title().unwrap(), "My Pepe");
+        // Verify parent decodes correctly
+        let parent_values = inscription.tags.get(tag::PARENT).unwrap();
+        let decoded_parent = tag::parse_inscription_id(&parent_values[0]).unwrap();
+        assert_eq!(decoded_parent, parent_id);
+      }
+      _ => panic!("expected Complete"),
+    }
+  }
+
+  #[test]
+  fn tag_trailer_spans_two_txs() {
+    // Body in tx1, tags split across tx1 and tx2
+    let mut script1: Vec<&[u8]> = Vec::new();
+    script1.push(&[3]);
+    script1.push(b"ord");
+    script1.push(&[81]); // npieces=1
+    script1.push(&[24]);
+    script1.push(b"text/plain;charset=utf-8");
+    script1.push(&[0]); // countdown 0
+    script1.push(&[4]);
+    script1.push(b"woof");
+    // tag trailer starts here in tx1: parent key
+    script1.push(&[6]);
+    script1.push(b"parent");
+    script1.push(&[36]);
+    script1.push(&[0; 36]);
+
+    // tx2 continues the tag trailer: delegate key
+    let mut script2: Vec<&[u8]> = Vec::new();
+    script2.push(&[8]);
+    script2.push(b"delegate");
+    script2.push(&[36]);
+    script2.push(&[1; 36]);
+
+    let result = InscriptionParser::parse(vec![
+      Script::from(script1.concat()),
+      Script::from(script2.concat()),
+    ]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, Some(b"woof".to_vec()));
+        assert_eq!(inscription.tags.len(), 2);
+        assert_eq!(inscription.tags.get("parent").unwrap(), &vec![vec![0; 36]]);
+        assert_eq!(
+          inscription.tags.get("delegate").unwrap(),
+          &vec![vec![1; 36]]
+        );
+      }
+      _ => panic!("expected Complete"),
+    }
+  }
+
+  #[test]
+  fn tag_trailer_in_separate_tx_after_multitx_body() {
+    // Body spans tx1+tx2, tags entirely in tx3
+    let mut script1: Vec<&[u8]> = Vec::new();
+    script1.push(&[3]);
+    script1.push(b"ord");
+    script1.push(&[82]); // npieces=2
+    script1.push(&[24]);
+    script1.push(b"text/plain;charset=utf-8");
+    script1.push(&[81]); // countdown 1
+    script1.push(&[4]);
+    script1.push(b"woof");
+
+    let mut script2: Vec<&[u8]> = Vec::new();
+    script2.push(&[0]); // countdown 0
+    script2.push(&[5]);
+    script2.push(b" woof");
+
+    // tx3: only tags
+    let mut script3: Vec<&[u8]> = Vec::new();
+    script3.push(&[6]);
+    script3.push(b"parent");
+    script3.push(&[36]);
+    script3.push(&[0; 36]);
+
+    let result = InscriptionParser::parse(vec![
+      Script::from(script1.concat()),
+      Script::from(script2.concat()),
+      Script::from(script3.concat()),
+    ]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, Some(b"woof woof".to_vec()));
+        assert_eq!(inscription.tags.len(), 1);
+        assert_eq!(inscription.tags.get("parent").unwrap(), &vec![vec![0; 36]]);
+      }
+      _ => panic!("expected Complete"),
+    }
+  }
+
+  #[test]
+  fn delegate_only_with_tags_in_second_tx() {
+    // npieces=0 (delegate), tags split across tx1 and tx2
+    let mut script1: Vec<&[u8]> = Vec::new();
+    script1.push(&[3]);
+    script1.push(b"ord");
+    script1.push(&[0]); // npieces=0
+    script1.push(&[24]);
+    script1.push(b"text/plain;charset=utf-8");
+    // tag in tx1
+    script1.push(&[8]);
+    script1.push(b"delegate");
+    script1.push(&[36]);
+    script1.push(&[2; 36]);
+
+    // more tags in tx2
+    let mut script2: Vec<&[u8]> = Vec::new();
+    script2.push(&[6]);
+    script2.push(b"parent");
+    script2.push(&[36]);
+    script2.push(&[3; 36]);
+
+    let result = InscriptionParser::parse(vec![
+      Script::from(script1.concat()),
+      Script::from(script2.concat()),
+    ]);
+    match result {
+      ParsedInscription::Complete(inscription) => {
+        assert_eq!(inscription.body, None);
+        assert_eq!(inscription.tags.len(), 2);
+        assert_eq!(
+          inscription.tags.get("delegate").unwrap(),
+          &vec![vec![2; 36]]
+        );
+        assert_eq!(inscription.tags.get("parent").unwrap(), &vec![vec![3; 36]]);
+      }
+      _ => panic!("expected Complete"),
+    }
   }
 }

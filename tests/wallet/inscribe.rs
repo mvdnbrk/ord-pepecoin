@@ -1044,3 +1044,46 @@ fn batch_inscribe_with_title() {
     .unwrap();
   assert_eq!(json.properties.unwrap().title.unwrap(), "Batch Title");
 }
+
+#[test]
+fn inscribe_large_file_with_parent_and_title() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  // Inscribe parent
+  let parent = inscribe(&rpc_server, &ord_server);
+  rpc_server.mine_blocks(1);
+
+  // Inscribe child with large body (>1500 bytes forces multi-tx reveal)
+  // plus parent and title tags that will end up after the body countdown
+  let large_body = "X".repeat(2000);
+  let output = CommandBuilder::new(format!(
+    "wallet inscribe --file big.txt --parent {} --title LargeChild",
+    parent.inscription
+  ))
+  .write("big.txt", &large_body)
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .data_dir(ord_server.directory())
+  .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  // Verify content was indexed correctly across reveal chain
+  let response = ord_server.request(format!("/content/{}", output.inscription));
+  assert_eq!(response.status(), 200);
+  assert_eq!(response.text().unwrap(), large_body);
+
+  // Verify title parsed from multi-tx tag trailer
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  assert_eq!(json.properties.unwrap().title.unwrap(), "LargeChild");
+
+  // Verify parent relationship parsed from multi-tx tag trailer
+  assert_eq!(json.parent_count, 1);
+  assert_eq!(json.parents[0].to_string(), parent.inscription);
+}
