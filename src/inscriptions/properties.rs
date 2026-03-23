@@ -2,6 +2,7 @@ use super::*;
 
 const MAX_SIZE: usize = 4_000;
 const MAX_COMPRESSION_RATIO: usize = 30;
+const COMPRESSION_THRESHOLD: usize = 64;
 
 const KEY_TITLE: &str = "title";
 
@@ -82,14 +83,17 @@ impl Properties {
       );
     }
 
-    let mut compressed = Vec::new();
-    brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
+    if cbor.len() >= COMPRESSION_THRESHOLD {
+      let mut compressed = Vec::new();
+      brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
 
-    if compressed.len() < cbor.len() {
-      tags.insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
-    } else {
-      tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+      if compressed.len() < cbor.len() {
+        tags.insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
+        return Ok(());
+      }
     }
+
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
 
     Ok(())
   }
