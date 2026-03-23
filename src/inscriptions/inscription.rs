@@ -38,7 +38,7 @@ impl Inscription {
   const MAX_PROPERTIES_SIZE: usize = 4_000;
   const MAX_COMPRESSION_RATIO: usize = 30;
 
-  pub(crate) fn properties_title(&self) -> Option<String> {
+  fn decode_properties(&self) -> Option<Vec<(ciborium::Value, ciborium::Value)>> {
     let cbor_bytes =
       if let Some(compressed) = self.tags.get(tag::PROPERTIES_BR).and_then(|v| v.first()) {
         let mut decompressed = Vec::new();
@@ -64,11 +64,43 @@ impl Inscription {
 
     let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
     if let ciborium::Value::Map(map) = value {
-      for (k, v) in map {
-        if let (ciborium::Value::Text(key), ciborium::Value::Text(val)) = (k, v) {
-          if key == "title" && !val.is_empty() {
-            return Some(val);
-          }
+      Some(map)
+    } else {
+      None
+    }
+  }
+
+  fn encode_properties(&mut self, value: ciborium::Value) -> Result {
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&value, &mut cbor)?;
+
+    if cbor.len() > Self::MAX_PROPERTIES_SIZE {
+      bail!(
+        "properties size of {} bytes exceeds {} byte limit",
+        cbor.len(),
+        Self::MAX_PROPERTIES_SIZE
+      );
+    }
+
+    let mut compressed = Vec::new();
+    brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
+
+    if compressed.len() < cbor.len() {
+      self
+        .tags
+        .insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
+    } else {
+      self.tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+    }
+    Ok(())
+  }
+
+  pub(crate) fn properties_title(&self) -> Option<String> {
+    let map = self.decode_properties()?;
+    for (k, v) in map {
+      if let (ciborium::Value::Text(key), ciborium::Value::Text(val)) = (k, v) {
+        if key == "title" && !val.is_empty() {
+          return Some(val);
         }
       }
     }
@@ -77,29 +109,12 @@ impl Inscription {
 
   pub(crate) fn set_title(&mut self, title: &str) -> Result {
     if !title.is_empty() {
-      let mut properties = std::collections::BTreeMap::new();
-      properties.insert("title", title);
-      let mut cbor = Vec::new();
-      ciborium::into_writer(&properties, &mut cbor)?;
-
-      if cbor.len() > Self::MAX_PROPERTIES_SIZE {
-        bail!(
-          "properties size of {} bytes exceeds {} byte limit",
-          cbor.len(),
-          Self::MAX_PROPERTIES_SIZE
-        );
-      }
-
-      let mut compressed = Vec::new();
-      brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
-
-      if compressed.len() < cbor.len() {
-        self
-          .tags
-          .insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
-      } else {
-        self.tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
-      }
+      let mut map = Vec::new();
+      map.push((
+        ciborium::Value::Text("title".to_string()),
+        ciborium::Value::Text(title.to_string()),
+      ));
+      self.encode_properties(ciborium::Value::Map(map))?;
     }
     Ok(())
   }
