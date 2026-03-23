@@ -5,6 +5,12 @@ pub struct Properties {
   pub title: Option<String>,
 }
 
+impl From<crate::inscriptions::properties::Properties> for Properties {
+  fn from(props: crate::inscriptions::properties::Properties) -> Self {
+    Self { title: props.title }
+  }
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Inscription {
   pub address: Option<String>,

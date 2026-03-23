@@ -39,11 +39,8 @@ impl Inscription {
     super::properties::Properties::from_tags(&self.tags)
   }
 
-  pub(crate) fn get_properties_title(&self) -> Option<String> {
-    self.properties().and_then(|p| p.title)
-  }
-
   pub(crate) fn set_properties_title(&mut self, title: &str) -> Result {
+    let title = title.trim();
     if !title.is_empty() {
       let props = super::properties::Properties {
         title: Some(title.to_string()),
@@ -210,7 +207,7 @@ mod tests {
   fn set_properties_title_roundtrip() {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
     inscription.set_properties_title("Hello").unwrap();
-    assert_eq!(inscription.get_properties_title().unwrap(), "Hello");
+    assert_eq!(inscription.properties().unwrap().title.unwrap(), "Hello");
   }
 
   #[test]
@@ -218,6 +215,20 @@ mod tests {
     let mut inscription = Inscription::new(None, None, BTreeMap::new());
     inscription.set_properties_title("").unwrap();
     assert!(inscription.tags.is_empty());
-    assert_eq!(inscription.get_properties_title(), None);
+    assert_eq!(inscription.properties(), None);
+  }
+
+  #[test]
+  fn set_properties_title_trims_whitespace() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_properties_title("  hello  ").unwrap();
+    assert_eq!(inscription.properties().unwrap().title.unwrap(), "hello");
+  }
+
+  #[test]
+  fn set_properties_title_whitespace_only() {
+    let mut inscription = Inscription::new(None, None, BTreeMap::new());
+    inscription.set_properties_title("   ").unwrap();
+    assert_eq!(inscription.properties(), None);
   }
 }

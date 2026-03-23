@@ -88,10 +88,12 @@ impl Properties {
     let mut map = Vec::new();
 
     if let Some(title) = &self.title {
-      map.push((
-        ciborium::Value::Text(KEY_TITLE.to_string()),
-        ciborium::Value::Text(title.clone()),
-      ));
+      if !title.is_empty() {
+        map.push((
+          ciborium::Value::Text(KEY_TITLE.to_string()),
+          ciborium::Value::Text(title.clone()),
+        ));
+      }
     }
 
     if map.is_empty() {
@@ -155,12 +157,7 @@ mod tests {
     };
     let mut tags = BTreeMap::new();
     props.to_tags(&mut tags).unwrap();
-
-    // Empty title should still encode the map (title field has value)
-    // But from_tags should return None since empty title is filtered
-    if !tags.is_empty() {
-      assert_eq!(Properties::from_tags(&tags), None);
-    }
+    assert!(tags.is_empty());
   }
 
   #[test]
