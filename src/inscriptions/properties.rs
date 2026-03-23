@@ -6,6 +6,51 @@ const COMPRESSION_THRESHOLD: usize = 64;
 
 const KEY_TITLE: &str = "title";
 
+fn decompress(tags: &BTreeMap<String, Vec<Vec<u8>>>) -> Option<Vec<u8>> {
+  if let Some(compressed) = tags.get(tag::PROPERTIES_BR).and_then(|v| v.first()) {
+    let mut decompressed = Vec::new();
+    brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
+
+    if decompressed.len() > MAX_SIZE {
+      return None;
+    }
+    if !compressed.is_empty() && decompressed.len() / compressed.len() > MAX_COMPRESSION_RATIO {
+      return None;
+    }
+
+    Some(decompressed)
+  } else {
+    let raw = tags.get(tag::PROPERTIES)?.first()?.clone();
+    if raw.len() > MAX_SIZE {
+      return None;
+    }
+    Some(raw)
+  }
+}
+
+fn compress(cbor: Vec<u8>, tags: &mut BTreeMap<String, Vec<Vec<u8>>>) -> Result {
+  if cbor.len() > MAX_SIZE {
+    bail!(
+      "properties size of {} bytes exceeds {} byte limit",
+      cbor.len(),
+      MAX_SIZE
+    );
+  }
+
+  if cbor.len() >= COMPRESSION_THRESHOLD {
+    let mut compressed = Vec::new();
+    brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
+
+    if compressed.len() < cbor.len() {
+      tags.insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
+      return Ok(());
+    }
+  }
+
+  tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+  Ok(())
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Properties {
   pub(crate) title: Option<String>,
@@ -13,26 +58,7 @@ pub(crate) struct Properties {
 
 impl Properties {
   pub(crate) fn from_tags(tags: &BTreeMap<String, Vec<Vec<u8>>>) -> Option<Self> {
-    let cbor_bytes = if let Some(compressed) = tags.get(tag::PROPERTIES_BR).and_then(|v| v.first())
-    {
-      let mut decompressed = Vec::new();
-      brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed).ok()?;
-
-      if decompressed.len() > MAX_SIZE {
-        return None;
-      }
-      if !compressed.is_empty() && decompressed.len() / compressed.len() > MAX_COMPRESSION_RATIO {
-        return None;
-      }
-
-      decompressed
-    } else {
-      let raw = tags.get(tag::PROPERTIES)?.first()?.clone();
-      if raw.len() > MAX_SIZE {
-        return None;
-      }
-      raw
-    };
+    let cbor_bytes = decompress(tags)?;
 
     let value: ciborium::Value = ciborium::from_reader(cbor_bytes.as_slice()).ok()?;
     let map = match value {
@@ -75,27 +101,7 @@ impl Properties {
     let mut cbor = Vec::new();
     ciborium::into_writer(&ciborium::Value::Map(map), &mut cbor)?;
 
-    if cbor.len() > MAX_SIZE {
-      bail!(
-        "properties size of {} bytes exceeds {} byte limit",
-        cbor.len(),
-        MAX_SIZE
-      );
-    }
-
-    if cbor.len() >= COMPRESSION_THRESHOLD {
-      let mut compressed = Vec::new();
-      brotli::BrotliCompress(&mut cbor.as_slice(), &mut compressed, &Default::default())?;
-
-      if compressed.len() < cbor.len() {
-        tags.insert(tag::PROPERTIES_BR.to_string(), vec![compressed]);
-        return Ok(());
-      }
-    }
-
-    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
-
-    Ok(())
+    compress(cbor, tags)
   }
 }
 
