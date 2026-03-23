@@ -61,5 +61,4 @@ mod tests {
     assert_eq!(parse_inscription_id(&[0; 37]), None);
     assert_eq!(parse_inscription_id(&[]), None);
   }
-
 }

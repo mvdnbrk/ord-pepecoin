@@ -9,6 +9,7 @@ use {
   },
   super::job::{sanitize_batch_name, RevealJob, RevealTx, MEMPOOL_CHAIN_LIMIT},
   super::*,
+  crate::inscriptions::properties::Properties,
   crate::wallet::{signer::LocalSigner, Wallet},
   bitcoin::{
     blockdata::script,
@@ -321,7 +322,7 @@ impl Inscribe {
         }
 
         if let Some(ref title) = entry.title {
-          inscription.set_title(title)?;
+          inscription.set_properties(Properties::default().with_title(title))?;
         }
 
         inscriptions.push((inscription, path, delegate_id, entry.title.clone()));
@@ -615,7 +616,7 @@ impl Inscribe {
       };
 
       if let Some(ref title) = self.title {
-        inscription.set_title(title)?;
+        inscription.set_properties(Properties::default().with_title(title))?;
       }
 
       let reveal_tx_destination = self
