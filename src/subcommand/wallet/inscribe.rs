@@ -213,6 +213,69 @@ fn sign_reveal_chain(
   })
 }
 
+fn validate_delegate(wallet: &Wallet, delegate_id: InscriptionId) -> Result<()> {
+  let delegate = wallet
+    .get_inscription(delegate_id)?
+    .ok_or_else(|| anyhow!("delegate {delegate_id} not found"))?;
+
+  if delegate.delegate.is_some() {
+    bail!("delegate {delegate_id} is itself a delegate");
+  }
+
+  Ok(())
+}
+
+fn set_delegate_tag(inscription: &mut Inscription, delegate_id: InscriptionId) {
+  inscription.tags.insert(
+    crate::inscriptions::tag::DELEGATE.to_string(),
+    vec![crate::inscriptions::tag::encode_inscription_id(
+      &delegate_id,
+    )],
+  );
+}
+
+fn add_parent_tag(inscription: &mut Inscription, parent_id: &InscriptionId) {
+  inscription
+    .tags
+    .entry(crate::inscriptions::tag::PARENT.to_string())
+    .or_default()
+    .push(crate::inscriptions::tag::encode_inscription_id(parent_id));
+}
+
+fn build_parent_signing<'a>(
+  wallet: &'a Wallet,
+  parent_entries: &'a [(&'a ParentInfo, OutPoint)],
+) -> Option<(&'a Wallet, &'a [(&'a ParentInfo, OutPoint)])> {
+  if parent_entries.is_empty() {
+    None
+  } else {
+    Some((wallet, parent_entries))
+  }
+}
+
+struct FileMetadata {
+  file_name: String,
+  content_type: String,
+  file_size: u64,
+}
+
+fn extract_file_metadata(path: Option<&Path>, delegate_id: Option<InscriptionId>) -> FileMetadata {
+  FileMetadata {
+    file_name: path
+      .and_then(|p| p.file_name())
+      .map(|n| n.to_string_lossy().to_string())
+      .unwrap_or_else(|| delegate_id.unwrap().to_string()),
+    content_type: path
+      .and_then(|p| Media::content_type_for_path(p).ok())
+      .unwrap_or("application/octet-stream")
+      .to_string(),
+    file_size: path
+      .and_then(|p| fs::metadata(p).ok())
+      .map(|m| m.len())
+      .unwrap_or(0),
+  }
+}
+
 impl Inscribe {
   pub(crate) fn validate_files(&self) -> Result {
     if let Some(ref file) = self.file {
@@ -292,21 +355,9 @@ impl Inscribe {
             None,
           )
         } else if let Some(delegate_id) = entry.delegate {
-          let delegate = wallet
-            .get_inscription(delegate_id)?
-            .ok_or_else(|| anyhow!("delegate {delegate_id} not found"))?;
-
-          if delegate.delegate.is_some() {
-            bail!("delegate {delegate_id} is itself a delegate");
-          }
-
+          validate_delegate(&wallet, delegate_id)?;
           let mut inscription = Inscription::new(None, None, BTreeMap::new());
-          inscription.tags.insert(
-            crate::inscriptions::tag::DELEGATE.to_string(),
-            vec![crate::inscriptions::tag::encode_inscription_id(
-              &delegate_id,
-            )],
-          );
+          set_delegate_tag(&mut inscription, delegate_id);
           (inscription, None, Some(delegate_id))
         } else {
           unreachable!()
@@ -314,11 +365,7 @@ impl Inscribe {
 
         // Add parent tags from batch file
         for parent_id in &batch_file.parents {
-          inscription
-            .tags
-            .entry(crate::inscriptions::tag::PARENT.to_string())
-            .or_default()
-            .push(crate::inscriptions::tag::encode_inscription_id(parent_id));
+          add_parent_tag(&mut inscription, parent_id);
         }
 
         if let Some(ref title) = entry.title {
@@ -488,11 +535,7 @@ impl Inscribe {
               .zip(current_parent_outpoints.iter())
               .map(|(pi, po)| (pi, *po))
               .collect();
-            let parent_signing = if parent_entries.is_empty() {
-              None
-            } else {
-              Some((&wallet, parent_entries.as_slice()))
-            };
+            let parent_signing = build_parent_signing(&wallet, &parent_entries);
             let signed = sign_reveal_chain(chain, commit_out, &privkey, &secp, parent_signing)?;
 
             // Update parent outpoints: after this chain's first reveal tx,
@@ -511,24 +554,13 @@ impl Inscribe {
             });
 
             let (_ins, path, delegate_id, title) = &chunk_inscriptions_with_metadata[i];
+            let meta = extract_file_metadata(path.as_deref(), *delegate_id);
 
             all_jobs.push(RevealJob {
               title: title.clone(),
-              file_name: path
-                .as_ref()
-                .and_then(|p| p.file_name())
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| delegate_id.unwrap().to_string()),
-              content_type: path
-                .as_ref()
-                .and_then(|p| Media::content_type_for_path(p).ok())
-                .unwrap_or("application/octet-stream")
-                .to_string(),
-              file_size: path
-                .as_ref()
-                .and_then(|p| fs::metadata(p).ok())
-                .map(|m| m.len())
-                .unwrap_or(0),
+              file_name: meta.file_name,
+              content_type: meta.content_type,
+              file_size: meta.file_size,
               commit_txid,
               commit_raw_hex: commit_raw_hex.clone(),
               commit_broadcast: false,
@@ -582,21 +614,9 @@ impl Inscribe {
       let mut inscription = if let Some(ref file) = self.file {
         Inscription::from_file(wallet.chain(), file)?
       } else if let Some(delegate_id) = self.delegate {
-        let delegate = wallet
-          .get_inscription(delegate_id)?
-          .ok_or_else(|| anyhow!("delegate {delegate_id} not found"))?;
-
-        if delegate.delegate.is_some() {
-          bail!("delegate {delegate_id} is itself a delegate");
-        }
-
+        validate_delegate(&wallet, delegate_id)?;
         let mut inscription = Inscription::new(None, None, BTreeMap::new());
-        inscription.tags.insert(
-          crate::inscriptions::tag::DELEGATE.to_string(),
-          vec![crate::inscriptions::tag::encode_inscription_id(
-            &delegate_id,
-          )],
-        );
+        set_delegate_tag(&mut inscription, delegate_id);
         inscription
       } else {
         unreachable!()
@@ -604,10 +624,7 @@ impl Inscribe {
 
       let parent_info = if let Some(ref parent_id) = self.parent {
         let info = Self::get_parent_info(parent_id, &wallet)?;
-        inscription.tags.insert(
-          crate::inscriptions::tag::PARENT.to_string(),
-          vec![crate::inscriptions::tag::encode_inscription_id(parent_id)],
-        );
+        add_parent_tag(&mut inscription, parent_id);
         // Exclude parent UTXO from available funding UTXOs
         utxos.remove(&info.location.outpoint);
         Some(info)
@@ -698,37 +715,20 @@ impl Inscribe {
           .as_ref()
           .map(|pi| vec![(pi, pi.location.outpoint)])
           .unwrap_or_default();
-        let parent_signing = if parent_entries.is_empty() {
-          None
-        } else {
-          Some((&wallet, parent_entries.as_slice()))
-        };
+        let parent_signing = build_parent_signing(&wallet, &parent_entries);
         let signed = sign_reveal_chain(chain, parent, &privkey, &secp, parent_signing)?;
 
         let jobs_dir = RevealJob::jobs_dir(wallet.settings(), wallet.name());
         fs::create_dir_all(&jobs_dir)?;
         let job_file = jobs_dir.join(format!("{}.json", commit));
 
+        let meta = extract_file_metadata(self.file.as_deref(), self.delegate);
+
         let mut job = RevealJob {
           title: self.title.clone(),
-          file_name: self
-            .file
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| self.delegate.unwrap().to_string()),
-          content_type: self
-            .file
-            .as_ref()
-            .and_then(|p| Media::content_type_for_path(p).ok())
-            .unwrap_or("application/octet-stream")
-            .to_string(),
-          file_size: self
-            .file
-            .as_ref()
-            .and_then(|p| fs::metadata(p).ok())
-            .map(|m| m.len())
-            .unwrap_or(0),
+          file_name: meta.file_name,
+          content_type: meta.content_type,
+          file_size: meta.file_size,
           commit_txid: commit,
           commit_raw_hex,
           commit_broadcast: true,
