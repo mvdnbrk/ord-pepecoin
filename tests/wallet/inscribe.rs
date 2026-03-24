@@ -1174,6 +1174,30 @@ fn batch_inscribe_with_traits() {
 }
 
 #[test]
+fn inscribe_with_compress() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let body = "hello world! ".repeat(100);
+
+  let output = CommandBuilder::new("wallet inscribe --file hello.txt --compress")
+    .write("hello.txt", &body)
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  let response = ord_server.request(format!("/content/{}", output.inscription));
+  assert_eq!(response.status(), 200);
+  assert_eq!(response.headers().get("content-encoding").unwrap(), "br");
+}
+
+#[test]
 fn inscribe_rejects_case_insensitive_duplicate_traits() {
   let rpc_server = test_bitcoincore_rpc::spawn();
   let ord_server = TestServer::spawn(&rpc_server);

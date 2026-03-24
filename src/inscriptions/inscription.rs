@@ -43,6 +43,62 @@ impl Inscription {
     props.to_tags(&mut self.tags)
   }
 
+  /// Compress the inscription content with Brotli. Only keeps the compressed
+  /// version if it is smaller than the original. Returns the number of bytes
+  /// saved (0 if compression was not beneficial).
+  pub(crate) fn compress(&mut self) -> Result<usize> {
+    let body = match &self.body {
+      Some(b) if !b.is_empty() => b,
+      _ => return Ok(0),
+    };
+
+    let mode = match self.content_type() {
+      Some(ct) if ct.starts_with("text/") || ct.contains("javascript") || ct.contains("json") => {
+        brotli::enc::backward_references::BrotliEncoderMode::BROTLI_MODE_TEXT
+      }
+      Some(ct) if ct.contains("font") || ct.contains("woff") => {
+        brotli::enc::backward_references::BrotliEncoderMode::BROTLI_MODE_FONT
+      }
+      _ => brotli::enc::backward_references::BrotliEncoderMode::BROTLI_MODE_GENERIC,
+    };
+
+    let mut params = brotli::enc::BrotliEncoderParams::default();
+    params.mode = mode;
+    params.quality = 11;
+    params.lgblock = 24;
+    params.lgwin = 24;
+    params.size_hint = body.len();
+
+    let mut compressed = Vec::new();
+    brotli::BrotliCompress(&mut body.as_slice(), &mut compressed, &params)?;
+
+    // Verify roundtrip decompression
+    let mut decompressed = Vec::new();
+    brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed)?;
+    if decompressed != *body {
+      bail!("brotli decompression roundtrip failed");
+    }
+
+    if compressed.len() < body.len() {
+      let saved = body.len() - compressed.len();
+      self.body = Some(compressed);
+      self
+        .tags
+        .insert(tag::CONTENT_ENCODING.to_string(), vec![b"br".to_vec()]);
+      Ok(saved)
+    } else {
+      Ok(0)
+    }
+  }
+
+  pub(crate) fn content_encoding(&self) -> Option<&str> {
+    self
+      .tags
+      .get(tag::CONTENT_ENCODING)
+      .and_then(|values| values.first())
+      .and_then(|v| str::from_utf8(v).ok())
+  }
+
   pub(crate) fn from_transactions(txs: &[Transaction]) -> ParsedInscription {
     let mut sig_scripts = Vec::with_capacity(txs.len());
     for tx in txs {
@@ -227,5 +283,60 @@ mod tests {
     let props = super::properties::Properties::default().with_title("   ");
     inscription.set_properties(props).unwrap();
     assert_eq!(inscription.properties(), None);
+  }
+
+  #[test]
+  fn compress_reduces_repetitive_text() {
+    let body = "hello world! ".repeat(100);
+    let original_len = body.len();
+    let mut inscription = Inscription::new(
+      Some(b"text/plain".to_vec()),
+      Some(body.into_bytes()),
+      BTreeMap::new(),
+    );
+
+    let saved = inscription.compress().unwrap();
+    assert!(
+      saved > 0,
+      "compression should save bytes on repetitive text"
+    );
+    assert_eq!(
+      inscription.content_encoding(),
+      Some("br"),
+      "should set content-encoding to br"
+    );
+    assert!(inscription.body.as_ref().unwrap().len() < original_len);
+  }
+
+  #[test]
+  fn compress_skips_when_not_beneficial() {
+    // Tiny body — Brotli overhead exceeds savings
+    let body = vec![42u8; 3];
+    let mut inscription = Inscription::new(
+      Some(b"application/octet-stream".to_vec()),
+      Some(body.clone()),
+      BTreeMap::new(),
+    );
+
+    let saved = inscription.compress().unwrap();
+    assert_eq!(saved, 0);
+    assert_eq!(inscription.content_encoding(), None);
+    assert_eq!(inscription.body.as_ref().unwrap(), &body);
+  }
+
+  #[test]
+  fn compress_empty_body() {
+    let mut inscription = Inscription::new(
+      Some(b"text/plain".to_vec()),
+      Some(Vec::new()),
+      BTreeMap::new(),
+    );
+    assert_eq!(inscription.compress().unwrap(), 0);
+  }
+
+  #[test]
+  fn compress_no_body() {
+    let mut inscription = Inscription::new(Some(b"text/plain".to_vec()), None, BTreeMap::new());
+    assert_eq!(inscription.compress().unwrap(), 0);
   }
 }
