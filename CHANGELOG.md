@@ -7,6 +7,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-03-24
+
 ### Added
 - Link address on inscription page to address page ([`49a02bc`](https://github.com/mvdnbrk/ord-pepecoin/commit/49a02bc1))
 
