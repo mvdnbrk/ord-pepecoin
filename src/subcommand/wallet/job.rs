@@ -48,7 +48,7 @@ pub(crate) struct RevealJob {
   #[serde(skip_serializing_if = "Option::is_none", default)]
   pub(crate) delegate_id: Option<InscriptionId>,
   #[serde(skip_serializing_if = "Option::is_none", default)]
-  pub(crate) traits: Option<BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
+  pub(crate) traits: Option<Vec<(String, crate::inscriptions::properties::TraitValue)>>,
 }
 
 impl RevealJob {

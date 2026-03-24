@@ -267,7 +267,7 @@ struct FileMetadata {
 
 fn load_json_traits(
   path: &Path,
-) -> Result<BTreeMap<String, crate::inscriptions::properties::TraitValue>> {
+) -> Result<Vec<(String, crate::inscriptions::properties::TraitValue)>> {
   let content = fs::read_to_string(path).context("failed to read JSON traits file")?;
   let value: serde_json::Value =
     serde_json::from_str(&content).context("failed to parse JSON traits file")?;
@@ -280,7 +280,7 @@ fn load_json_traits(
     bail!("JSON traits file must not contain `title` — use --title flag instead");
   }
 
-  let mut traits = BTreeMap::new();
+  let mut traits = Vec::new();
   for (key, val) in obj {
     let trait_val = match val {
       serde_json::Value::String(s) => {
@@ -296,7 +296,7 @@ fn load_json_traits(
       serde_json::Value::Null => crate::inscriptions::properties::TraitValue::Null,
       _ => bail!("trait `{key}` must be a string, boolean, integer, or null"),
     };
-    traits.insert(key.clone(), trait_val);
+    traits.push((key.clone(), trait_val));
   }
 
   Ok(traits)
@@ -304,7 +304,7 @@ fn load_json_traits(
 
 fn build_batch_properties(
   title: Option<&str>,
-  traits: Option<&BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
+  traits: Option<&Vec<(String, crate::inscriptions::properties::TraitValue)>>,
 ) -> Properties {
   let mut props = Properties::default();
   if let Some(title) = title {

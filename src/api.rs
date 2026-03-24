@@ -4,7 +4,7 @@ use super::*;
 pub struct Properties {
   pub title: Option<String>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub traits: Option<BTreeMap<String, crate::inscriptions::TraitValue>>,
+  pub traits: Option<Vec<(String, crate::inscriptions::TraitValue)>>,
 }
 
 impl From<crate::inscriptions::properties::Properties> for Properties {
@@ -12,7 +12,7 @@ impl From<crate::inscriptions::properties::Properties> for Properties {
     let traits = if props.traits().is_empty() {
       None
     } else {
-      Some(props.traits().clone())
+      Some(props.traits().to_vec())
     };
     Self {
       title: props.title().map(String::from),

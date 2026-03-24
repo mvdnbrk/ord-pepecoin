@@ -38,23 +38,28 @@ impl TraitValue {
     }
   }
 
-  fn from_cbor(value: &ciborium::Value) -> Option<Self> {
+  /// Decode a trait value from CBOR.
+  /// Returns `Ok(Some(val))` for valid types, `Ok(None)` for empty strings
+  /// (skipped), and `Err(())` for unsupported types (floats, bytes, arrays,
+  /// maps, etc.) which invalidate the entire properties tag.
+  fn from_cbor(value: &ciborium::Value) -> std::result::Result<Option<Self>, ()> {
     match value {
-      ciborium::Value::Null => Some(TraitValue::Null),
-      ciborium::Value::Bool(b) => Some(TraitValue::Bool(*b)),
+      ciborium::Value::Null => Ok(Some(TraitValue::Null)),
+      ciborium::Value::Bool(b) => Ok(Some(TraitValue::Bool(*b))),
       ciborium::Value::Integer(n) => {
-        let n: i64 = (*n).try_into().ok()?;
-        Some(TraitValue::Integer(n))
+        let n: i64 = (*n).try_into().map_err(|_| ())?;
+        Ok(Some(TraitValue::Integer(n)))
       }
       ciborium::Value::Text(s) => {
         let trimmed = s.trim().to_string();
         if trimmed.is_empty() {
-          None
+          Ok(None)
         } else {
-          Some(TraitValue::String(trimmed))
+          Ok(Some(TraitValue::String(trimmed)))
         }
       }
-      _ => None,
+      // Floats, bytes, arrays, maps, and other CBOR types are rejected
+      _ => Err(()),
     }
   }
 }
@@ -107,7 +112,7 @@ fn compress(cbor: Vec<u8>, tags: &mut BTreeMap<String, Vec<Vec<u8>>>) -> Result 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct Properties {
   title: Option<String>,
-  traits: BTreeMap<String, TraitValue>,
+  traits: Vec<(String, TraitValue)>,
 }
 
 impl Properties {
@@ -123,16 +128,16 @@ impl Properties {
   pub(crate) fn with_trait(mut self, key: &str, value: TraitValue) -> Self {
     let key = key.trim();
     if !key.is_empty() {
-      self.traits.insert(key.to_string(), value);
+      self.traits.push((key.to_string(), value));
     }
     self
   }
 
-  pub(crate) fn with_traits(mut self, traits: BTreeMap<String, TraitValue>) -> Self {
+  pub(crate) fn with_traits(mut self, traits: Vec<(String, TraitValue)>) -> Self {
     for (k, v) in traits {
       let k = k.trim().to_string();
       if !k.is_empty() {
-        self.traits.insert(k, v);
+        self.traits.push((k, v));
       }
     }
     self
@@ -142,7 +147,7 @@ impl Properties {
     self.title.as_deref()
   }
 
-  pub(crate) fn traits(&self) -> &BTreeMap<String, TraitValue> {
+  pub(crate) fn traits(&self) -> &[(String, TraitValue)] {
     &self.traits
   }
 
@@ -166,13 +171,24 @@ impl Properties {
           }
         }
         (ciborium::Value::Text(key), ciborium::Value::Map(trait_map)) if key == KEY_TRAITS => {
+          let mut seen = HashSet::new();
           for (tk, tv) in trait_map {
             if let ciborium::Value::Text(trait_key) = tk {
               let trait_key = trait_key.trim().to_string();
-              if let Some(trait_val) = TraitValue::from_cbor(tv) {
-                if !trait_key.is_empty() {
-                  props.traits.entry(trait_key).or_insert(trait_val);
+              if trait_key.is_empty() {
+                continue;
+              }
+              // Reject duplicate trait names
+              if !seen.insert(trait_key.clone()) {
+                return None;
+              }
+              // Reject unsupported value types (floats, bytes, arrays, maps)
+              match TraitValue::from_cbor(tv) {
+                Ok(Some(trait_val)) => {
+                  props.traits.push((trait_key, trait_val));
                 }
+                Ok(None) => {} // empty string — skip
+                Err(()) => return None,
               }
             }
           }
@@ -267,13 +283,14 @@ mod tests {
     props.to_tags(&mut tags).unwrap();
 
     let decoded = Properties::from_tags(&tags).unwrap();
+    // Order preserved: background first, eyes second
     assert_eq!(
-      decoded.traits().get("background").unwrap(),
-      &TraitValue::String("gold".into())
+      decoded.traits()[0],
+      ("background".into(), TraitValue::String("gold".into()))
     );
     assert_eq!(
-      decoded.traits().get("eyes").unwrap(),
-      &TraitValue::String("laser".into())
+      decoded.traits()[1],
+      ("eyes".into(), TraitValue::String("laser".into()))
     );
     assert_eq!(decoded.traits().len(), 2);
   }
@@ -290,12 +307,12 @@ mod tests {
     let decoded = Properties::from_tags(&tags).unwrap();
     assert_eq!(decoded.title().unwrap(), "Rare Pepe #1");
     assert_eq!(
-      decoded.traits().get("background").unwrap(),
-      &TraitValue::String("gold".into())
+      decoded.traits()[0],
+      ("background".into(), TraitValue::String("gold".into()))
     );
     assert_eq!(
-      decoded.traits().get("level").unwrap(),
-      &TraitValue::Integer(42)
+      decoded.traits()[1],
+      ("level".into(), TraitValue::Integer(42))
     );
   }
 
@@ -311,25 +328,23 @@ mod tests {
 
     let decoded = Properties::from_tags(&tags).unwrap();
     assert_eq!(
-      decoded.traits().get("name").unwrap(),
-      &TraitValue::String("pepe".into())
+      decoded.traits()[0],
+      ("name".into(), TraitValue::String("pepe".into()))
     );
+    assert_eq!(decoded.traits()[1], ("rare".into(), TraitValue::Bool(true)));
     assert_eq!(
-      decoded.traits().get("rare").unwrap(),
-      &TraitValue::Bool(true)
+      decoded.traits()[2],
+      ("level".into(), TraitValue::Integer(99))
     );
-    assert_eq!(
-      decoded.traits().get("level").unwrap(),
-      &TraitValue::Integer(99)
-    );
-    assert_eq!(decoded.traits().get("extra").unwrap(), &TraitValue::Null);
+    assert_eq!(decoded.traits()[3], ("extra".into(), TraitValue::Null));
   }
 
   #[test]
   fn with_traits_bulk() {
-    let mut traits = BTreeMap::new();
-    traits.insert("a".to_string(), TraitValue::String("1".into()));
-    traits.insert("b".to_string(), TraitValue::Integer(2));
+    let traits = vec![
+      ("a".to_string(), TraitValue::String("1".into())),
+      ("b".to_string(), TraitValue::Integer(2)),
+    ];
     let props = Properties::default().with_traits(traits);
     assert_eq!(props.traits().len(), 2);
   }
@@ -344,8 +359,8 @@ mod tests {
   fn whitespace_trimmed_in_trait_key() {
     let props = Properties::default().with_trait("  bg  ", TraitValue::String("gold".into()));
     assert_eq!(
-      props.traits().get("bg").unwrap(),
-      &TraitValue::String("gold".into())
+      props.traits()[0],
+      ("bg".into(), TraitValue::String("gold".into()))
     );
   }
 
@@ -386,8 +401,7 @@ mod tests {
   }
 
   #[test]
-  fn duplicate_trait_keys_first_wins() {
-    // Craft CBOR with duplicate trait keys — first value should win
+  fn duplicate_trait_keys_rejected() {
     let trait_pairs = vec![
       (
         ciborium::Value::Text("bg".to_string()),
@@ -408,12 +422,93 @@ mod tests {
     let mut tags = BTreeMap::new();
     tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
 
-    let decoded = Properties::from_tags(&tags).unwrap();
-    assert_eq!(
-      decoded.traits().get("bg").unwrap(),
-      &TraitValue::String("gold".into())
-    );
-    assert_eq!(decoded.traits().len(), 1);
+    assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn float_trait_value_rejected() {
+    let trait_pairs = vec![(
+      ciborium::Value::Text("score".to_string()),
+      ciborium::Value::Float(1.5),
+    )];
+    let cbor_map = ciborium::Value::Map(vec![(
+      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Map(trait_pairs),
+    )]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn array_trait_value_rejected() {
+    let trait_pairs = vec![(
+      ciborium::Value::Text("tags".to_string()),
+      ciborium::Value::Array(vec![ciborium::Value::Text("a".to_string())]),
+    )];
+    let cbor_map = ciborium::Value::Map(vec![(
+      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Map(trait_pairs),
+    )]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn nested_map_trait_value_rejected() {
+    let trait_pairs = vec![(
+      ciborium::Value::Text("nested".to_string()),
+      ciborium::Value::Map(vec![(
+        ciborium::Value::Text("key".to_string()),
+        ciborium::Value::Text("val".to_string()),
+      )]),
+    )];
+    let cbor_map = ciborium::Value::Map(vec![(
+      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Map(trait_pairs),
+    )]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn invalid_trait_invalidates_entire_properties_including_title() {
+    // Valid title + invalid trait (float) → entire properties rejected
+    let cbor_map = ciborium::Value::Map(vec![
+      (
+        ciborium::Value::Text("title".to_string()),
+        ciborium::Value::Text("Rare Pepe".to_string()),
+      ),
+      (
+        ciborium::Value::Text("traits".to_string()),
+        ciborium::Value::Map(vec![(
+          ciborium::Value::Text("score".to_string()),
+          ciborium::Value::Float(9.5),
+        )]),
+      ),
+    ]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    // Title is lost — all-or-nothing
+    assert_eq!(Properties::from_tags(&tags), None);
   }
 
   #[test]
@@ -425,8 +520,8 @@ mod tests {
     let decoded = Properties::from_tags(&tags).unwrap();
     assert!(decoded.title().is_none());
     assert_eq!(
-      decoded.traits().get("rarity").unwrap(),
-      &TraitValue::String("epic".into())
+      decoded.traits()[0],
+      ("rarity".into(), TraitValue::String("epic".into()))
     );
   }
 }

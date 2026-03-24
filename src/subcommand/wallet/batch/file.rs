@@ -1,4 +1,6 @@
-use {super::*, std::path::Path};
+use {
+  super::*, crate::inscriptions::properties::TraitValue, serde::de::Deserializer, std::path::Path,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct BatchFile {
@@ -13,7 +15,8 @@ pub(crate) struct BatchEntry {
   pub(crate) delegate: Option<InscriptionId>,
   pub(crate) destination: Option<Address>,
   pub(crate) title: Option<String>,
-  pub(crate) traits: Option<BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
+  #[serde(default, deserialize_with = "deserialize_traits")]
+  pub(crate) traits: Option<Vec<(String, crate::inscriptions::properties::TraitValue)>>,
 }
 
 impl BatchFile {
@@ -47,4 +50,45 @@ impl BatchFile {
 
     Ok(batch_file)
   }
+}
+
+fn deserialize_traits<'de, D>(
+  deserializer: D,
+) -> std::result::Result<Option<Vec<(String, TraitValue)>>, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  let value: Option<serde_yaml::Value> = Option::deserialize(deserializer)?;
+  let mapping = match value {
+    Some(serde_yaml::Value::Mapping(m)) => m,
+    Some(_) => return Err(serde::de::Error::custom("traits must be a mapping")),
+    None => return Ok(None),
+  };
+
+  let mut traits = Vec::new();
+  for (k, v) in mapping {
+    let key = k
+      .as_str()
+      .ok_or_else(|| serde::de::Error::custom("trait key must be a string"))?
+      .to_string();
+    let val = match v {
+      serde_yaml::Value::String(s) => TraitValue::String(s),
+      serde_yaml::Value::Bool(b) => TraitValue::Bool(b),
+      serde_yaml::Value::Number(n) => {
+        let n = n
+          .as_i64()
+          .ok_or_else(|| serde::de::Error::custom("trait value must be an integer, not float"))?;
+        TraitValue::Integer(n)
+      }
+      serde_yaml::Value::Null => TraitValue::Null,
+      _ => {
+        return Err(serde::de::Error::custom(
+          "trait value must be a string, boolean, integer, or null",
+        ))
+      }
+    };
+    traits.push((key, val));
+  }
+
+  Ok(Some(traits))
 }

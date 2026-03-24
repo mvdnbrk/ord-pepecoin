@@ -1118,16 +1118,17 @@ fn inscribe_with_json_traits() {
   let props = json.properties.unwrap();
   assert_eq!(props.title.unwrap(), "MyPepe");
   let traits = props.traits.unwrap();
+  // Order preserved from JSON file
   assert_eq!(
-    traits.get("background").unwrap(),
-    &ord::TraitValue::String("gold".into())
+    traits[0],
+    ("background".into(), ord::TraitValue::String("gold".into()))
   );
   assert_eq!(
-    traits.get("eyes").unwrap(),
-    &ord::TraitValue::String("laser".into())
+    traits[1],
+    ("eyes".into(), ord::TraitValue::String("laser".into()))
   );
-  assert_eq!(traits.get("level").unwrap(), &ord::TraitValue::Integer(42));
-  assert_eq!(traits.get("rare").unwrap(), &ord::TraitValue::Bool(true));
+  assert_eq!(traits[2], ("level".into(), ord::TraitValue::Integer(42)));
+  assert_eq!(traits[3], ("rare".into(), ord::TraitValue::Bool(true)));
 }
 
 #[test]
@@ -1161,12 +1162,13 @@ fn batch_inscribe_with_traits() {
   let props = json.properties.unwrap();
   assert_eq!(props.title.unwrap(), "Batch Pepe");
   let traits = props.traits.unwrap();
+  // Order preserved from YAML
   assert_eq!(
-    traits.get("background").unwrap(),
-    &ord::TraitValue::String("green".into())
+    traits[0],
+    ("background".into(), ord::TraitValue::String("green".into()))
   );
   assert_eq!(
-    traits.get("rarity").unwrap(),
-    &ord::TraitValue::String("epic".into())
+    traits[1],
+    ("rarity".into(), ord::TraitValue::String("epic".into()))
   );
 }

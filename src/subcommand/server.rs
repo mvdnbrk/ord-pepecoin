@@ -1295,7 +1295,7 @@ impl Server {
       let title = props.as_ref().and_then(|p| p.title().map(String::from));
       let traits = props
         .as_ref()
-        .map(|p| p.traits().clone())
+        .map(|p| p.traits().to_vec())
         .unwrap_or_default();
       Ok(
         InscriptionHtml {
