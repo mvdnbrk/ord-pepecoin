@@ -1087,3 +1087,86 @@ fn inscribe_large_file_with_parent_and_title() {
   assert_eq!(json.parent_count, 1);
   assert_eq!(json.parents[0].to_string(), parent.inscription);
 }
+
+#[test]
+fn inscribe_with_json_traits() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new(
+    "wallet inscribe --file hello.txt --title MyPepe --json-traits traits.json",
+  )
+  .write("hello.txt", "HELLOWORLD")
+  .write(
+    "traits.json",
+    r#"{"background": "gold", "eyes": "laser", "level": 42, "rare": true}"#,
+  )
+  .rpc_server(&rpc_server)
+  .ord_server(&ord_server)
+  .data_dir(ord_server.directory())
+  .output::<Inscribe>();
+
+  rpc_server.mine_blocks(1);
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!("/inscription/{}", output.inscription))
+    .json()
+    .unwrap();
+  let props = json.properties.unwrap();
+  assert_eq!(props.title.unwrap(), "MyPepe");
+  let traits = props.traits.unwrap();
+  assert_eq!(
+    traits.get("background").unwrap(),
+    &ord::TraitValue::String("gold".into())
+  );
+  assert_eq!(
+    traits.get("eyes").unwrap(),
+    &ord::TraitValue::String("laser".into())
+  );
+  assert_eq!(traits.get("level").unwrap(), &ord::TraitValue::Integer(42));
+  assert_eq!(traits.get("rare").unwrap(), &ord::TraitValue::Bool(true));
+}
+
+#[test]
+fn batch_inscribe_with_traits() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  let output = CommandBuilder::new("wallet inscribe --batch batch.yaml")
+    .write("hello.txt", "HELLOWORLD")
+    .write(
+      "batch.yaml",
+      "inscriptions:\n  - file: hello.txt\n    title: Batch Pepe\n    traits:\n      background: green\n      rarity: epic\n",
+    )
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .output::<BatchOutput>();
+
+  rpc_server.mine_blocks(1);
+
+  let json: ord::api::Inscription = ord_server
+    .json_request(format!(
+      "/inscription/{}",
+      output.inscriptions[0].inscription
+    ))
+    .json()
+    .unwrap();
+  let props = json.properties.unwrap();
+  assert_eq!(props.title.unwrap(), "Batch Pepe");
+  let traits = props.traits.unwrap();
+  assert_eq!(
+    traits.get("background").unwrap(),
+    &ord::TraitValue::String("green".into())
+  );
+  assert_eq!(
+    traits.get("rarity").unwrap(),
+    &ord::TraitValue::String("epic".into())
+  );
+}

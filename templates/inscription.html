@@ -48,6 +48,17 @@
   <dt>title</dt>
   <dd>{{ title }}</dd>
 %% }
+%% if !self.traits.is_empty() {
+  <dt>traits</dt>
+  <dd>
+    <dl>
+%% for (key, value) in &self.traits {
+      <dt>{{ key }}</dt>
+      <dd>{{ value }}</dd>
+%% }
+    </dl>
+  </dd>
+%% }
 %% if let Ok(address) = self.chain.address_from_script(&self.output.script_pubkey ) {
   <dt>address</dt>
   <dd class=monospace><a href=/address/{{ address }}>{{ address }}</a></dd>

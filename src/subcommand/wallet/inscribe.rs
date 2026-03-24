@@ -96,6 +96,12 @@ pub(crate) struct Inscribe {
     conflicts_with = "batch"
   )]
   pub(crate) title: Option<String>,
+  #[clap(
+    long,
+    help = "Include JSON traits from <JSON_TRAITS> file as PRC-721 properties.",
+    conflicts_with = "batch"
+  )]
+  pub(crate) json_traits: Option<PathBuf>,
 }
 
 pub(crate) struct ParentInfo {
@@ -259,6 +265,57 @@ struct FileMetadata {
   file_size: u64,
 }
 
+fn load_json_traits(
+  path: &Path,
+) -> Result<BTreeMap<String, crate::inscriptions::properties::TraitValue>> {
+  let content = fs::read_to_string(path).context("failed to read JSON traits file")?;
+  let value: serde_json::Value =
+    serde_json::from_str(&content).context("failed to parse JSON traits file")?;
+
+  let obj = value
+    .as_object()
+    .ok_or_else(|| anyhow!("JSON traits file must contain an object"))?;
+
+  if obj.contains_key("title") {
+    bail!("JSON traits file must not contain `title` — use --title flag instead");
+  }
+
+  let mut traits = BTreeMap::new();
+  for (key, val) in obj {
+    let trait_val = match val {
+      serde_json::Value::String(s) => {
+        crate::inscriptions::properties::TraitValue::String(s.clone())
+      }
+      serde_json::Value::Bool(b) => crate::inscriptions::properties::TraitValue::Bool(*b),
+      serde_json::Value::Number(n) => {
+        let n = n
+          .as_i64()
+          .ok_or_else(|| anyhow!("trait `{key}` must be a string, boolean, integer, or null"))?;
+        crate::inscriptions::properties::TraitValue::Integer(n)
+      }
+      serde_json::Value::Null => crate::inscriptions::properties::TraitValue::Null,
+      _ => bail!("trait `{key}` must be a string, boolean, integer, or null"),
+    };
+    traits.insert(key.clone(), trait_val);
+  }
+
+  Ok(traits)
+}
+
+fn build_batch_properties(
+  title: Option<&str>,
+  traits: Option<&BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
+) -> Properties {
+  let mut props = Properties::default();
+  if let Some(title) = title {
+    props = props.with_title(title);
+  }
+  if let Some(traits) = traits {
+    props = props.with_traits(traits.clone());
+  }
+  props
+}
+
 fn extract_file_metadata(path: Option<&Path>, delegate_id: Option<InscriptionId>) -> FileMetadata {
   FileMetadata {
     file_name: path
@@ -277,6 +334,18 @@ fn extract_file_metadata(path: Option<&Path>, delegate_id: Option<InscriptionId>
 }
 
 impl Inscribe {
+  fn build_properties(&self) -> Result<Properties> {
+    let mut props = Properties::default();
+    if let Some(ref title) = self.title {
+      props = props.with_title(title);
+    }
+    if let Some(ref path) = self.json_traits {
+      let traits = load_json_traits(path)?;
+      props = props.with_traits(traits);
+    }
+    Ok(props)
+  }
+
   pub(crate) fn validate_files(&self) -> Result {
     if let Some(ref file) = self.file {
       if !file.exists() {
@@ -368,11 +437,18 @@ impl Inscribe {
           add_parent_tag(&mut inscription, parent_id);
         }
 
-        if let Some(ref title) = entry.title {
-          inscription.set_properties(Properties::default().with_title(title))?;
+        let props = build_batch_properties(entry.title.as_deref(), entry.traits.as_ref());
+        if props != Properties::default() {
+          inscription.set_properties(props)?;
         }
 
-        inscriptions.push((inscription, path, delegate_id, entry.title.clone()));
+        inscriptions.push((
+          inscription,
+          path,
+          delegate_id,
+          entry.title.clone(),
+          entry.traits.clone(),
+        ));
         destinations.push(
           entry
             .destination
@@ -384,7 +460,7 @@ impl Inscribe {
       // Pre-flight balance check
       let mut total_postage = 0;
       let mut total_reveal_fees = 0;
-      for (inscription, _, _, _) in &inscriptions {
+      for (inscription, _, _, _, _) in &inscriptions {
         total_postage += postage.to_sat();
         let batches = split_inscription_into_batches(inscription);
         for batch in &batches {
@@ -423,7 +499,7 @@ impl Inscribe {
         let (chunk_inscriptions_with_metadata, chunk_destinations) = chunk_data;
         let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_metadata
           .iter()
-          .map(|(ins, _, _, _)| ins.clone())
+          .map(|(ins, _, _, _, _)| ins.clone())
           .collect();
 
         let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos
@@ -553,7 +629,7 @@ impl Inscribe {
               destination: chunk_destinations[i].clone(),
             });
 
-            let (_ins, path, delegate_id, title) = &chunk_inscriptions_with_metadata[i];
+            let (_ins, path, delegate_id, title, traits) = &chunk_inscriptions_with_metadata[i];
             let meta = extract_file_metadata(path.as_deref(), *delegate_id);
 
             all_jobs.push(RevealJob {
@@ -572,6 +648,7 @@ impl Inscribe {
               reveals: signed.reveals,
               parent_ids: batch_parent_infos.iter().map(|pi| pi.id).collect(),
               delegate_id: *delegate_id,
+              traits: traits.clone(),
             });
           }
         }
@@ -632,8 +709,9 @@ impl Inscribe {
         None
       };
 
-      if let Some(ref title) = self.title {
-        inscription.set_properties(Properties::default().with_title(title))?;
+      let properties = self.build_properties()?;
+      if properties != Properties::default() {
+        inscription.set_properties(properties)?;
       }
 
       let reveal_tx_destination = self
@@ -740,6 +818,11 @@ impl Inscribe {
           reveals: signed.reveals,
           parent_ids: self.parent.iter().cloned().collect(),
           delegate_id: self.delegate,
+          traits: self
+            .json_traits
+            .as_ref()
+            .map(|p| load_json_traits(p))
+            .transpose()?,
         };
 
         job.broadcast_batch(client);

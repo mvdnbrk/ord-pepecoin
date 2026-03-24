@@ -47,6 +47,8 @@ pub(crate) struct RevealJob {
   pub(crate) parent_ids: Vec<InscriptionId>,
   #[serde(skip_serializing_if = "Option::is_none", default)]
   pub(crate) delegate_id: Option<InscriptionId>,
+  #[serde(skip_serializing_if = "Option::is_none", default)]
+  pub(crate) traits: Option<BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
 }
 
 impl RevealJob {
@@ -463,6 +465,7 @@ mod tests {
       }],
       parent_ids: vec![],
       delegate_id: None,
+      traits: None,
     };
 
     let serialized = serde_json::to_string(&job).unwrap();
@@ -502,6 +505,7 @@ mod tests {
       created_at: Utc::now(),
       parent_ids: vec![],
       delegate_id: None,
+      traits: None,
       reveals: (0..num_reveals)
         .map(|i| RevealTx {
           index: i,

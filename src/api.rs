@@ -3,12 +3,20 @@ use super::*;
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
 pub struct Properties {
   pub title: Option<String>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub traits: Option<BTreeMap<String, crate::inscriptions::TraitValue>>,
 }
 
 impl From<crate::inscriptions::properties::Properties> for Properties {
   fn from(props: crate::inscriptions::properties::Properties) -> Self {
+    let traits = if props.traits().is_empty() {
+      None
+    } else {
+      Some(props.traits().clone())
+    };
     Self {
       title: props.title().map(String::from),
+      traits,
     }
   }
 }

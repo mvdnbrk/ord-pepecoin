@@ -69,7 +69,7 @@ use {
 pub use crate::{
   fee_rate::FeeRate,
   index::{Index, List},
-  inscriptions::{Inscription, InscriptionId},
+  inscriptions::{Inscription, InscriptionId, TraitValue},
   object::Object,
   rarity::Rarity,
   sat::Sat,

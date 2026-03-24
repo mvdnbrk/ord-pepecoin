@@ -13,6 +13,7 @@ pub(crate) struct BatchEntry {
   pub(crate) delegate: Option<InscriptionId>,
   pub(crate) destination: Option<Address>,
   pub(crate) title: Option<String>,
+  pub(crate) traits: Option<BTreeMap<String, crate::inscriptions::properties::TraitValue>>,
 }
 
 impl BatchFile {
