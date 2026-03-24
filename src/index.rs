@@ -892,7 +892,9 @@ impl Index {
     let table = rtx.open_multimap_table(ADDRESS_TO_INSCRIPTION_IDS)?;
     let satpoint_table = rtx.open_table(INSCRIPTION_ID_TO_SATPOINT)?;
 
-    let mut ids = Vec::new();
+    let entry_table = rtx.open_table(INSCRIPTION_ID_TO_INSCRIPTION_ENTRY)?;
+
+    let mut ids_with_number = Vec::new();
     let mut outputs = Vec::new();
     for result in table.get(address)? {
       let value = result?;
@@ -903,8 +905,14 @@ impl Index {
           outputs.push(satpoint.outpoint);
         }
       }
-      ids.push(inscription_id);
+      let number = entry_table
+        .get(&inscription_id.store())?
+        .map(|e| InscriptionEntry::load(e.value()).number)
+        .unwrap_or(0);
+      ids_with_number.push((inscription_id, number));
     }
+    ids_with_number.sort_by(|a, b| b.1.cmp(&a.1));
+    let ids = ids_with_number.into_iter().map(|(id, _)| id).collect();
     Ok((ids, outputs))
   }
 
