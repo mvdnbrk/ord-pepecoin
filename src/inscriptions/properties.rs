@@ -4,8 +4,11 @@ const MAX_SIZE: usize = 4_000;
 const MAX_COMPRESSION_RATIO: usize = 30;
 const COMPRESSION_THRESHOLD: usize = 64;
 
-const KEY_TITLE: &str = "title";
-const KEY_TRAITS: &str = "traits";
+const KEY_TITLE: i64 = 0; // "title"
+const KEY_TRAITS: i64 = 1; // "traits"
+
+const KEY_TITLE_STR: &str = "title";
+const KEY_TRAITS_STR: &str = "traits";
 
 /// Trait values: booleans, integers, null, or strings.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -163,14 +166,21 @@ impl Properties {
     let mut props = Properties::default();
 
     for (k, v) in map {
-      match (&k, &v) {
-        (ciborium::Value::Text(key), ciborium::Value::Text(val)) if key == KEY_TITLE => {
+      let key_id = match &k {
+        ciborium::Value::Integer(n) => Some(i128::from(*n)),
+        ciborium::Value::Text(s) if s == KEY_TITLE_STR => Some(i128::from(KEY_TITLE)),
+        ciborium::Value::Text(s) if s == KEY_TRAITS_STR => Some(i128::from(KEY_TRAITS)),
+        _ => None,
+      };
+
+      match (key_id, &v) {
+        (Some(id), ciborium::Value::Text(val)) if id == i128::from(KEY_TITLE) => {
           let trimmed = val.trim().to_string();
           if !trimmed.is_empty() {
             props.title = Some(trimmed);
           }
         }
-        (ciborium::Value::Text(key), ciborium::Value::Map(trait_map)) if key == KEY_TRAITS => {
+        (Some(id), ciborium::Value::Map(trait_map)) if id == i128::from(KEY_TRAITS) => {
           let mut seen = HashSet::new();
           for (tk, tv) in trait_map {
             if let ciborium::Value::Text(trait_key) = tk {
@@ -210,7 +220,7 @@ impl Properties {
     if let Some(title) = &self.title {
       if !title.is_empty() {
         map.push((
-          ciborium::Value::Text(KEY_TITLE.to_string()),
+          ciborium::Value::Integer(KEY_TITLE.into()),
           ciborium::Value::Text(title.clone()),
         ));
       }
@@ -223,7 +233,7 @@ impl Properties {
         .map(|(k, v)| (ciborium::Value::Text(k.clone()), v.to_cbor()))
         .collect();
       map.push((
-        ciborium::Value::Text(KEY_TRAITS.to_string()),
+        ciborium::Value::Integer(KEY_TRAITS.into()),
         ciborium::Value::Map(trait_pairs),
       ));
     }
@@ -413,7 +423,7 @@ mod tests {
       ),
     ];
     let cbor_map = ciborium::Value::Map(vec![(
-      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Integer(1.into()),
       ciborium::Value::Map(trait_pairs),
     )]);
     let mut cbor = Vec::new();
@@ -432,7 +442,7 @@ mod tests {
       ciborium::Value::Float(1.5),
     )];
     let cbor_map = ciborium::Value::Map(vec![(
-      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Integer(1.into()),
       ciborium::Value::Map(trait_pairs),
     )]);
     let mut cbor = Vec::new();
@@ -451,7 +461,7 @@ mod tests {
       ciborium::Value::Array(vec![ciborium::Value::Text("a".to_string())]),
     )];
     let cbor_map = ciborium::Value::Map(vec![(
-      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Integer(1.into()),
       ciborium::Value::Map(trait_pairs),
     )]);
     let mut cbor = Vec::new();
@@ -473,7 +483,7 @@ mod tests {
       )]),
     )];
     let cbor_map = ciborium::Value::Map(vec![(
-      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Integer(1.into()),
       ciborium::Value::Map(trait_pairs),
     )]);
     let mut cbor = Vec::new();
@@ -490,11 +500,11 @@ mod tests {
     // Valid title + invalid trait (float) → entire properties rejected
     let cbor_map = ciborium::Value::Map(vec![
       (
-        ciborium::Value::Text("title".to_string()),
+        ciborium::Value::Integer(0.into()),
         ciborium::Value::Text("Rare Pepe".to_string()),
       ),
       (
-        ciborium::Value::Text("traits".to_string()),
+        ciborium::Value::Integer(1.into()),
         ciborium::Value::Map(vec![(
           ciborium::Value::Text("score".to_string()),
           ciborium::Value::Float(9.5),
@@ -509,6 +519,36 @@ mod tests {
 
     // Title is lost — all-or-nothing
     assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn string_keys_accepted_on_decode() {
+    // Encode with string keys — should still decode
+    let cbor_map = ciborium::Value::Map(vec![
+      (
+        ciborium::Value::Text("title".to_string()),
+        ciborium::Value::Text("Legacy Pepe".to_string()),
+      ),
+      (
+        ciborium::Value::Text("traits".to_string()),
+        ciborium::Value::Map(vec![(
+          ciborium::Value::Text("bg".to_string()),
+          ciborium::Value::Text("gold".to_string()),
+        )]),
+      ),
+    ]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    let decoded = Properties::from_tags(&tags).unwrap();
+    assert_eq!(decoded.title().unwrap(), "Legacy Pepe");
+    assert_eq!(
+      decoded.traits()[0],
+      ("bg".into(), TraitValue::String("gold".into()))
+    );
   }
 
   #[test]
