@@ -109,52 +109,8 @@ mod tests {
       ]),
     );
     case(
-      "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
-      Object::Address(
-        "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
-          .parse()
-          .unwrap(),
-      ),
-    );
-    case(
-      "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4",
-      Object::Address(
-        "BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4"
-          .parse()
-          .unwrap(),
-      ),
-    );
-    case(
-      "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy",
-      Object::Address(
-        "tb1qqqqqp399et2xygdj5xreqhjjvcmzhxw4aywxecjdzew6hylgvsesrxh6hy"
-          .parse()
-          .unwrap(),
-      ),
-    );
-    case(
-      "TB1QQQQQP399ET2XYGDJ5XREQHJJVCMZHXW4AYWXECJDZEW6HYLGVSESRXH6HY",
-      Object::Address(
-        "TB1QQQQQP399ET2XYGDJ5XREQHJJVCMZHXW4AYWXECJDZEW6HYLGVSESRXH6HY"
-          .parse()
-          .unwrap(),
-      ),
-    );
-    case(
-      "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw",
-      Object::Address(
-        "bcrt1qs758ursh4q9z627kt3pp5yysm78ddny6txaqgw"
-          .parse()
-          .unwrap(),
-      ),
-    );
-    case(
-      "BCRT1QS758URSH4Q9Z627KT3PP5YYSM78DDNY6TXAQGW",
-      Object::Address(
-        "BCRT1QS758URSH4Q9Z627KT3PP5YYSM78DDNY6TXAQGW"
-          .parse()
-          .unwrap(),
-      ),
+      "PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM",
+      Object::Address("PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM".parse().unwrap()),
     );
     case(
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef:123",

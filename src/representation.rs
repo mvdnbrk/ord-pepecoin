@@ -16,7 +16,7 @@ impl Representation {
     (
       self,
       match self {
-        Self::Address => r"^(bc|BC|tb|TB|bcrt|BCRT)1.*$",
+        Self::Address => r"^[PA92][1-9A-HJ-NP-Za-km-z]{25,33}$",
         Self::Decimal => r"^.*\..*$",
         Self::Hash => r"^[[:xdigit:]]{64}$",
         Self::InscriptionId => r"^[[:xdigit:]]{64}i\d+$",

@@ -910,6 +910,8 @@ impl Server {
       static ref HASH: Regex = Regex::new(r"^[[:xdigit:]]{64}$").unwrap();
       static ref OUTPOINT: Regex = Regex::new(r"^[[:xdigit:]]{64}:\d+$").unwrap();
       static ref INSCRIPTION_ID: Regex = Regex::new(r"^[[:xdigit:]]{64}i\d+$").unwrap();
+      static ref ADDRESS: Regex =
+        Regex::new(r"^[PA92][1-9A-HJ-NP-Za-km-z]{25,33}$").unwrap();
     }
 
     let query = query.trim();
@@ -924,6 +926,8 @@ impl Server {
       Ok(Redirect::to(&format!("/output/{query}")))
     } else if INSCRIPTION_ID.is_match(query) {
       Ok(Redirect::to(&format!("/inscription/{query}")))
+    } else if ADDRESS.is_match(query) {
+      Ok(Redirect::to(&format!("/address/{query}")))
     } else {
       Ok(Redirect::to(&format!("/sat/{query}")))
     }
