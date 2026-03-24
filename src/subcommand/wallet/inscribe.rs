@@ -730,18 +730,7 @@ impl Inscribe {
       }
 
       if self.compress {
-        let saved = inscription.compress()?;
-        if saved > 0 {
-          let body_len = inscription.body.as_ref().map(|b| b.len()).unwrap_or(0);
-          eprintln!(
-            "Compressed content: {} bytes saved ({} bytes → {} bytes)",
-            saved,
-            body_len + saved,
-            body_len,
-          );
-        } else {
-          eprintln!("Compression not beneficial, using original content");
-        }
+        inscription.compress()?;
       }
 
       let content_encoding = inscription.content_encoding().map(String::from);

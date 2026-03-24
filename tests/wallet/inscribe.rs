@@ -1188,7 +1188,6 @@ fn inscribe_with_compress() {
     .rpc_server(&rpc_server)
     .ord_server(&ord_server)
     .data_dir(ord_server.directory())
-    .stderr_regex("Compressed content: .*bytes saved.*")
     .output::<Inscribe>();
 
   rpc_server.mine_blocks(1);
