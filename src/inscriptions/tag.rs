@@ -6,7 +6,6 @@ pub(crate) const DELEGATE: &str = "delegate";
 pub(crate) const METADATA: &str = "metadata";
 pub(crate) const PROPERTIES: &str = "properties";
 pub(crate) const PROPERTIES_BR: &str = "properties;br";
-#[allow(dead_code)]
 pub(crate) const CONTENT_ENCODING: &str = "content-encoding";
 
 /// Parse a 36-byte inscription ID (32-byte txid LE + 4-byte index LE) from tag value.

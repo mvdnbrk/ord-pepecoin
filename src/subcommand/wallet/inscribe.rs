@@ -102,6 +102,8 @@ pub(crate) struct Inscribe {
     conflicts_with = "batch"
   )]
   pub(crate) json_traits: Option<PathBuf>,
+  #[clap(long, help = "Compress inscription content with Brotli.")]
+  pub(crate) compress: bool,
 }
 
 pub(crate) struct ParentInfo {
@@ -446,12 +448,19 @@ impl Inscribe {
           inscription.set_properties(props)?;
         }
 
+        if self.compress {
+          inscription.compress()?;
+        }
+
+        let content_encoding = inscription.content_encoding().map(String::from);
+
         inscriptions.push((
           inscription,
           path,
           delegate_id,
           entry.title.clone(),
           entry.traits.clone(),
+          content_encoding,
         ));
         destinations.push(
           entry
@@ -464,7 +473,7 @@ impl Inscribe {
       // Pre-flight balance check
       let mut total_postage = 0;
       let mut total_reveal_fees = 0;
-      for (inscription, _, _, _, _) in &inscriptions {
+      for (inscription, _, _, _, _, _) in &inscriptions {
         total_postage += postage.to_sat();
         let batches = split_inscription_into_batches(inscription);
         for batch in &batches {
@@ -503,7 +512,7 @@ impl Inscribe {
         let (chunk_inscriptions_with_metadata, chunk_destinations) = chunk_data;
         let chunk_inscriptions: Vec<Inscription> = chunk_inscriptions_with_metadata
           .iter()
-          .map(|(ins, _, _, _, _)| ins.clone())
+          .map(|(ins, _, _, _, _, _)| ins.clone())
           .collect();
 
         let chunk_utxos: BTreeMap<OutPoint, Amount> = utxos
@@ -633,7 +642,8 @@ impl Inscribe {
               destination: chunk_destinations[i].clone(),
             });
 
-            let (_ins, path, delegate_id, title, traits) = &chunk_inscriptions_with_metadata[i];
+            let (_ins, path, delegate_id, title, traits, content_encoding) =
+              &chunk_inscriptions_with_metadata[i];
             let meta = extract_file_metadata(path.as_deref(), *delegate_id);
 
             all_jobs.push(RevealJob {
@@ -653,6 +663,7 @@ impl Inscribe {
               parent_ids: batch_parent_infos.iter().map(|pi| pi.id).collect(),
               delegate_id: *delegate_id,
               traits: traits.clone(),
+              content_encoding: content_encoding.clone(),
             });
           }
         }
@@ -717,6 +728,23 @@ impl Inscribe {
       if properties != Properties::default() {
         inscription.set_properties(properties)?;
       }
+
+      if self.compress {
+        let saved = inscription.compress()?;
+        if saved > 0 {
+          let body_len = inscription.body.as_ref().map(|b| b.len()).unwrap_or(0);
+          eprintln!(
+            "Compressed content: {} bytes saved ({} bytes → {} bytes)",
+            saved,
+            body_len + saved,
+            body_len,
+          );
+        } else {
+          eprintln!("Compression not beneficial, using original content");
+        }
+      }
+
+      let content_encoding = inscription.content_encoding().map(String::from);
 
       let reveal_tx_destination = self
         .destination
@@ -827,6 +855,7 @@ impl Inscribe {
             .as_ref()
             .map(|p| load_json_traits(p))
             .transpose()?,
+          content_encoding,
         };
 
         job.broadcast_batch(client);

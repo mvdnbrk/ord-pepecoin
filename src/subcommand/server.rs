@@ -1097,6 +1097,12 @@ impl Server {
       HeaderValue::from_static("max-age=31536000, immutable"),
     );
 
+    if let Some(encoding) = inscription.content_encoding() {
+      if let Ok(value) = encoding.parse() {
+        headers.insert(header::CONTENT_ENCODING, value);
+      }
+    }
+
     Some((headers, inscription.into_body()?))
   }
 
