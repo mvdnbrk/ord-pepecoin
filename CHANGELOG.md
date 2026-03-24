@@ -7,6 +7,16 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+### Added
+- Link address on inscription page to address page ([`49a02bc`](https://github.com/mvdnbrk/ord-pepecoin/commit/49a02bc1))
+
+### Changed
+- Sort inscriptions on address page by number descending ([`2a41447`](https://github.com/mvdnbrk/ord-pepecoin/commit/2a41447a))
+- Change link color to green ([`40d9004`](https://github.com/mvdnbrk/ord-pepecoin/commit/40d90045))
+
+### Fixed
+- Fix search resolving Pepecoin addresses to `/sat` instead of `/address` ([`60e4338`](https://github.com/mvdnbrk/ord-pepecoin/commit/60e43386))
+
 ## [0.10.1] - 2026-03-23
 
 ### Fixed
