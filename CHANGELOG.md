@@ -5,9 +5,21 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
-## [Unreleased]
+## [0.11.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.11.0) - 2026-03-24
 
-## [0.10.2] - 2026-03-24
+### Added
+- PRC-721 traits support for inscriptions ([#57](https://github.com/mvdnbrk/ord-pepecoin/pull/57))
+  - `--json-traits <file>` flag for single inscriptions
+  - Batch YAML `traits` field for collection inscriptions
+  - Trait values: strings, booleans, integers, null
+  - Strict validation: duplicate names and unsupported types invalidate entire properties tag
+  - Case-insensitive duplicate trait name check on inscribe
+  - Order-preserving: traits displayed in the order the inscriber intended
+  - Integer CBOR keys for properties (saves ~12 bytes per inscription)
+  - JSON API: traits object on `/inscription/{id}`
+  - HTML: traits displayed in inscription detail page
+
+## [0.10.2](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.10.2) - 2026-03-24
 
 ### Added
 - Link address on inscription page to address page ([`49a02bc`](https://github.com/mvdnbrk/ord-pepecoin/commit/49a02bc1))
@@ -19,12 +31,12 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 ### Fixed
 - Fix search resolving Pepecoin addresses to `/sat` instead of `/address` ([`60e4338`](https://github.com/mvdnbrk/ord-pepecoin/commit/60e43386))
 
-## [0.10.1] - 2026-03-23
+## [0.10.1](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.10.1) - 2026-03-23
 
 ### Fixed
 - Fix PRC-721 tags lost in multi-tx reveal chains ([#56](https://github.com/mvdnbrk/ord-pepecoin/pull/56))
 
-## [0.10.0] - 2026-03-23
+## [0.10.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.10.0) - 2026-03-23
 
 ### Added
 - PRC-721 title property support for inscriptions ([#53](https://github.com/mvdnbrk/ord-pepecoin/pull/53))
