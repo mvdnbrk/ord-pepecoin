@@ -1097,6 +1097,12 @@ impl Server {
       HeaderValue::from_static("max-age=31536000, immutable"),
     );
 
+    if let Some(encoding) = inscription.content_encoding() {
+      if let Ok(value) = encoding.parse() {
+        headers.insert(header::CONTENT_ENCODING, value);
+      }
+    }
+
     Some((headers, inscription.into_body()?))
   }
 
@@ -1183,18 +1189,7 @@ impl Server {
         )
           .into_response(),
       ),
-      Media::Text => {
-        let content = inscription
-          .body()
-          .ok_or_not_found(|| format!("inscription {inscription_id} content"))?;
-        Ok(
-          PreviewTextHtml {
-            text: str::from_utf8(content)
-              .map_err(|err| anyhow!("Failed to decode {inscription_id} text: {err}"))?,
-          }
-          .into_response(),
-        )
-      }
+      Media::Text => Ok(PreviewTextHtml { inscription_id }.into_response()),
       Media::Unknown => Ok(PreviewUnknownHtml.into_response()),
       Media::Video => Ok(PreviewVideoHtml { inscription_id }.into_response()),
     }
@@ -2734,62 +2729,14 @@ mod tests {
         ..Default::default()
       });
 
+    let inscription_id = InscriptionId::from(txid);
     server.mine_blocks(1);
 
     server.assert_response_csp(
-      format!("/preview/{}", InscriptionId::from(txid)),
+      format!("/preview/{inscription_id}"),
       StatusCode::OK,
       "default-src 'self'",
-      ".*<pre>hello</pre>.*",
-    );
-  }
-
-  #[test]
-  fn text_preview_returns_error_when_content_is_not_utf8() {
-    let server = TestServer::new();
-    server.mine_blocks(1);
-
-    let txid = server
-      .pepecoin_rpc_server
-      .broadcast_tx(TransactionTemplate {
-        inputs: &[(1, 0, 0)],
-        script_sig: inscription("text/plain;charset=utf-8", b"\xc3\x28").to_p2sh_unlock(),
-        ..Default::default()
-      });
-
-    server.mine_blocks(1);
-
-    server.assert_response(
-      format!("/preview/{}", InscriptionId::from(txid)),
-      StatusCode::INTERNAL_SERVER_ERROR,
-      "Internal Server Error",
-    );
-  }
-
-  #[test]
-  fn text_preview_text_is_escaped() {
-    let server = TestServer::new();
-    server.mine_blocks(1);
-
-    let txid = server
-      .pepecoin_rpc_server
-      .broadcast_tx(TransactionTemplate {
-        inputs: &[(1, 0, 0)],
-        script_sig: inscription(
-          "text/plain;charset=utf-8",
-          "<script>alert('hello');</script>",
-        )
-        .to_p2sh_unlock(),
-        ..Default::default()
-      });
-
-    server.mine_blocks(1);
-
-    server.assert_response_csp(
-      format!("/preview/{}", InscriptionId::from(txid)),
-      StatusCode::OK,
-      "default-src 'self'",
-      r".*<pre>&lt;script&gt;alert\(&apos;hello&apos;\);&lt;/script&gt;</pre>.*",
+      &format!(".*data-inscription={inscription_id}.*<pre></pre>.*"),
     );
   }
 
