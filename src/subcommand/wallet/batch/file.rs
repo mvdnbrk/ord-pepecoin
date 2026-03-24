@@ -66,11 +66,17 @@ where
   };
 
   let mut traits = Vec::new();
+  let mut seen = std::collections::HashSet::new();
   for (k, v) in mapping {
     let key = k
       .as_str()
       .ok_or_else(|| serde::de::Error::custom("trait key must be a string"))?
       .to_string();
+    if !seen.insert(key.to_lowercase()) {
+      return Err(serde::de::Error::custom(format!(
+        "duplicate trait name `{key}` (case-insensitive)"
+      )));
+    }
     let val = match v {
       serde_yaml::Value::String(s) => TraitValue::String(s),
       serde_yaml::Value::Bool(b) => TraitValue::Bool(b),

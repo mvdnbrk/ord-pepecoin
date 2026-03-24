@@ -281,7 +281,11 @@ fn load_json_traits(
   }
 
   let mut traits = Vec::new();
+  let mut seen = HashSet::new();
   for (key, val) in obj {
+    if !seen.insert(key.to_lowercase()) {
+      bail!("duplicate trait name `{key}` (case-insensitive)");
+    }
     let trait_val = match val {
       serde_json::Value::String(s) => {
         crate::inscriptions::properties::TraitValue::String(s.clone())

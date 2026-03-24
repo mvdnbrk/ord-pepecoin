@@ -1172,3 +1172,25 @@ fn batch_inscribe_with_traits() {
     ("rarity".into(), ord::TraitValue::String("epic".into()))
   );
 }
+
+#[test]
+fn inscribe_rejects_case_insensitive_duplicate_traits() {
+  let rpc_server = test_bitcoincore_rpc::spawn();
+  let ord_server = TestServer::spawn(&rpc_server);
+
+  create_wallet_with_data_dir(&rpc_server, Some(ord_server.directory()));
+  rpc_server.mine_blocks(1);
+
+  CommandBuilder::new("wallet inscribe --file hello.txt --json-traits traits.json")
+    .write("hello.txt", "HELLOWORLD")
+    .write(
+      "traits.json",
+      r#"{"background": "gold", "Background": "silver"}"#,
+    )
+    .rpc_server(&rpc_server)
+    .ord_server(&ord_server)
+    .data_dir(ord_server.directory())
+    .expected_exit_code(1)
+    .stderr_regex(".*duplicate trait name.*case-insensitive.*")
+    .run();
+}
