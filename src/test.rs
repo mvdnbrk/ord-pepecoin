@@ -62,9 +62,7 @@ pub(crate) fn satpoint(n: u64, offset: u64) -> SatPoint {
 }
 
 pub(crate) fn address() -> Address {
-  "PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM"
-    .parse()
-    .unwrap()
+  "PXvn95h8m6x4oGorNVerA2F4FFRpqMqwAM".parse().unwrap()
 }
 
 pub(crate) fn recipient() -> Address {

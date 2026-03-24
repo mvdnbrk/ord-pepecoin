@@ -910,8 +910,7 @@ impl Server {
       static ref HASH: Regex = Regex::new(r"^[[:xdigit:]]{64}$").unwrap();
       static ref OUTPOINT: Regex = Regex::new(r"^[[:xdigit:]]{64}:\d+$").unwrap();
       static ref INSCRIPTION_ID: Regex = Regex::new(r"^[[:xdigit:]]{64}i\d+$").unwrap();
-      static ref ADDRESS: Regex =
-        Regex::new(r"^[PA92][1-9A-HJ-NP-Za-km-z]{25,33}$").unwrap();
+      static ref ADDRESS: Regex = Regex::new(r"^[PA92][1-9A-HJ-NP-Za-km-z]{25,33}$").unwrap();
     }
 
     let query = query.trim();
