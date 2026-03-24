@@ -171,7 +171,7 @@ impl Properties {
               let trait_key = trait_key.trim().to_string();
               if let Some(trait_val) = TraitValue::from_cbor(tv) {
                 if !trait_key.is_empty() {
-                  props.traits.insert(trait_key, trait_val);
+                  props.traits.entry(trait_key).or_insert(trait_val);
                 }
               }
             }
@@ -383,6 +383,37 @@ mod tests {
   fn no_tags_returns_none() {
     let tags = BTreeMap::new();
     assert_eq!(Properties::from_tags(&tags), None);
+  }
+
+  #[test]
+  fn duplicate_trait_keys_first_wins() {
+    // Craft CBOR with duplicate trait keys — first value should win
+    let trait_pairs = vec![
+      (
+        ciborium::Value::Text("bg".to_string()),
+        ciborium::Value::Text("gold".to_string()),
+      ),
+      (
+        ciborium::Value::Text("bg".to_string()),
+        ciborium::Value::Text("silver".to_string()),
+      ),
+    ];
+    let cbor_map = ciborium::Value::Map(vec![(
+      ciborium::Value::Text("traits".to_string()),
+      ciborium::Value::Map(trait_pairs),
+    )]);
+    let mut cbor = Vec::new();
+    ciborium::into_writer(&cbor_map, &mut cbor).unwrap();
+
+    let mut tags = BTreeMap::new();
+    tags.insert(tag::PROPERTIES.to_string(), vec![cbor]);
+
+    let decoded = Properties::from_tags(&tags).unwrap();
+    assert_eq!(
+      decoded.traits().get("bg").unwrap(),
+      &TraitValue::String("gold".into())
+    );
+    assert_eq!(decoded.traits().len(), 1);
   }
 
   #[test]
