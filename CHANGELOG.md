@@ -18,6 +18,17 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
   - Integer CBOR keys for properties (saves ~12 bytes per inscription)
   - JSON API: traits object on `/inscription/{id}`
   - HTML: traits displayed in inscription detail page
+- PRC-721 support for body compression ([#59](https://github.com/mvdnbrk/ord-pepecoin/pull/59))
+  - `--compress` flag for Brotli content compression
+  - Smart comparison: only keeps compressed version if smaller than original
+  - Content-type-aware Brotli mode selection (text, font, generic)
+  - Roundtrip decompression verification after compression
+  - Server serves `Content-Encoding: br` header for compressed inscriptions
+  - Content encoding displayed on inscription detail page
+  - Works with both single and batch inscription flows
+
+### Changed
+- Text preview fetches content via JS instead of server-side rendering ([#59](https://github.com/mvdnbrk/ord-pepecoin/pull/59))
 
 ## [0.10.2](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.10.2) - 2026-03-24
 
