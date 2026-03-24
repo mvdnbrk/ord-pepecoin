@@ -65,9 +65,19 @@ impl Inscription {
     let mut params = brotli::enc::BrotliEncoderParams::default();
     params.mode = mode;
     params.quality = 11;
+    params.lgblock = 24;
+    params.lgwin = 24;
+    params.size_hint = body.len();
 
     let mut compressed = Vec::new();
     brotli::BrotliCompress(&mut body.as_slice(), &mut compressed, &params)?;
+
+    // Verify roundtrip decompression
+    let mut decompressed = Vec::new();
+    brotli::BrotliDecompress(&mut compressed.as_slice(), &mut decompressed)?;
+    if decompressed != *body {
+      bail!("brotli decompression roundtrip failed");
+    }
 
     if compressed.len() < body.len() {
       let saved = body.len() - compressed.len();
