@@ -3,12 +3,67 @@ use super::*;
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
 pub struct Properties {
   pub title: Option<String>,
+  #[serde(
+    skip_serializing_if = "Option::is_none",
+    serialize_with = "serialize_traits",
+    deserialize_with = "deserialize_traits",
+    default
+  )]
+  pub traits: Option<Vec<(String, crate::inscriptions::TraitValue)>>,
+}
+
+fn serialize_traits<S>(
+  traits: &Option<Vec<(String, crate::inscriptions::TraitValue)>>,
+  serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+  S: Serializer,
+{
+  use serde::ser::SerializeMap;
+  match traits {
+    Some(items) => {
+      let mut map = serializer.serialize_map(Some(items.len()))?;
+      for (k, v) in items {
+        map.serialize_entry(k, v)?;
+      }
+      map.end()
+    }
+    None => serializer.serialize_none(),
+  }
+}
+
+fn deserialize_traits<'de, D>(
+  deserializer: D,
+) -> std::result::Result<Option<Vec<(String, crate::inscriptions::TraitValue)>>, D::Error>
+where
+  D: Deserializer<'de>,
+{
+  let value: Option<serde_json::Map<String, serde_json::Value>> =
+    Option::deserialize(deserializer)?;
+  match value {
+    Some(map) => {
+      let mut traits = Vec::new();
+      for (k, v) in map {
+        let tv: crate::inscriptions::TraitValue =
+          serde_json::from_value(v).map_err(serde::de::Error::custom)?;
+        traits.push((k, tv));
+      }
+      Ok(Some(traits))
+    }
+    None => Ok(None),
+  }
 }
 
 impl From<crate::inscriptions::properties::Properties> for Properties {
   fn from(props: crate::inscriptions::properties::Properties) -> Self {
+    let traits = if props.traits().is_empty() {
+      None
+    } else {
+      Some(props.traits().to_vec())
+    };
     Self {
       title: props.title().map(String::from),
+      traits,
     }
   }
 }

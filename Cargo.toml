@@ -50,7 +50,7 @@ rust-embed = "6.4.0"
 rustls = "0.23.20"
 rustls-acme = { version = "0.15.0", features = ["axum"] }
 serde = { version = "1.0.137", features = ["derive"] }
-serde_json = { version = "1.0.81" }
+serde_json = { version = "1.0.81", features = ["preserve_order"] }
 serde_yaml = "0.9.17"
 sys-info = "0.9.1"
 tempfile = "3.2.0"

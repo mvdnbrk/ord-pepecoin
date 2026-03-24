@@ -1291,9 +1291,12 @@ impl Server {
       )
     } else {
       let delegate = inscription.delegate_id();
-      let title = inscription
-        .properties()
-        .and_then(|p| p.title().map(String::from));
+      let props = inscription.properties();
+      let title = props.as_ref().and_then(|p| p.title().map(String::from));
+      let traits = props
+        .as_ref()
+        .map(|p| p.traits().to_vec())
+        .unwrap_or_default();
       Ok(
         InscriptionHtml {
           chain: page_config.chain,
@@ -1313,6 +1316,7 @@ impl Server {
           timestamp: timestamp(entry.timestamp),
           delegate,
           title,
+          traits,
         }
         .page(page_config, index.has_sat_index()?)
         .into_response(),

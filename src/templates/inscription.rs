@@ -19,6 +19,7 @@ pub(crate) struct InscriptionHtml {
   pub(crate) timestamp: DateTime<Utc>,
   pub(crate) delegate: Option<InscriptionId>,
   pub(crate) title: Option<String>,
+  pub(crate) traits: Vec<(String, crate::inscriptions::properties::TraitValue)>,
 }
 
 impl PageContent for InscriptionHtml {
@@ -56,6 +57,7 @@ mod tests {
         timestamp: timestamp(0),
         delegate: None,
         title: None,
+        traits: Vec::new(),
       },
       "
         <h1>Inscription 1</h1>
@@ -120,6 +122,7 @@ mod tests {
         timestamp: timestamp(0),
         delegate: None,
         title: None,
+        traits: Vec::new(),
       },
       "
         <h1>Inscription 1</h1>
@@ -157,6 +160,7 @@ mod tests {
         timestamp: timestamp(0),
         delegate: None,
         title: None,
+        traits: Vec::new(),
       },
       "
         <h1>Inscription 1</h1>
