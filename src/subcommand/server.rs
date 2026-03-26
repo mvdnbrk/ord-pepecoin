@@ -1,5 +1,6 @@
 use {
   self::{
+    accept_encoding::AcceptEncoding,
     accept_json::AcceptJson,
     deserialize_from_str::DeserializeFromStr,
     error::{OptionExt, ServerError, ServerResult},
@@ -40,6 +41,7 @@ use {
   },
 };
 
+mod accept_encoding;
 mod accept_json;
 mod error;
 mod query;
@@ -1054,6 +1056,7 @@ impl Server {
   async fn content(
     Extension(index): Extension<Arc<Index>>,
     Extension(settings): Extension<Arc<Settings>>,
+    accept_encoding: AcceptEncoding,
     Path(inscription_id): Path<InscriptionId>,
   ) -> ServerResult<Response> {
     if settings.is_hidden(inscription_id) {
@@ -1068,6 +1071,18 @@ impl Server {
       inscription = index
         .get_inscription_by_id(delegate)?
         .ok_or_not_found(|| format!("delegate {inscription_id}"))?;
+    }
+
+    if !accept_encoding.accepts(inscription.content_encoding()) {
+      let content_encoding: HeaderValue = inscription
+        .content_encoding()
+        .unwrap_or_default()
+        .parse()
+        .unwrap_or_else(|_| HeaderValue::from_static("unknown"));
+      return Err(ServerError::NotAcceptable {
+        accept_encoding,
+        content_encoding,
+      });
     }
 
     Ok(
@@ -1109,6 +1124,7 @@ impl Server {
   async fn preview(
     Extension(index): Extension<Arc<Index>>,
     Extension(settings): Extension<Arc<Settings>>,
+    accept_encoding: AcceptEncoding,
     Path(inscription_id): Path<InscriptionId>,
   ) -> ServerResult<Response> {
     if settings.is_hidden(inscription_id) {
@@ -1141,11 +1157,24 @@ impl Server {
           .into_response(),
       ),
       Media::Font => Ok(PreviewFontHtml { inscription_id }.into_response()),
-      Media::Iframe => Ok(
-        Self::content_response(inscription)
-          .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
-          .into_response(),
-      ),
+      Media::Iframe => {
+        if !accept_encoding.accepts(inscription.content_encoding()) {
+          let content_encoding: HeaderValue = inscription
+            .content_encoding()
+            .unwrap_or_default()
+            .parse()
+            .unwrap_or_else(|_| HeaderValue::from_static("unknown"));
+          return Err(ServerError::NotAcceptable {
+            accept_encoding,
+            content_encoding,
+          });
+        }
+        Ok(
+          Self::content_response(inscription)
+            .ok_or_not_found(|| format!("inscription {inscription_id} content"))?
+            .into_response(),
+        )
+      }
       Media::Image(image_rendering) => Ok(
         (
           [(
