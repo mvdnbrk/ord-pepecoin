@@ -11,7 +11,7 @@ pub(crate) struct InscriptionHtml {
   pub(crate) inscription_id: InscriptionId,
   pub(crate) next: Option<InscriptionId>,
   pub(crate) number: u32,
-  pub(crate) output: TxOut,
+  pub(crate) output: Option<TxOut>,
   pub(crate) parents: Vec<InscriptionId>,
   pub(crate) previous: Option<InscriptionId>,
   pub(crate) sat: Option<Sat>,
@@ -49,7 +49,7 @@ mod tests {
         inscription_id: inscription_id(1),
         next: None,
         number: 1,
-        output: tx_out(1, address()),
+        output: Some(tx_out(1, address())),
         parents: Vec::new(),
         previous: None,
         sat: None,
@@ -114,7 +114,7 @@ mod tests {
         inscription_id: inscription_id(1),
         next: None,
         number: 1,
-        output: tx_out(1, address()),
+        output: Some(tx_out(1, address())),
         parents: Vec::new(),
         previous: None,
         sat: Some(Sat(1)),
@@ -152,7 +152,7 @@ mod tests {
         inscription_id: inscription_id(2),
         next: Some(inscription_id(3)),
         number: 1,
-        output: tx_out(1, address()),
+        output: Some(tx_out(1, address())),
         parents: Vec::new(),
         previous: Some(inscription_id(1)),
         sat: None,
@@ -173,5 +173,33 @@ mod tests {
       "
       .unindent()
     );
+  }
+
+  #[test]
+  fn lost_inscription_no_output() {
+    let html = InscriptionHtml {
+      chain: Chain::Mainnet,
+      children: Vec::new(),
+      child_count: 0,
+      fee: 1,
+      height: 0,
+      inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+      inscription_id: inscription_id(1),
+      next: None,
+      number: 1,
+      output: None,
+      parents: Vec::new(),
+      previous: None,
+      sat: None,
+      satpoint: satpoint(1, 0),
+      timestamp: timestamp(0),
+      delegate: None,
+      title: None,
+      traits: Vec::new(),
+    }
+    .to_string();
+
+    assert!(!html.contains("address"));
+    assert!(!html.contains("output value"));
   }
 }
