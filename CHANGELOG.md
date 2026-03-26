@@ -5,6 +5,14 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
+## [Unreleased]
+
+### Fixed
+- Show actual error message in 500 responses instead of generic "Internal Server Error" ([#60](https://github.com/mvdnbrk/ord-pepecoin/pull/60))
+
+### Added
+- Add `Accept-Encoding` negotiation for br-encoded inscriptions, returning 406 when client doesn't support the content encoding ([#60](https://github.com/mvdnbrk/ord-pepecoin/pull/60))
+
 ## [0.12.0](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.12.0) - 2026-03-24
 
 ### Added
