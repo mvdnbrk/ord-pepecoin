@@ -1249,13 +1249,17 @@ impl Server {
       .get_inscription_satpoint_by_id(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
 
-    let output = index
-      .get_transaction(satpoint.outpoint.txid)?
-      .ok_or_not_found(|| format!("inscription {inscription_id} current transaction"))?
-      .output
-      .into_iter()
-      .nth(satpoint.outpoint.vout.try_into().unwrap())
-      .ok_or_not_found(|| format!("inscription {inscription_id} current transaction output"))?;
+    let output = if satpoint.outpoint == OutPoint::null() {
+      None
+    } else {
+      index
+        .get_transaction(satpoint.outpoint.txid)?
+        .and_then(|tx| {
+          tx.output
+            .into_iter()
+            .nth(usize::try_from(satpoint.outpoint.vout).unwrap_or(0))
+        })
+    };
 
     let previous = if let Some(previous) = entry.number.checked_sub(1) {
       Some(
@@ -1278,11 +1282,15 @@ impl Server {
       let delegate = inscription.delegate_id();
       Ok(
         Json(api::Inscription {
-          address: page_config
-            .chain
-            .address_from_script(&output.script_pubkey)
-            .map(|address| address.to_string())
-            .ok(),
+          address: output
+            .as_ref()
+            .and_then(|o| {
+              page_config
+                .chain
+                .address_from_script(&o.script_pubkey)
+                .map(|address| address.to_string())
+                .ok()
+            }),
           children: children.iter().copied().take(4).collect(),
           child_count,
           content_length: inscription.body().map(|body: &[u8]| body.len()),
@@ -1309,7 +1317,7 @@ impl Server {
           sat: entry.sat,
           satpoint,
           timestamp: i64::from(entry.timestamp),
-          value: Some(output.value),
+          value: output.as_ref().map(|o| o.value),
         })
         .into_response(),
       )
