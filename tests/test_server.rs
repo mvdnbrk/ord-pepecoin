@@ -90,6 +90,15 @@ impl TestServer {
     reqwest::blocking::get(self.url().join(path.as_ref()).unwrap()).unwrap()
   }
 
+  pub(crate) fn request_with_encoding(&self, path: impl AsRef<str>, encoding: &str) -> Response {
+    self.sync_server();
+    reqwest::blocking::Client::new()
+      .get(self.url().join(path.as_ref()).unwrap())
+      .header(reqwest::header::ACCEPT_ENCODING, encoding)
+      .send()
+      .unwrap()
+  }
+
   pub(crate) fn json_request(&self, path: impl AsRef<str>) -> Response {
     self.sync_server();
     reqwest::blocking::Client::new()

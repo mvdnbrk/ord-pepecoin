@@ -1192,7 +1192,15 @@ fn inscribe_with_compress() {
 
   rpc_server.mine_blocks(1);
 
+  // Without Accept-Encoding: br, should get 406
   let response = ord_server.request(format!("/content/{}", output.inscription));
+  assert_eq!(response.status(), 406);
+
+  // With Accept-Encoding: br, should get 200
+  let response = ord_server.request_with_encoding(
+    format!("/content/{}", output.inscription),
+    "br",
+  );
   assert_eq!(response.status(), 200);
   assert_eq!(response.headers().get("content-encoding").unwrap(), "br");
 }
