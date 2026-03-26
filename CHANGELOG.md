@@ -5,7 +5,7 @@ All notable changes to ordpep are documented in this file.
 This project is forked from [apezord/ord-dogecoin](https://github.com/apezord/ord-dogecoin),
 which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5.1`.
 
-## [Unreleased]
+## [0.12.1](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.12.1) - 2026-03-26
 
 ### Fixed
 - Show actual error message in 500 responses instead of generic "Internal Server Error" ([#60](https://github.com/mvdnbrk/ord-pepecoin/pull/60))
