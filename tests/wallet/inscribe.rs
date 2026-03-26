@@ -1197,10 +1197,7 @@ fn inscribe_with_compress() {
   assert_eq!(response.status(), 406);
 
   // With Accept-Encoding: br, should get 200
-  let response = ord_server.request_with_encoding(
-    format!("/content/{}", output.inscription),
-    "br",
-  );
+  let response = ord_server.request_with_encoding(format!("/content/{}", output.inscription), "br");
   assert_eq!(response.status(), 200);
   assert_eq!(response.headers().get("content-encoding").unwrap(), "br");
 }
