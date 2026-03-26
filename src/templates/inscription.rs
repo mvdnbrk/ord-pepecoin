@@ -174,4 +174,32 @@ mod tests {
       .unindent()
     );
   }
+
+  #[test]
+  fn lost_inscription_no_output() {
+    let html = InscriptionHtml {
+      chain: Chain::Mainnet,
+      children: Vec::new(),
+      child_count: 0,
+      fee: 1,
+      height: 0,
+      inscription: inscription("text/plain;charset=utf-8", "HELLOWORLD"),
+      inscription_id: inscription_id(1),
+      next: None,
+      number: 1,
+      output: None,
+      parents: Vec::new(),
+      previous: None,
+      sat: None,
+      satpoint: satpoint(1, 0),
+      timestamp: timestamp(0),
+      delegate: None,
+      title: None,
+      traits: Vec::new(),
+    }
+    .to_string();
+
+    assert!(!html.contains("address"));
+    assert!(!html.contains("output value"));
+  }
 }
