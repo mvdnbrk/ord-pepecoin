@@ -1282,15 +1282,13 @@ impl Server {
       let delegate = inscription.delegate_id();
       Ok(
         Json(api::Inscription {
-          address: output
-            .as_ref()
-            .and_then(|o| {
-              page_config
-                .chain
-                .address_from_script(&o.script_pubkey)
-                .map(|address| address.to_string())
-                .ok()
-            }),
+          address: output.as_ref().and_then(|o| {
+            page_config
+              .chain
+              .address_from_script(&o.script_pubkey)
+              .map(|address| address.to_string())
+              .ok()
+          }),
           children: children.iter().copied().take(4).collect(),
           child_count,
           content_length: inscription.body().map(|body: &[u8]| body.len()),
