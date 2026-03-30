@@ -2751,6 +2751,19 @@ mod tests {
   }
 
   #[test]
+  fn content_response_bad_content_type() {
+    let (headers, body) = Server::content_response(Inscription::new(
+      Some("\n".as_bytes().to_vec()),
+      Some(Vec::new()),
+      BTreeMap::new(),
+    ))
+    .unwrap();
+
+    assert_eq!(headers["content-type"], "application/octet-stream");
+    assert!(body.is_empty());
+  }
+
+  #[test]
   fn text_preview() {
     let server = TestServer::new();
     server.mine_blocks(1);
