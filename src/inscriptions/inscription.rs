@@ -212,7 +212,7 @@ impl Inscription {
     if self.delegate_id().is_some() {
       return None;
     }
-    let content_type = str::from_utf8(self.content_type.as_ref()?).ok()?;
+    let content_type = str::from_utf8(self.content_type.as_ref()?).ok()?.trim();
 
     // Require a '/' to filter out binary data that happens to be valid UTF-8
     if !content_type.contains('/') {
@@ -364,5 +364,11 @@ mod tests {
     let png_header = b"\x89PNG\r\n\x1a\n".to_vec();
     let inscription = Inscription::new(Some(png_header), None, BTreeMap::new());
     assert_eq!(inscription.content_type(), None);
+  }
+
+  #[test]
+  fn content_type_trims_whitespace() {
+    let inscription = Inscription::new(Some(b"image/avif\r\n".to_vec()), None, BTreeMap::new());
+    assert_eq!(inscription.content_type(), Some("image/avif"));
   }
 }
