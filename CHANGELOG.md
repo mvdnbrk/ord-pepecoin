@@ -7,6 +7,14 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.12.3](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.12.3) - 2026-03-30
+
+### Fixed
+- Validate and sanitize inscription content_type field ([#63](https://github.com/mvdnbrk/ord-pepecoin/pull/63))
+  - Reject binary data that passes UTF-8 check by requiring `/` in MIME type
+  - Trim whitespace from content_type values (e.g. `image/avif\r\n` → `image/avif`)
+  - Fix potential panic in content response for unparseable header values
+
 ## [0.12.2](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.12.2) - 2026-03-30
 
 ### Fixed
