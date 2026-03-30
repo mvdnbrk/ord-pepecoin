@@ -7,6 +7,8 @@ which is itself forked from [ordinals/ord](https://github.com/ordinals/ord) `0.5
 
 ## [Unreleased]
 
+## [0.12.2](https://github.com/mvdnbrk/ord-pepecoin/releases/tag/0.12.2) - 2026-03-30
+
 ### Fixed
 - Handle lost/burned inscriptions gracefully instead of returning 404 ([#61](https://github.com/mvdnbrk/ord-pepecoin/pull/61))
 
