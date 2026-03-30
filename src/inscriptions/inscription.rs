@@ -212,7 +212,14 @@ impl Inscription {
     if self.delegate_id().is_some() {
       return None;
     }
-    str::from_utf8(self.content_type.as_ref()?).ok()
+    let content_type = str::from_utf8(self.content_type.as_ref()?).ok()?;
+
+    // Require a '/' to filter out binary data that happens to be valid UTF-8
+    if !content_type.contains('/') {
+      return None;
+    }
+
+    Some(content_type)
   }
 
   pub fn to_p2sh_unlock(&self) -> Script {
@@ -338,5 +345,24 @@ mod tests {
   fn compress_no_body() {
     let mut inscription = Inscription::new(Some(b"text/plain".to_vec()), None, BTreeMap::new());
     assert_eq!(inscription.compress().unwrap(), 0);
+  }
+
+  #[test]
+  fn content_type_valid() {
+    let inscription = Inscription::new(Some(b"image/png".to_vec()), None, BTreeMap::new());
+    assert_eq!(inscription.content_type(), Some("image/png"));
+  }
+
+  #[test]
+  fn content_type_rejects_missing_slash() {
+    let inscription = Inscription::new(Some(b"not a mime type".to_vec()), None, BTreeMap::new());
+    assert_eq!(inscription.content_type(), None);
+  }
+
+  #[test]
+  fn content_type_rejects_binary() {
+    let png_header = b"\x89PNG\r\n\x1a\n".to_vec();
+    let inscription = Inscription::new(Some(png_header), None, BTreeMap::new());
+    assert_eq!(inscription.content_type(), None);
   }
 }

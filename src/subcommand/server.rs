@@ -1099,9 +1099,8 @@ impl Server {
       header::CONTENT_TYPE,
       inscription
         .content_type()
-        .unwrap_or("application/octet-stream")
-        .parse()
-        .unwrap(),
+        .and_then(|content_type| content_type.parse().ok())
+        .unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
     headers.insert(
       header::CONTENT_SECURITY_POLICY,
